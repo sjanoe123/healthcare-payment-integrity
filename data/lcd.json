@@ -1,0 +1,4 @@
+{
+  "99213": {"diagnosis_codes": ["J06.9", "J00", "J01.90"], "age_ranges": [], "genders": [], "experimental": false},
+  "99214": {"diagnosis_codes": ["J06.9", "J00", "J01.90"], "age_ranges": [], "genders": [], "experimental": false}
+}

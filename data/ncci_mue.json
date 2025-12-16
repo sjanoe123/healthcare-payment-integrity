@@ -1,0 +1,107 @@
+{
+  "99211": {
+    "limit": 1,
+    "unit": "services",
+    "rationale": "E/M - one per date of service"
+  },
+  "99212": {
+    "limit": 1,
+    "unit": "services",
+    "rationale": "E/M - one per date of service"
+  },
+  "99213": {
+    "limit": 1,
+    "unit": "services",
+    "rationale": "E/M - one per date of service"
+  },
+  "99214": {
+    "limit": 1,
+    "unit": "services",
+    "rationale": "E/M - one per date of service"
+  },
+  "99215": {
+    "limit": 1,
+    "unit": "services",
+    "rationale": "E/M - one per date of service"
+  },
+  "99281": {
+    "limit": 1,
+    "unit": "services",
+    "rationale": "ED visit - one per date of service"
+  },
+  "99282": {
+    "limit": 1,
+    "unit": "services",
+    "rationale": "ED visit - one per date of service"
+  },
+  "99283": {
+    "limit": 1,
+    "unit": "services",
+    "rationale": "ED visit - one per date of service"
+  },
+  "99284": {
+    "limit": 1,
+    "unit": "services",
+    "rationale": "ED visit - one per date of service"
+  },
+  "99285": {
+    "limit": 1,
+    "unit": "services",
+    "rationale": "ED visit - one per date of service"
+  },
+  "99291": {
+    "limit": 1,
+    "unit": "services",
+    "rationale": "Critical care initial - one per date"
+  },
+  "99292": {
+    "limit": 8,
+    "unit": "services",
+    "rationale": "Critical care add-on - max 8 per date (4 hours)"
+  },
+  "90834": {
+    "limit": 4,
+    "unit": "services",
+    "rationale": "Psychotherapy - max 4 per day"
+  },
+  "90837": {
+    "limit": 4,
+    "unit": "services",
+    "rationale": "Psychotherapy - max 4 per day"
+  },
+  "97110": {
+    "limit": 12,
+    "unit": "services",
+    "rationale": "Therapeutic exercises - 12 units max"
+  },
+  "97140": {
+    "limit": 12,
+    "unit": "services",
+    "rationale": "Manual therapy - 12 units max"
+  },
+  "36415": {
+    "limit": 3,
+    "unit": "services",
+    "rationale": "Venipuncture - max 3 per encounter"
+  },
+  "85025": {
+    "limit": 2,
+    "unit": "services",
+    "rationale": "CBC - max 2 per day"
+  },
+  "80053": {
+    "limit": 2,
+    "unit": "services",
+    "rationale": "CMP - max 2 per day"
+  },
+  "71046": {
+    "limit": 2,
+    "unit": "services",
+    "rationale": "Chest X-ray - max 2 per day"
+  },
+  "93000": {
+    "limit": 3,
+    "unit": "services",
+    "rationale": "EKG - max 3 per day"
+  }
+}

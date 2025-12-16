@@ -1,0 +1,13 @@
+# FastAPI and server
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+
+# Claude API
+anthropic==0.40.0
+
+# ChromaDB for RAG
+chromadb==0.5.23
+
+# Utilities
+python-multipart==0.0.18
