@@ -89,7 +89,7 @@ def main():
     print(f"Loading LEIE data from: {source_path}")
     stats = load_leie(str(source_path), str(output_path))
 
-    print(f"\nLEIE Processing Complete:")
+    print("\nLEIE Processing Complete:")
     print(f"  Total exclusions: {stats['total_exclusions']:,}")
     print(f"  With NPI: {stats['exclusions_with_npi']:,}")
     print(f"  Unique NPIs: {stats['unique_npis']:,}")

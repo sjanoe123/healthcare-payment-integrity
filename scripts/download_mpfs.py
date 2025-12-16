@@ -288,7 +288,7 @@ def main():
     # Sample E/M code
     if "99213" in mpfs_data:
         sample = mpfs_data["99213"]
-        print(f"\n  Sample - 99213:")
+        print("\n  Sample - 99213:")
         print(f"    Description: {sample.get('description', 'N/A')}")
         print(f"    Work RVU: {sample.get('work_rvu', 'N/A')}")
         print(f"    National Payment: ${sample.get('regions', {}).get('national_nonfac', 'N/A')}")

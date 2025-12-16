@@ -194,7 +194,7 @@ def parse_lcd_data(zip_data: bytes) -> dict[str, dict[str, Any]]:
                         if count % 1000 == 0:
                             print(f"    Processed {count:,} LCDs...")
 
-                    except Exception as e:
+                    except Exception:
                         continue
 
                 print(f"  Total LCDs processed: {count:,}")
@@ -286,7 +286,7 @@ def main():
     print("=" * 60)
 
     # Summary
-    print(f"\nSummary:")
+    print("\nSummary:")
     print(f"  Total LCDs: {len(lcd_data):,}")
 
     # Sample LCD
