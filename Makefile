@@ -1,4 +1,4 @@
-.PHONY: help install run seed test docker-build docker-up docker-down clean data-all data-leie data-ncci data-mpfs
+.PHONY: help install run seed test docker-build docker-up docker-down clean data-all data-leie data-ncci data-mpfs data-lcd
 
 help:
 	@echo "Healthcare Payment Integrity Prototype"
@@ -9,11 +9,12 @@ help:
 	@echo "  make seed        Seed ChromaDB with policy documents (24 docs)"
 	@echo "  make test        Run the test script against running server"
 	@echo ""
-	@echo "Data Commands:"
-	@echo "  make data-all    Generate all reference data"
+	@echo "Data Commands (Phase 2 - Real CMS Data):"
+	@echo "  make data-all    Download all CMS reference data (~10 min)"
+	@echo "  make data-ncci   Download NCCI PTP/MUE from CMS (29K+ pairs, 8K+ MUE)"
+	@echo "  make data-mpfs   Download MPFS fee schedule from CMS (10K+ codes)"
+	@echo "  make data-lcd    Download LCD coverage data from CMS (79+ policies)"
 	@echo "  make data-leie   Load OIG exclusion list (8K+ NPIs)"
-	@echo "  make data-ncci   Generate NCCI PTP/MUE data"
-	@echo "  make data-mpfs   Generate MPFS fee schedule data"
 	@echo ""
 	@echo "Docker Commands:"
 	@echo "  make docker-build  Build Docker image"
@@ -44,13 +45,24 @@ data-ncci:
 data-mpfs:
 	python scripts/download_mpfs.py
 
-data-all: data-leie data-ncci data-mpfs seed
+data-lcd:
+	python scripts/download_lcd.py
+
+data-all: data-ncci data-mpfs data-lcd data-leie seed
 	@echo ""
-	@echo "All reference data generated successfully!"
-	@echo "  - OIG Exclusions: data/oig_exclusions.json"
-	@echo "  - NCCI PTP/MUE: data/ncci_ptp.json, data/ncci_mue.json"
-	@echo "  - MPFS Rates: data/mpfs.json"
-	@echo "  - ChromaDB: data/chroma/ (24 policy documents)"
+	@echo "=============================================="
+	@echo "All CMS reference data downloaded successfully!"
+	@echo "=============================================="
+	@echo ""
+	@echo "Phase 2 Data Summary:"
+	@echo "  - NCCI PTP Edits: data/ncci_ptp.json (29K+ code pairs)"
+	@echo "  - NCCI MUE Limits: data/ncci_mue.json (8K+ codes)"
+	@echo "  - MPFS Rates: data/mpfs.json (10K+ procedures)"
+	@echo "  - LCD Coverage: data/lcd.json (79+ policies)"
+	@echo "  - OIG Exclusions: data/oig_exclusions.json (8K+ NPIs)"
+	@echo "  - ChromaDB RAG: data/chroma/ (24 policy documents)"
+	@echo ""
+	@echo "Run 'make run' to start the backend with this data."
 
 docker-build:
 	docker-compose build

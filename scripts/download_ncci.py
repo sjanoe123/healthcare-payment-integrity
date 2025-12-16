@@ -1,197 +1,356 @@
 #!/usr/bin/env python3
-"""Download and process NCCI PTP and MUE data from CMS."""
+"""Download and process NCCI PTP and MUE data from CMS.
+
+Downloads Medicaid NCCI edit files which are freely available from CMS.
+These contain the same code edits as Medicare NCCI but without AMA license requirements.
+
+Data sources:
+- PTP: https://www.cms.gov/medicare/coding-billing/ncci-medicaid/medicaid-ncci-edit-files
+- MUE: Same source
+
+Output:
+- data/ncci_ptp.json: PTP column 1/2 code pairs with modifier indicators
+- data/ncci_mue.json: MUE (Medically Unlikely Edits) unit limits
+"""
 from __future__ import annotations
 
-import csv
 import io
 import json
-import re
+import ssl
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.request import urlopen, Request
 
+# CMS Medicaid NCCI file URLs (updated quarterly)
+# Check https://www.cms.gov/medicare/coding-billing/ncci-medicaid/medicaid-ncci-edit-files for latest
+CMS_BASE = "https://www.cms.gov/files/zip"
 
-# CMS NCCI Download Base URL
-CMS_NCCI_BASE = "https://www.cms.gov/files/zip"
-
-# Known file patterns (update quarterly as needed)
-# Format: 2025Q1 = January 2025
-CURRENT_QUARTER = "2024Q4"  # Update this when CMS releases new data
-
-# Known CMS download URLs (quarterly updates)
+# Current quarter files (update when CMS releases new data)
 NCCI_FILES = {
-    # PTP files - Practitioner and Outpatient
-    "ptp_practitioner": f"{CMS_NCCI_BASE}/ncci-ptpef-edits-october-2024.zip",
-    "ptp_outpatient": f"{CMS_NCCI_BASE}/ncci-ptpef-edits-october-2024.zip",
-    # MUE files
-    "mue_practitioner": f"{CMS_NCCI_BASE}/ncci-mue-values-october-2024.zip",
-    "mue_outpatient": f"{CMS_NCCI_BASE}/ncci-mue-values-october-2024.zip",
+    "ptp": f"{CMS_BASE}/medicaid-ncci-q1-2026-ptp-edits-practitioner-services.zip",
+    "mue": f"{CMS_BASE}/medicaid-ncci-q1-2026-mue-edits-practitioner-services.zip",
 }
 
+# High-priority procedure codes for fraud detection
+# Focus on codes that commonly appear in claims and have high fraud risk
+HIGH_PRIORITY_CODES = {
+    # E/M codes (office visits, hospital visits, ED)
+    "99202", "99203", "99204", "99205", "99211", "99212", "99213", "99214", "99215",
+    "99221", "99222", "99223", "99231", "99232", "99233", "99238", "99239",
+    "99281", "99282", "99283", "99284", "99285", "99291", "99292",
+    # Lab panels
+    "80048", "80050", "80053", "80061", "85025", "85027", "36415",
+    # Common imaging
+    "71046", "71045", "72148", "72149", "73721", "74177",
+    "93000", "93005", "93010",  # EKG
+    # Therapy
+    "97110", "97112", "97140", "97530", "97535", "97542",
+    # Common procedures
+    "43235", "43239", "45378", "45380", "45385",  # GI scopes
+    "29881", "29880", "29876",  # Knee arthroscopy
+    "20610", "20605", "20600",  # Joint injections
+    # DME/Supplies often flagged
+    "A4253", "A4259", "E0601", "E0424", "E0260",
+    # Drug administration
+    "96372", "96373", "96374", "96375",
+    "J0696", "J1100", "J3490",  # Common injectables
+}
 
-def download_file(url: str) -> bytes:
-    """Download a file from URL."""
+# Also include these code ranges for comprehensive coverage
+PRIORITY_CODE_PREFIXES = [
+    "992",  # E/M office/outpatient
+    "993",  # E/M hospital
+    "994",  # E/M consultations
+    "800",  # Lab panels
+    "850",  # Hematology
+    "364",  # Venipuncture
+    "930",  # EKG
+    "971",  # Physical therapy
+    "433", "453", "458",  # GI procedures
+]
+
+
+def download_file(url: str, timeout: int = 120) -> bytes:
+    """Download a file from URL with SSL handling."""
     print(f"  Downloading: {url}")
-    request = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+
+    # Create SSL context that doesn't verify (CMS certificates sometimes have issues)
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0 (Healthcare Payment Integrity)"})
     try:
-        with urlopen(request, timeout=60) as response:
-            return response.read()
+        with urlopen(request, timeout=timeout, context=ctx) as response:
+            data = response.read()
+            print(f"  Downloaded {len(data):,} bytes")
+            return data
     except Exception as e:
         print(f"  Error downloading {url}: {e}")
         return b""
 
 
-def parse_ptp_csv(content: str) -> list[dict[str, Any]]:
-    """Parse PTP edit CSV content."""
-    ptp_pairs = []
-    reader = csv.DictReader(io.StringIO(content))
+def parse_ptp_file(zip_data: bytes, active_only: bool = True) -> list[dict[str, Any]]:
+    """Parse PTP edit file from ZIP.
 
-    for row in reader:
-        # Handle different column naming conventions from CMS
-        col1 = row.get("Column 1", row.get("HCPCS/CPT Column 1", "")).strip()
-        col2 = row.get("Column 2", row.get("HCPCS/CPT Column 2", "")).strip()
-        modifier = row.get("Modifier", row.get("Correct Coding Modifier Indicator", "")).strip()
-        eff_date = row.get("Effective Date", "").strip()
-        del_date = row.get("Deletion Date", row.get("Term Date", "")).strip()
+    File format (tab-delimited):
+    - Line 0: Title
+    - Line 1: Notice
+    - Line 2: Headers: Col1, Col2, EffDt, DelDt, ModifierIndicator, PTP Edit Rationale
+    - Line 3+: Data
 
-        if col1 and col2:
-            ptp_pairs.append({
-                "codes": sorted([col1, col2]),
-                "modifier": modifier,
-                "citation": "NCCI PTP Column 1/2 Edit",
-                "effective_date": eff_date,
-                "termination_date": del_date if del_date and del_date != '*' else None,
-            })
+    Args:
+        zip_data: ZIP file bytes
+        active_only: If True, only include edits without deletion dates or future deletion
 
-    return ptp_pairs
-
-
-def parse_mue_csv(content: str) -> dict[str, dict[str, Any]]:
-    """Parse MUE values CSV content."""
-    mue_limits = {}
-    reader = csv.DictReader(io.StringIO(content))
-
-    for row in reader:
-        # Handle different column naming conventions
-        code = row.get("HCPCS/CPT Code", row.get("HCPCS", row.get("Code", ""))).strip()
-        mue_value = row.get("MUE Value", row.get("MUE", row.get("Units of Service", ""))).strip()
-        mai = row.get("MUE Adjudication Indicator", row.get("MAI", "")).strip()
-        rationale = row.get("MUE Rationale", row.get("Rationale", "")).strip()
-
-        if code and mue_value:
-            try:
-                limit = int(mue_value)
-                mue_limits[code] = {
-                    "limit": limit,
-                    "unit": "services",
-                    "adjudication_indicator": mai,
-                    "rationale": rationale,
-                }
-            except ValueError:
-                continue
-
-    return mue_limits
-
-
-def process_ncci_zip(zip_data: bytes, file_type: str) -> list[dict] | dict:
-    """Process a NCCI ZIP file and extract data."""
+    Returns:
+        List of PTP edit records
+    """
     if not zip_data:
-        return [] if file_type == "ptp" else {}
+        return []
 
-    results = [] if file_type == "ptp" else {}
+    ptp_pairs = []
+    today = datetime.now().strftime("%Y%m%d")
 
     try:
         with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
             for name in zf.namelist():
-                # Look for CSV files
-                if name.lower().endswith('.csv'):
+                if name.lower().endswith(".txt"):
                     print(f"  Processing: {name}")
-                    content = zf.read(name).decode('utf-8', errors='ignore')
+                    content = zf.read(name).decode("utf-8", errors="ignore")
+                    lines = content.strip().split("\n")
 
-                    if file_type == "ptp":
-                        pairs = parse_ptp_csv(content)
-                        results.extend(pairs)
-                    else:
-                        limits = parse_mue_csv(content)
-                        results.update(limits)
+                    # Skip header lines (first 3 lines)
+                    for line in lines[3:]:
+                        if not line.strip() or "\t" not in line:
+                            continue
+
+                        parts = line.split("\t")
+                        if len(parts) < 5:
+                            continue
+
+                        col1 = parts[0].strip()
+                        col2 = parts[1].strip()
+                        eff_date = parts[2].strip()
+                        del_date = parts[3].strip()
+                        modifier = parts[4].strip()
+                        rationale = parts[5].strip() if len(parts) > 5 else ""
+
+                        # Skip if not active (has past deletion date)
+                        if active_only and del_date and del_date < today:
+                            continue
+
+                        # Skip if either code is empty
+                        if not col1 or not col2:
+                            continue
+
+                        ptp_pairs.append({
+                            "codes": sorted([col1, col2]),
+                            "column1": col1,
+                            "column2": col2,
+                            "modifier": modifier,  # 0=not allowed, 1=allowed, 9=N/A
+                            "effective_date": eff_date,
+                            "deletion_date": del_date if del_date else None,
+                            "rationale": rationale,
+                        })
+                    break
+
     except Exception as e:
-        print(f"  Error processing ZIP: {e}")
+        print(f"  Error parsing PTP file: {e}")
 
-    return results
+    return ptp_pairs
 
 
-def generate_sample_ncci_data() -> tuple[list[dict], dict]:
-    """Generate comprehensive sample NCCI data when downloads fail."""
-    # Common E/M PTP pairs
-    ptp_pairs = [
-        # E/M code pairs
-        {"codes": ["99213", "99214"], "modifier": "0", "citation": "NCCI PTP - E/M level conflict"},
-        {"codes": ["99214", "99215"], "modifier": "0", "citation": "NCCI PTP - E/M level conflict"},
-        {"codes": ["99212", "99213"], "modifier": "0", "citation": "NCCI PTP - E/M level conflict"},
-        {"codes": ["99211", "99212"], "modifier": "0", "citation": "NCCI PTP - E/M level conflict"},
+def parse_mue_file(zip_data: bytes) -> dict[str, dict[str, Any]]:
+    """Parse MUE values file from ZIP.
 
-        # E/M with procedures
-        {"codes": ["99213", "36415"], "modifier": "59", "citation": "NCCI PTP - E/M with venipuncture"},
-        {"codes": ["99214", "36415"], "modifier": "59", "citation": "NCCI PTP - E/M with venipuncture"},
+    File format (tab-delimited):
+    - Lines 0-8: Copyright and notices
+    - Line 9: Headers: HCPCS/CPT Code, MUE Values, MUE Rationale
+    - Line 10+: Data
 
-        # Lab pairs
-        {"codes": ["80053", "80048"], "modifier": "0", "citation": "NCCI PTP - Comprehensive includes basic panel"},
-        {"codes": ["80050", "80053"], "modifier": "0", "citation": "NCCI PTP - General health panel includes CMP"},
-        {"codes": ["85025", "85027"], "modifier": "0", "citation": "NCCI PTP - CBC with diff includes CBC"},
+    Returns:
+        Dictionary mapping code to MUE limit info
+    """
+    if not zip_data:
+        return {}
 
-        # EKG pairs
-        {"codes": ["93000", "93005"], "modifier": "0", "citation": "NCCI PTP - EKG global includes tracing"},
-        {"codes": ["93000", "93010"], "modifier": "0", "citation": "NCCI PTP - EKG global includes interpretation"},
+    mue_limits = {}
 
-        # Surgical pairs
-        {"codes": ["43239", "43235"], "modifier": "0", "citation": "NCCI PTP - Upper GI endoscopy with biopsy includes diagnostic"},
-        {"codes": ["45380", "45378"], "modifier": "0", "citation": "NCCI PTP - Colonoscopy with biopsy includes diagnostic"},
-        {"codes": ["29881", "29880"], "modifier": "0", "citation": "NCCI PTP - Knee arthroscopy medial and lateral meniscectomy"},
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+            for name in zf.namelist():
+                if name.lower().endswith(".txt"):
+                    print(f"  Processing: {name}")
+                    content = zf.read(name).decode("utf-8", errors="ignore")
+                    lines = content.strip().split("\n")
 
-        # Imaging pairs
-        {"codes": ["71046", "71045"], "modifier": "0", "citation": "NCCI PTP - Chest X-ray 2 views includes single view"},
-        {"codes": ["72148", "72149"], "modifier": "0", "citation": "NCCI PTP - Lumbar MRI without/with contrast"},
+                    # Find the header line
+                    data_start = 0
+                    for i, line in enumerate(lines):
+                        if "HCPCS/CPT Code" in line:
+                            data_start = i + 1
+                            break
 
-        # Critical care
-        {"codes": ["99285", "99291"], "modifier": "59", "citation": "NCCI PTP - ED visit with critical care"},
-        {"codes": ["99291", "99292"], "modifier": "0", "citation": "NCCI PTP - Critical care add-on requires base code"},
+                    # Parse data lines
+                    for line in lines[data_start:]:
+                        if not line.strip() or "\t" not in line:
+                            continue
+
+                        parts = line.split("\t")
+                        if len(parts) < 2:
+                            continue
+
+                        code = parts[0].strip()
+                        mue_value = parts[1].strip()
+                        rationale = parts[2].strip() if len(parts) > 2 else ""
+
+                        if not code or not mue_value:
+                            continue
+
+                        try:
+                            limit = int(mue_value)
+                            mue_limits[code] = {
+                                "limit": limit,
+                                "unit": "services",
+                                "rationale": rationale,
+                            }
+                        except ValueError:
+                            continue
+                    break
+
+    except Exception as e:
+        print(f"  Error parsing MUE file: {e}")
+
+    return mue_limits
+
+
+def filter_priority_codes(ptp_pairs: list[dict], mue_limits: dict) -> tuple[list[dict], dict]:
+    """Filter to priority codes for smaller file size.
+
+    This reduces the dataset to common high-volume codes that are most
+    relevant for fraud detection in typical claims processing.
+
+    Uses two-tier filtering:
+    1. High-priority codes (specific codes known for fraud risk)
+    2. Priority prefixes (code ranges for common services)
+    """
+    print("\n  Filtering to priority codes...")
+
+    def is_priority(code: str) -> bool:
+        # Check if it's a specific high-priority code
+        if code in HIGH_PRIORITY_CODES:
+            return True
+        # Check if it matches a priority prefix
+        for prefix in PRIORITY_CODE_PREFIXES:
+            if code.startswith(prefix):
+                return True
+        return False
+
+    # Filter PTP pairs where AT LEAST ONE code is high-priority
+    # (captures edits involving common codes)
+    filtered_ptp = [
+        p for p in ptp_pairs
+        if is_priority(p["column1"]) or is_priority(p["column2"])
     ]
 
-    # Common MUE limits
+    # Further filter to pairs where both are core clinical codes
+    def is_core_code(code: str) -> bool:
+        # Focus on E/M, key labs, common radiology, common medicine
+        return (
+            code.startswith(("99",  # E/M
+                           "800", "850", "851", "852",  # Key labs
+                           "710", "720", "730", "740",  # Common imaging
+                           "930", "931", "932", "933",  # Cardio diagnostics
+                           "971", "972",  # Physical therapy
+                           "963", "964",  # Drug admin
+                           "364",  # Venipuncture
+                           "432", "433", "453", "454",  # GI scopes
+                           "298",  # Arthroscopy
+                           "206",  # Joint injections
+                           ))
+        )
+
+    # Apply filter to keep dataset manageable
+    filtered_ptp = [
+        p for p in filtered_ptp
+        if is_core_code(p["column1"]) and is_core_code(p["column2"])
+    ]
+
+    # For MUE, keep more codes (they're small records)
+    # Include E/M, labs, radiology, medicine, therapy, procedures
+    def is_mue_relevant(code: str) -> bool:
+        return (
+            code.startswith(("99",  # E/M
+                           "8",  # Labs/pathology
+                           "7",  # Radiology
+                           "9",  # Medicine
+                           "36", "43", "45", "29", "20", "27",  # Common procedures
+                           "A", "E", "G", "J", "L", "Q",  # HCPCS
+                           ))
+        )
+
+    filtered_mue = {
+        code: info for code, info in mue_limits.items()
+        if is_mue_relevant(code)
+    }
+
+    print(f"  PTP: {len(ptp_pairs):,} -> {len(filtered_ptp):,} pairs")
+    print(f"  MUE: {len(mue_limits):,} -> {len(filtered_mue):,} codes")
+
+    return filtered_ptp, filtered_mue
+
+
+def deduplicate_ptp(ptp_pairs: list[dict]) -> list[dict]:
+    """Remove duplicate PTP pairs (same codes, keep most restrictive)."""
+    # Group by sorted code pair
+    by_pair: dict[tuple, list[dict]] = {}
+    for p in ptp_pairs:
+        key = tuple(p["codes"])
+        if key not in by_pair:
+            by_pair[key] = []
+        by_pair[key].append(p)
+
+    # For each pair, keep the most restrictive (modifier=0 preferred)
+    deduped = []
+    for key, records in by_pair.items():
+        # Sort by modifier (0 first, then 1, then 9)
+        records.sort(key=lambda x: x.get("modifier", "9"))
+        deduped.append(records[0])
+
+    return deduped
+
+
+def generate_sample_data() -> tuple[list[dict], dict]:
+    """Generate sample NCCI data as fallback when downloads fail."""
+    print("  Generating fallback sample data...")
+
+    ptp_pairs = [
+        {"codes": ["99213", "99214"], "column1": "99213", "column2": "99214", "modifier": "0", "rationale": "E/M level conflict"},
+        {"codes": ["99214", "99215"], "column1": "99214", "column2": "99215", "modifier": "0", "rationale": "E/M level conflict"},
+        {"codes": ["80053", "80048"], "column1": "80053", "column2": "80048", "modifier": "0", "rationale": "CMP includes BMP"},
+        {"codes": ["85025", "85027"], "column1": "85025", "column2": "85027", "modifier": "0", "rationale": "CBC with diff includes CBC"},
+        {"codes": ["93000", "93005"], "column1": "93000", "column2": "93005", "modifier": "0", "rationale": "EKG global includes tracing"},
+        {"codes": ["43239", "43235"], "column1": "43239", "column2": "43235", "modifier": "0", "rationale": "EGD with biopsy includes diagnostic"},
+        {"codes": ["45380", "45378"], "column1": "45380", "column2": "45378", "modifier": "0", "rationale": "Colonoscopy with biopsy includes diagnostic"},
+        {"codes": ["99213", "36415"], "column1": "99213", "column2": "36415", "modifier": "1", "rationale": "E/M with venipuncture - modifier allowed"},
+        {"codes": ["71046", "71045"], "column1": "71046", "column2": "71045", "modifier": "0", "rationale": "Chest X-ray 2v includes 1v"},
+    ]
+
     mue_limits = {
-        # E/M codes - 1 per day
-        "99211": {"limit": 1, "unit": "services", "rationale": "E/M - one per date of service"},
-        "99212": {"limit": 1, "unit": "services", "rationale": "E/M - one per date of service"},
-        "99213": {"limit": 1, "unit": "services", "rationale": "E/M - one per date of service"},
-        "99214": {"limit": 1, "unit": "services", "rationale": "E/M - one per date of service"},
-        "99215": {"limit": 1, "unit": "services", "rationale": "E/M - one per date of service"},
-
-        # ED visits - 1 per day
-        "99281": {"limit": 1, "unit": "services", "rationale": "ED visit - one per date of service"},
-        "99282": {"limit": 1, "unit": "services", "rationale": "ED visit - one per date of service"},
-        "99283": {"limit": 1, "unit": "services", "rationale": "ED visit - one per date of service"},
-        "99284": {"limit": 1, "unit": "services", "rationale": "ED visit - one per date of service"},
-        "99285": {"limit": 1, "unit": "services", "rationale": "ED visit - one per date of service"},
-
-        # Critical care
-        "99291": {"limit": 1, "unit": "services", "rationale": "Critical care initial - one per date"},
-        "99292": {"limit": 8, "unit": "services", "rationale": "Critical care add-on - max 8 per date (4 hours)"},
-
-        # Therapy codes
-        "90834": {"limit": 4, "unit": "services", "rationale": "Psychotherapy - max 4 per day"},
-        "90837": {"limit": 4, "unit": "services", "rationale": "Psychotherapy - max 4 per day"},
-        "97110": {"limit": 12, "unit": "services", "rationale": "Therapeutic exercises - 12 units max"},
-        "97140": {"limit": 12, "unit": "services", "rationale": "Manual therapy - 12 units max"},
-
-        # Lab codes
-        "36415": {"limit": 3, "unit": "services", "rationale": "Venipuncture - max 3 per encounter"},
-        "85025": {"limit": 2, "unit": "services", "rationale": "CBC - max 2 per day"},
-        "80053": {"limit": 2, "unit": "services", "rationale": "CMP - max 2 per day"},
-
-        # Imaging
-        "71046": {"limit": 2, "unit": "services", "rationale": "Chest X-ray - max 2 per day"},
-        "93000": {"limit": 3, "unit": "services", "rationale": "EKG - max 3 per day"},
+        "99211": {"limit": 1, "unit": "services", "rationale": "E/M - one per DOS"},
+        "99212": {"limit": 1, "unit": "services", "rationale": "E/M - one per DOS"},
+        "99213": {"limit": 1, "unit": "services", "rationale": "E/M - one per DOS"},
+        "99214": {"limit": 1, "unit": "services", "rationale": "E/M - one per DOS"},
+        "99215": {"limit": 1, "unit": "services", "rationale": "E/M - one per DOS"},
+        "99291": {"limit": 1, "unit": "services", "rationale": "Critical care initial"},
+        "99292": {"limit": 8, "unit": "services", "rationale": "Critical care add-on"},
+        "36415": {"limit": 3, "unit": "services", "rationale": "Venipuncture"},
+        "85025": {"limit": 2, "unit": "services", "rationale": "CBC"},
+        "80053": {"limit": 2, "unit": "services", "rationale": "CMP"},
+        "97110": {"limit": 12, "unit": "services", "rationale": "Therapeutic exercises"},
     }
 
     return ptp_pairs, mue_limits
@@ -203,47 +362,78 @@ def main():
     output_dir = base_dir / "data"
     output_dir.mkdir(exist_ok=True)
 
+    print("=" * 60)
     print("NCCI Data Download Script")
-    print("=" * 50)
+    print("=" * 60)
+    print("\nSource: CMS Medicaid NCCI Edit Files")
+    print("https://www.cms.gov/medicare/coding-billing/ncci-medicaid/medicaid-ncci-edit-files\n")
 
-    # Try to download from CMS
-    all_ptp_pairs = []
-    all_mue_limits = {}
+    # Download and process MUE data
+    print("Step 1: Downloading MUE (Medically Unlikely Edits)...")
+    mue_data = download_file(NCCI_FILES["mue"])
+    mue_limits = parse_mue_file(mue_data)
 
-    print("\nAttempting to download NCCI data from CMS...")
-    print("Note: CMS URLs change quarterly. Using fallback sample data.\n")
+    if not mue_limits:
+        print("  MUE download failed, using sample data")
+        _, mue_limits = generate_sample_data()
 
-    # In a real implementation, we would:
-    # 1. Scrape the CMS NCCI page to find current file URLs
-    # 2. Download and parse the ZIP files
-    # For now, use comprehensive sample data
+    # Download and process PTP data
+    print("\nStep 2: Downloading PTP (Procedure-to-Procedure Edits)...")
+    print("  Note: This is a large file (~68MB), please wait...")
+    ptp_data = download_file(NCCI_FILES["ptp"], timeout=180)
+    ptp_pairs = parse_ptp_file(ptp_data, active_only=True)
 
-    # Generate comprehensive sample data
-    print("Generating comprehensive NCCI sample data...")
-    ptp_pairs, mue_limits = generate_sample_ncci_data()
-    all_ptp_pairs = ptp_pairs
-    all_mue_limits = mue_limits
+    if not ptp_pairs:
+        print("  PTP download failed, using sample data")
+        ptp_pairs, _ = generate_sample_data()
 
-    # Write PTP data
+    # Filter and deduplicate
+    print("\nStep 3: Processing data...")
+    if len(ptp_pairs) > 10000:
+        ptp_pairs, mue_limits = filter_priority_codes(ptp_pairs, mue_limits)
+
+    ptp_pairs = deduplicate_ptp(ptp_pairs)
+    print(f"  After deduplication: {len(ptp_pairs):,} PTP pairs")
+
+    # Write output files
+    print("\nStep 4: Writing output files...")
+
     ptp_output = output_dir / "ncci_ptp.json"
-    with open(ptp_output, 'w') as f:
-        json.dump(all_ptp_pairs, f, indent=2)
-    print(f"\nWritten {len(all_ptp_pairs)} PTP code pairs to: {ptp_output}")
+    # Use compact format (no indent) for large PTP file
+    with open(ptp_output, "w") as f:
+        json.dump(ptp_pairs, f, separators=(",", ":"))
+    ptp_size = ptp_output.stat().st_size
+    print(f"  Written {len(ptp_pairs):,} PTP pairs to: {ptp_output} ({ptp_size / 1024 / 1024:.1f} MB)")
 
-    # Write MUE data
     mue_output = output_dir / "ncci_mue.json"
-    with open(mue_output, 'w') as f:
-        json.dump(all_mue_limits, f, indent=2)
-    print(f"Written {len(all_mue_limits)} MUE limits to: {mue_output}")
+    with open(mue_output, "w") as f:
+        json.dump(mue_limits, f, indent=2)
+    mue_size = mue_output.stat().st_size
+    print(f"  Written {len(mue_limits):,} MUE limits to: {mue_output} ({mue_size:,} bytes)")
 
-    print("\nNCCI data generation complete!")
-    print("\nTo get full production data:")
-    print("1. Visit https://www.cms.gov/Medicare/Coding/NationalCorrectCodInitEd/NCCI-Coding-Edits")
-    print("2. Download the latest quarterly ZIP files")
-    print("3. Extract CSVs and place in ./data/ directory")
+    print("\n" + "=" * 60)
+    print("NCCI data download complete!")
+    print("=" * 60)
+
+    # Print summary statistics
+    print("\nSummary:")
+    print(f"  PTP Code Pairs: {len(ptp_pairs):,}")
+    if ptp_pairs:
+        mod_0 = sum(1 for p in ptp_pairs if p.get("modifier") == "0")
+        mod_1 = sum(1 for p in ptp_pairs if p.get("modifier") == "1")
+        print(f"    - Modifier 0 (never bill together): {mod_0:,}")
+        print(f"    - Modifier 1 (modifier may allow): {mod_1:,}")
+
+    print(f"  MUE Limits: {len(mue_limits):,}")
+    if mue_limits:
+        common_limits = sorted(
+            [(k, v["limit"]) for k, v in mue_limits.items() if k.startswith("99")],
+            key=lambda x: x[0]
+        )[:5]
+        print(f"    Sample E/M limits: {common_limits}")
 
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     exit(main())

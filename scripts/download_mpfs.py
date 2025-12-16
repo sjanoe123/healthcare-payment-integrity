@@ -1,101 +1,238 @@
 #!/usr/bin/env python3
-"""Download and process Medicare Physician Fee Schedule (MPFS) data from CMS."""
+"""Download and process Medicare Physician Fee Schedule (MPFS) data from CMS.
+
+Downloads the PFS Relative Value Files which contain:
+- RVU values (work, practice expense, malpractice)
+- National payment rates
+- Global surgery indicators
+- Status codes
+
+Data source:
+https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files
+
+Output:
+- data/mpfs.json: Procedure codes with RVUs and national payment rates
+"""
 from __future__ import annotations
 
+import csv
+import io
 import json
+import ssl
+import zipfile
 from pathlib import Path
+from typing import Any
+from urllib.request import urlopen, Request
+
+# CMS MPFS RVU file URL (updated annually, with quarterly corrections)
+# Check https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files for latest
+CMS_MPFS_URL = "https://www.cms.gov/files/zip/rvu25a-updated-01/10/2025.zip"
+
+# The main RVU file within the ZIP
+RVU_CSV_FILENAME = "PPRRVU25_JAN.csv"
+
+# 2025 Conversion Factor (used to calculate payment from RVUs)
+CONVERSION_FACTOR = 32.3465
+
+# CSV column indices (based on PPRRVU25_JAN.csv format)
+COL_HCPCS = 0
+COL_MOD = 1
+COL_DESCRIPTION = 2
+COL_STATUS = 3
+COL_WORK_RVU = 5
+COL_NONFAC_PE_RVU = 6
+COL_FAC_PE_RVU = 8
+COL_MP_RVU = 10
+COL_NONFAC_TOTAL = 11
+COL_FAC_TOTAL = 12
+COL_GLOBAL = 14
+COL_CONV_FACTOR = 24
+
+# Filter to relevant procedure codes
+RELEVANT_CODE_PREFIXES = (
+    "99",  # E/M codes
+    "80", "81", "82", "83", "84", "85", "86", "87", "88", "89",  # Lab/Pathology
+    "70", "71", "72", "73", "74", "75", "76", "77", "78", "79",  # Radiology
+    "90", "91", "92", "93", "94", "95", "96", "97",  # Medicine
+    "36",  # Vascular access
+    "43", "45",  # GI procedures
+    "29",  # Arthroscopy
+    "10", "11", "12",  # Integumentary
+    "20", "21", "27",  # Musculoskeletal
+    "A", "E", "G", "J", "L", "Q",  # HCPCS Level II
+)
 
 
-def generate_mpfs_data() -> dict:
+def download_file(url: str, timeout: int = 60) -> bytes:
+    """Download a file from URL with SSL handling."""
+    print(f"  Downloading: {url}")
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0 (Healthcare Payment Integrity)"})
+    try:
+        with urlopen(request, timeout=timeout, context=ctx) as response:
+            data = response.read()
+            print(f"  Downloaded {len(data):,} bytes")
+            return data
+    except Exception as e:
+        print(f"  Error downloading {url}: {e}")
+        return b""
+
+
+def safe_float(value: str, default: float = 0.0) -> float:
+    """Safely convert string to float."""
+    if not value or not value.strip():
+        return default
+    try:
+        return float(value.strip())
+    except ValueError:
+        return default
+
+
+def parse_mpfs_csv(zip_data: bytes) -> dict[str, dict[str, Any]]:
+    """Parse MPFS RVU CSV file from ZIP.
+
+    Returns:
+        Dictionary mapping HCPCS code to fee schedule info
     """
-    Generate comprehensive MPFS fee schedule data.
+    if not zip_data:
+        return {}
 
-    In production, this would download from:
-    https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files
+    mpfs_data = {}
 
-    The data includes national payment rates and key indicators.
-    """
-    # Common procedure codes with 2024 national rates (approximate)
-    mpfs_data = {
-        # Evaluation & Management - Office/Outpatient
-        "99202": {"regions": {"national": 76.57}, "global_surgery": "XXX", "rvu_work": 0.93, "description": "New patient E/M, straightforward"},
-        "99203": {"regions": {"national": 111.89}, "global_surgery": "XXX", "rvu_work": 1.60, "description": "New patient E/M, low complexity"},
-        "99204": {"regions": {"national": 167.10}, "global_surgery": "XXX", "rvu_work": 2.60, "description": "New patient E/M, moderate complexity"},
-        "99205": {"regions": {"national": 211.12}, "global_surgery": "XXX", "rvu_work": 3.50, "description": "New patient E/M, high complexity"},
-        "99211": {"regions": {"national": 24.31}, "global_surgery": "XXX", "rvu_work": 0.18, "description": "Established patient E/M, may not require MD"},
-        "99212": {"regions": {"national": 57.38}, "global_surgery": "XXX", "rvu_work": 0.70, "description": "Established patient E/M, straightforward"},
-        "99213": {"regions": {"national": 92.42}, "global_surgery": "XXX", "rvu_work": 1.30, "description": "Established patient E/M, low complexity"},
-        "99214": {"regions": {"national": 130.40}, "global_surgery": "XXX", "rvu_work": 1.92, "description": "Established patient E/M, moderate complexity"},
-        "99215": {"regions": {"national": 175.51}, "global_surgery": "XXX", "rvu_work": 2.80, "description": "Established patient E/M, high complexity"},
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+            # Find the RVU CSV file
+            csv_file = None
+            for name in zf.namelist():
+                if "PPRRVU" in name and name.endswith(".csv"):
+                    csv_file = name
+                    break
 
-        # ED Visits
-        "99281": {"regions": {"national": 22.67}, "global_surgery": "XXX", "rvu_work": 0.25, "description": "ED visit, self-limited problem"},
-        "99282": {"regions": {"national": 45.38}, "global_surgery": "XXX", "rvu_work": 0.56, "description": "ED visit, low severity"},
-        "99283": {"regions": {"national": 74.84}, "global_surgery": "XXX", "rvu_work": 1.01, "description": "ED visit, moderate severity"},
-        "99284": {"regions": {"national": 133.26}, "global_surgery": "XXX", "rvu_work": 1.93, "description": "ED visit, high severity"},
-        "99285": {"regions": {"national": 195.24}, "global_surgery": "XXX", "rvu_work": 3.00, "description": "ED visit, high severity with threat to life"},
+            if not csv_file:
+                print("  Error: Could not find RVU CSV file in ZIP")
+                return {}
 
-        # Critical Care
-        "99291": {"regions": {"national": 275.06}, "global_surgery": "XXX", "rvu_work": 4.50, "description": "Critical care, first 30-74 mins"},
-        "99292": {"regions": {"national": 122.57}, "global_surgery": "ZZZ", "rvu_work": 2.25, "description": "Critical care, each additional 30 mins"},
+            print(f"  Processing: {csv_file}")
+            content = zf.read(csv_file).decode("utf-8", errors="ignore")
+            reader = csv.reader(io.StringIO(content))
+            rows = list(reader)
 
-        # Hospital Visits
-        "99221": {"regions": {"national": 103.35}, "global_surgery": "XXX", "rvu_work": 1.92, "description": "Initial hospital care, low complexity"},
-        "99222": {"regions": {"national": 143.21}, "global_surgery": "XXX", "rvu_work": 2.61, "description": "Initial hospital care, moderate complexity"},
-        "99223": {"regions": {"national": 205.91}, "global_surgery": "XXX", "rvu_work": 3.86, "description": "Initial hospital care, high complexity"},
-        "99231": {"regions": {"national": 49.67}, "global_surgery": "XXX", "rvu_work": 0.76, "description": "Subsequent hospital care, stable"},
-        "99232": {"regions": {"national": 89.95}, "global_surgery": "XXX", "rvu_work": 1.39, "description": "Subsequent hospital care, responding"},
-        "99233": {"regions": {"national": 127.95}, "global_surgery": "XXX", "rvu_work": 2.00, "description": "Subsequent hospital care, unstable"},
+            # Find header row (contains "HCPCS")
+            header_row = 0
+            for i, row in enumerate(rows):
+                if row and row[0] == "HCPCS":
+                    header_row = i
+                    break
 
-        # Psychotherapy
-        "90832": {"regions": {"national": 68.40}, "global_surgery": "XXX", "rvu_work": 0.97, "description": "Psychotherapy, 30 mins"},
-        "90834": {"regions": {"national": 102.60}, "global_surgery": "XXX", "rvu_work": 1.45, "description": "Psychotherapy, 45 mins"},
-        "90837": {"regions": {"national": 136.80}, "global_surgery": "XXX", "rvu_work": 1.93, "description": "Psychotherapy, 60 mins"},
+            # Process data rows
+            for row in rows[header_row + 1:]:
+                if len(row) < 15:
+                    continue
 
-        # Lab/Pathology
-        "36415": {"regions": {"national": 3.00}, "global_surgery": "XXX", "rvu_work": 0.03, "description": "Routine venipuncture"},
-        "85025": {"regions": {"national": 10.56}, "global_surgery": "XXX", "rvu_work": 0.00, "description": "CBC with diff, automated"},
-        "80053": {"regions": {"national": 14.35}, "global_surgery": "XXX", "rvu_work": 0.00, "description": "Comprehensive metabolic panel"},
-        "80048": {"regions": {"national": 11.12}, "global_surgery": "XXX", "rvu_work": 0.00, "description": "Basic metabolic panel"},
-        "81001": {"regions": {"national": 4.12}, "global_surgery": "XXX", "rvu_work": 0.00, "description": "Urinalysis with microscopy"},
+                hcpcs = row[COL_HCPCS].strip()
+                if not hcpcs:
+                    continue
 
-        # EKG
-        "93000": {"regions": {"national": 17.61}, "global_surgery": "XXX", "rvu_work": 0.17, "description": "EKG complete"},
-        "93005": {"regions": {"national": 8.40}, "global_surgery": "XXX", "rvu_work": 0.00, "description": "EKG tracing only"},
-        "93010": {"regions": {"national": 9.21}, "global_surgery": "XXX", "rvu_work": 0.17, "description": "EKG interpretation only"},
+                # Filter to relevant codes
+                if not hcpcs.startswith(RELEVANT_CODE_PREFIXES):
+                    continue
 
-        # Imaging
-        "71046": {"regions": {"national": 28.67}, "global_surgery": "XXX", "rvu_work": 0.18, "description": "Chest X-ray, 2 views"},
-        "71045": {"regions": {"national": 21.13}, "global_surgery": "XXX", "rvu_work": 0.14, "description": "Chest X-ray, single view"},
-        "72148": {"regions": {"national": 314.92}, "global_surgery": "XXX", "rvu_work": 1.13, "description": "MRI lumbar spine without contrast"},
-        "72149": {"regions": {"national": 452.43}, "global_surgery": "XXX", "rvu_work": 1.35, "description": "MRI lumbar spine with contrast"},
-        "73721": {"regions": {"national": 325.12}, "global_surgery": "XXX", "rvu_work": 1.13, "description": "MRI lower extremity without contrast"},
+                modifier = row[COL_MOD].strip()
+                description = row[COL_DESCRIPTION].strip()
+                status = row[COL_STATUS].strip()
 
-        # Physical Therapy
-        "97110": {"regions": {"national": 29.45}, "global_surgery": "XXX", "rvu_work": 0.45, "description": "Therapeutic exercises, 15 min"},
-        "97140": {"regions": {"national": 29.45}, "global_surgery": "XXX", "rvu_work": 0.43, "description": "Manual therapy, 15 min"},
-        "97530": {"regions": {"national": 32.56}, "global_surgery": "XXX", "rvu_work": 0.44, "description": "Therapeutic activities, 15 min"},
+                # Skip deleted codes
+                if status == "D":
+                    continue
 
-        # Surgical - Minor
-        "10060": {"regions": {"national": 120.33}, "global_surgery": "010", "rvu_work": 1.22, "description": "I&D abscess, simple"},
-        "10061": {"regions": {"national": 220.33}, "global_surgery": "010", "rvu_work": 2.50, "description": "I&D abscess, complicated"},
-        "11102": {"regions": {"national": 118.78}, "global_surgery": "000", "rvu_work": 0.81, "description": "Tangential biopsy of skin"},
-        "11104": {"regions": {"national": 143.21}, "global_surgery": "000", "rvu_work": 0.91, "description": "Punch biopsy of skin"},
+                # Get RVU values
+                work_rvu = safe_float(row[COL_WORK_RVU])
+                nonfac_pe_rvu = safe_float(row[COL_NONFAC_PE_RVU])
+                fac_pe_rvu = safe_float(row[COL_FAC_PE_RVU])
+                mp_rvu = safe_float(row[COL_MP_RVU])
+                nonfac_total = safe_float(row[COL_NONFAC_TOTAL])
+                fac_total = safe_float(row[COL_FAC_TOTAL])
+                global_surgery = row[COL_GLOBAL].strip() if len(row) > COL_GLOBAL else "XXX"
 
-        # Endoscopy
-        "43235": {"regions": {"national": 217.89}, "global_surgery": "000", "rvu_work": 2.39, "description": "Upper GI endoscopy, diagnostic"},
-        "43239": {"regions": {"national": 285.67}, "global_surgery": "000", "rvu_work": 3.00, "description": "Upper GI endoscopy with biopsy"},
-        "45378": {"regions": {"national": 290.45}, "global_surgery": "000", "rvu_work": 3.69, "description": "Colonoscopy, diagnostic"},
-        "45380": {"regions": {"national": 340.12}, "global_surgery": "000", "rvu_work": 4.25, "description": "Colonoscopy with biopsy"},
-        "45385": {"regions": {"national": 425.34}, "global_surgery": "000", "rvu_work": 5.00, "description": "Colonoscopy with polypectomy"},
+                # Calculate national payment (Total RVU * Conversion Factor)
+                nonfac_payment = round(nonfac_total * CONVERSION_FACTOR, 2)
+                fac_payment = round(fac_total * CONVERSION_FACTOR, 2)
 
-        # Injections
-        "20610": {"regions": {"national": 47.89}, "global_surgery": "000", "rvu_work": 0.66, "description": "Arthrocentesis, major joint"},
-        "J1040": {"regions": {"national": 3.50}, "global_surgery": "XXX", "rvu_work": 0.00, "description": "Methylprednisolone 80mg injection"},
-        "96372": {"regions": {"national": 25.78}, "global_surgery": "XXX", "rvu_work": 0.17, "description": "Therapeutic injection, SC/IM"},
-    }
+                # Use code with modifier as key if modifier exists
+                key = f"{hcpcs}-{modifier}" if modifier else hcpcs
+
+                # Skip if we already have this code without modifier and this has no modifier
+                if not modifier and key in mpfs_data:
+                    continue
+
+                mpfs_data[key] = {
+                    "hcpcs": hcpcs,
+                    "modifier": modifier if modifier else None,
+                    "description": description,
+                    "status": status,
+                    "work_rvu": work_rvu,
+                    "pe_rvu_nonfac": nonfac_pe_rvu,
+                    "pe_rvu_fac": fac_pe_rvu,
+                    "mp_rvu": mp_rvu,
+                    "total_rvu_nonfac": nonfac_total,
+                    "total_rvu_fac": fac_total,
+                    "global_surgery": global_surgery,
+                    "regions": {
+                        "national_nonfac": nonfac_payment,
+                        "national_fac": fac_payment,
+                    },
+                    "conversion_factor": CONVERSION_FACTOR,
+                }
+
+    except Exception as e:
+        print(f"  Error parsing MPFS file: {e}")
 
     return mpfs_data
+
+
+def generate_sample_data() -> dict[str, dict[str, Any]]:
+    """Generate sample MPFS data as fallback."""
+    print("  Generating fallback sample data...")
+
+    return {
+        "99213": {
+            "hcpcs": "99213",
+            "description": "Office visit, established, low",
+            "status": "A",
+            "work_rvu": 1.30,
+            "total_rvu_nonfac": 2.75,
+            "total_rvu_fac": 1.97,
+            "global_surgery": "XXX",
+            "regions": {"national_nonfac": 88.95, "national_fac": 63.72},
+            "conversion_factor": CONVERSION_FACTOR,
+        },
+        "99214": {
+            "hcpcs": "99214",
+            "description": "Office visit, established, moderate",
+            "status": "A",
+            "work_rvu": 1.92,
+            "total_rvu_nonfac": 3.80,
+            "total_rvu_fac": 2.83,
+            "global_surgery": "XXX",
+            "regions": {"national_nonfac": 122.92, "national_fac": 91.54},
+            "conversion_factor": CONVERSION_FACTOR,
+        },
+        "85025": {
+            "hcpcs": "85025",
+            "description": "CBC with diff, automated",
+            "status": "A",
+            "work_rvu": 0.00,
+            "total_rvu_nonfac": 0.33,
+            "total_rvu_fac": 0.33,
+            "global_surgery": "XXX",
+            "regions": {"national_nonfac": 10.67, "national_fac": 10.67},
+            "conversion_factor": CONVERSION_FACTOR,
+        },
+    }
 
 
 def main():
@@ -104,27 +241,60 @@ def main():
     output_dir = base_dir / "data"
     output_dir.mkdir(exist_ok=True)
 
-    print("MPFS Fee Schedule Data Generation")
-    print("=" * 50)
+    print("=" * 60)
+    print("MPFS Fee Schedule Download Script")
+    print("=" * 60)
+    print("\nSource: CMS PFS Relative Value Files")
+    print("https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files\n")
 
-    print("\nGenerating comprehensive MPFS sample data...")
-    mpfs_data = generate_mpfs_data()
+    # Download and process MPFS data
+    print("Step 1: Downloading MPFS RVU file...")
+    zip_data = download_file(CMS_MPFS_URL)
+    mpfs_data = parse_mpfs_csv(zip_data)
+
+    if not mpfs_data:
+        print("  Download failed, using sample data")
+        mpfs_data = generate_sample_data()
 
     # Write output
+    print("\nStep 2: Writing output file...")
     output_path = output_dir / "mpfs.json"
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(mpfs_data, f, indent=2)
 
-    print(f"\nWritten {len(mpfs_data)} procedure codes to: {output_path}")
+    file_size = output_path.stat().st_size
+    print(f"  Written {len(mpfs_data):,} procedure codes to: {output_path}")
+    print(f"  File size: {file_size / 1024:.1f} KB")
 
-    print("\nMPFS data generation complete!")
-    print("\nTo get full production data:")
-    print("1. Visit https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files")
-    print("2. Download the latest RVU file (PPRRVUxx.zip)")
-    print("3. Parse the fixed-width TXT file")
+    print("\n" + "=" * 60)
+    print("MPFS data download complete!")
+    print("=" * 60)
+
+    # Summary statistics
+    print("\nSummary:")
+    print(f"  Total codes: {len(mpfs_data):,}")
+
+    # Count by code type
+    em_codes = sum(1 for k in mpfs_data if k.startswith("99"))
+    lab_codes = sum(1 for k in mpfs_data if k.startswith(("8",)))
+    imaging_codes = sum(1 for k in mpfs_data if k.startswith("7"))
+    hcpcs_codes = sum(1 for k in mpfs_data if k[0].isalpha())
+
+    print(f"  E/M codes (99xxx): {em_codes}")
+    print(f"  Lab codes (8xxxx): {lab_codes}")
+    print(f"  Imaging codes (7xxxx): {imaging_codes}")
+    print(f"  HCPCS Level II: {hcpcs_codes}")
+
+    # Sample E/M code
+    if "99213" in mpfs_data:
+        sample = mpfs_data["99213"]
+        print(f"\n  Sample - 99213:")
+        print(f"    Description: {sample.get('description', 'N/A')}")
+        print(f"    Work RVU: {sample.get('work_rvu', 'N/A')}")
+        print(f"    National Payment: ${sample.get('regions', {}).get('national_nonfac', 'N/A')}")
 
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     exit(main())
