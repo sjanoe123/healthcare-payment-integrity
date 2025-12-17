@@ -84,8 +84,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install bandit
-        run: pip install bandit
+      - name: Install security tools
+        run: pip install bandit pip-audit
+
+      - name: Audit dependencies for vulnerabilities
+        run: pip-audit -r backend/requirements.txt
+        continue-on-error: true  # Advisory - report but don't block
 
       - name: Run security scan (high severity - blocking)
         run: bandit -r backend/ --severity-level high

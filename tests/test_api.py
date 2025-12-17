@@ -107,7 +107,7 @@ class TestSearchEndpoint:
 class TestStatsEndpoint:
     """Test the statistics endpoint."""
 
-    def test_stats_returns_counts(self, client: TestClient):
+    def test_stats_returns_counts(self, client: TestClient) -> None:
         """Test stats endpoint returns job counts."""
         response = client.get("/api/stats")
 
@@ -115,6 +115,18 @@ class TestStatsEndpoint:
         data = response.json()
         assert "total_jobs" in data
         assert "completed_jobs" in data
+
+
+class TestResultsEndpoint:
+    """Test the results endpoint."""
+
+    def test_get_nonexistent_job_returns_404(self, client: TestClient) -> None:
+        """Test getting results for non-existent job returns 404."""
+        response = client.get("/api/results/nonexistent-job-id")
+
+        assert response.status_code == 404
+        data = response.json()
+        assert "detail" in data
 
 
 class TestAnalyzeEndpoint:

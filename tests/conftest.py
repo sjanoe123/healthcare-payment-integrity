@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import atexit
 import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Generator
 
 import pytest
 
@@ -16,31 +15,28 @@ backend_path = str(Path(__file__).parent.parent / "backend")
 if backend_path not in sys.path:
     sys.path.insert(0, backend_path)
 
-# Set test database path before importing app
-# Use a temp file instead of :memory: for SQLite compatibility with FastAPI
-_temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-_temp_db_path = _temp_db.name
+# Create temp database file for tests
+# Must be set before importing app modules
+_temp_db_dir = tempfile.mkdtemp(prefix="hpi_test_")
+_temp_db_path = os.path.join(_temp_db_dir, "test.db")
 os.environ["DB_PATH"] = _temp_db_path
 
 
-def _cleanup_test_db() -> None:
-    """Clean up temporary test database file."""
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_db() -> Generator[None, None, None]:
+    """Pytest fixture to ensure test database cleanup after session."""
+    yield
+    # Clean up temp database file and directory
     if os.path.exists(_temp_db_path):
         try:
             os.unlink(_temp_db_path)
         except OSError:
-            pass  # File may already be deleted or locked
-
-
-# Register cleanup to run at exit
-atexit.register(_cleanup_test_db)
-
-
-@pytest.fixture(scope="session", autouse=True)
-def cleanup_test_db() -> None:
-    """Pytest fixture to ensure test database cleanup after session."""
-    yield
-    _cleanup_test_db()
+            pass
+    if os.path.exists(_temp_db_dir):
+        try:
+            os.rmdir(_temp_db_dir)
+        except OSError:
+            pass
 
 
 @pytest.fixture
