@@ -1,4 +1,5 @@
 """Core rules evaluation engine."""
+
 from __future__ import annotations
 
 from dataclasses import replace
@@ -62,7 +63,9 @@ def evaluate_baseline(
     decision_mode = threshold_config.decision_mode(score)
 
     outcome = BaselineOutcome(
-        decision=DecisionOutcome(score=score, confidence=confidence, decision_mode=decision_mode),
+        decision=DecisionOutcome(
+            score=score, confidence=confidence, decision_mode=decision_mode
+        ),
         rule_result=rule_result,
         ncci_flags=list(dict.fromkeys(ncci_flags)),
         coverage_flags=list(dict.fromkeys(coverage_flags)),

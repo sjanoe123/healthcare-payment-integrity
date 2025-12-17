@@ -1,4 +1,5 @@
 """Claude API client for fraud analysis explanations."""
+
 from __future__ import annotations
 
 import json
@@ -132,6 +133,9 @@ def extract_recommendations(text: str) -> list[str]:
 
     # Fallback if no recommendations found
     if not recommendations:
-        recommendations = ["Review flagged items for compliance", "Verify provider credentials"]
+        recommendations = [
+            "Review flagged items for compliance",
+            "Verify provider credentials",
+        ]
 
     return recommendations[:5]  # Limit to 5 recommendations

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Seed ChromaDB with sample healthcare policy documents."""
+
 from __future__ import annotations
 
 import sys
@@ -28,7 +29,11 @@ Procedural Terminology (CPT) codes that should not be reported together for a va
 When a PTP edit is triggered, the column 2 code is typically denied unless an appropriate
 modifier is applied to indicate the procedures were performed in different sessions or
 anatomic sites.""",
-        "metadata": {"source": "NCCI Policy Manual", "chapter": "1", "topic": "PTP Edits"},
+        "metadata": {
+            "source": "NCCI Policy Manual",
+            "chapter": "1",
+            "topic": "PTP Edits",
+        },
     },
     {
         "content": """NCCI Medically Unlikely Edits (MUE) Overview:
@@ -44,7 +49,11 @@ Example MUE limits:
 - Lab tests: May be limited based on medical necessity
 
 If units of service exceed the MUE value, the excess units will be denied.""",
-        "metadata": {"source": "NCCI Policy Manual", "chapter": "2", "topic": "MUE Edits"},
+        "metadata": {
+            "source": "NCCI Policy Manual",
+            "chapter": "2",
+            "topic": "MUE Edits",
+        },
     },
     {
         "content": """NCCI Modifier Indicators:
@@ -67,7 +76,11 @@ Common modifiers used to bypass PTP edits:
 - Modifier XS: Separate structure
 - Modifier XP: Separate practitioner
 - Modifier XU: Unusual non-overlapping service""",
-        "metadata": {"source": "NCCI Policy Manual", "chapter": "3", "topic": "Modifier Indicators"},
+        "metadata": {
+            "source": "NCCI Policy Manual",
+            "chapter": "3",
+            "topic": "Modifier Indicators",
+        },
     },
     {
         "content": """NCCI MUE Adjudication Indicators:
@@ -87,9 +100,12 @@ Providers should:
 2. Ensure documentation supports medical necessity for all units
 3. Report accurate units of service
 4. Appeal with supporting documentation if denial is inappropriate""",
-        "metadata": {"source": "NCCI Policy Manual", "chapter": "4", "topic": "MUE Adjudication"},
+        "metadata": {
+            "source": "NCCI Policy Manual",
+            "chapter": "4",
+            "topic": "MUE Adjudication",
+        },
     },
-
     # LCD/NCD Coverage Documents
     {
         "content": """Local Coverage Determination (LCD) Overview:
@@ -111,7 +127,11 @@ Common reasons for LCD denial:
 - Missing required documentation
 - Frequency limits exceeded
 - Service not medically necessary for the diagnosis""",
-        "metadata": {"source": "CMS LCD Guidelines", "chapter": "General", "topic": "LCD Overview"},
+        "metadata": {
+            "source": "CMS LCD Guidelines",
+            "chapter": "General",
+            "topic": "LCD Overview",
+        },
     },
     {
         "content": """National Coverage Determination (NCD) vs LCD:
@@ -129,7 +149,11 @@ When coverage conflicts exist:
 2. Check applicable LCD for additional local requirements
 3. Ensure documentation meets both NCD and LCD criteria
 4. Appeal with supporting medical evidence if denial is inappropriate""",
-        "metadata": {"source": "CMS Coverage", "chapter": "NCD vs LCD", "topic": "Coverage Hierarchy"},
+        "metadata": {
+            "source": "CMS Coverage",
+            "chapter": "NCD vs LCD",
+            "topic": "Coverage Hierarchy",
+        },
     },
     {
         "content": """LCD Medical Necessity Documentation Requirements:
@@ -157,9 +181,12 @@ To establish medical necessity for services covered under an LCD, documentation 
    - Alternative treatments considered
 
 Documentation must be made at the time of service or prior to service for pre-authorization.""",
-        "metadata": {"source": "CMS LCD Guidelines", "chapter": "Documentation", "topic": "Medical Necessity"},
+        "metadata": {
+            "source": "CMS LCD Guidelines",
+            "chapter": "Documentation",
+            "topic": "Medical Necessity",
+        },
     },
-
     # OIG and Compliance Documents
     {
         "content": """OIG Exclusion List (LEIE) Requirements:
@@ -175,7 +202,11 @@ Billing for services provided by excluded providers is prohibited and may result
 
 Providers should verify all employees and contractors against the LEIE monthly and
 maintain documentation of these checks.""",
-        "metadata": {"source": "OIG LEIE", "chapter": "Compliance", "topic": "Exclusion Screening"},
+        "metadata": {
+            "source": "OIG LEIE",
+            "chapter": "Compliance",
+            "topic": "Exclusion Screening",
+        },
     },
     {
         "content": """OIG Exclusion Types and Mandatory Exclusion:
@@ -198,7 +229,11 @@ Reinstatement requires:
 1. Serving the minimum exclusion period
 2. Submitting reinstatement application
 3. OIG approval (not automatic)""",
-        "metadata": {"source": "OIG LEIE", "chapter": "Exclusion Types", "topic": "Mandatory vs Permissive"},
+        "metadata": {
+            "source": "OIG LEIE",
+            "chapter": "Exclusion Types",
+            "topic": "Mandatory vs Permissive",
+        },
     },
     {
         "content": """OIG Work Plan - Common Audit Focus Areas:
@@ -222,9 +257,12 @@ Compliance Programs should:
 - Conduct self-audits in focus areas
 - Implement corrective action plans
 - Train staff on identified risk areas""",
-        "metadata": {"source": "OIG Work Plan", "chapter": "Audit Focus", "topic": "Priority Areas"},
+        "metadata": {
+            "source": "OIG Work Plan",
+            "chapter": "Audit Focus",
+            "topic": "Priority Areas",
+        },
     },
-
     # FWA Detection Documents
     {
         "content": """Fraud, Waste, and Abuse (FWA) Detection Indicators:
@@ -247,7 +285,11 @@ Common red flags that may indicate potential FWA include:
    - Services not supported by medical necessity
 
 These indicators should trigger additional review and investigation.""",
-        "metadata": {"source": "FWA Guidelines", "chapter": "Detection", "topic": "Red Flags"},
+        "metadata": {
+            "source": "FWA Guidelines",
+            "chapter": "Detection",
+            "topic": "Red Flags",
+        },
     },
     {
         "content": """Common Healthcare Fraud Schemes:
@@ -277,7 +319,11 @@ OIG and DOJ have identified common fraud schemes in healthcare:
    - Using patient identities without authorization
    - Billing under deceased patient Medicare numbers
    - Ordering services for fictitious patients""",
-        "metadata": {"source": "DOJ/OIG", "chapter": "Fraud Schemes", "topic": "Common Patterns"},
+        "metadata": {
+            "source": "DOJ/OIG",
+            "chapter": "Fraud Schemes",
+            "topic": "Common Patterns",
+        },
     },
     {
         "content": """Whistleblower (Qui Tam) Provisions and False Claims Act:
@@ -301,9 +347,12 @@ Penalties:
 - Treble damages
 - Potential criminal prosecution
 - Exclusion from federal healthcare programs""",
-        "metadata": {"source": "DOJ", "chapter": "False Claims Act", "topic": "Qui Tam"},
+        "metadata": {
+            "source": "DOJ",
+            "chapter": "False Claims Act",
+            "topic": "Qui Tam",
+        },
     },
-
     # Billing and Coding Guidelines
     {
         "content": """Global Surgery Period and Modifier Requirements:
@@ -321,7 +370,11 @@ Documentation must clearly support that the E/M service was:
 
 Failure to properly document and apply modifiers may result in claim denial or
 potential audit findings.""",
-        "metadata": {"source": "CMS MPFS", "chapter": "Global Surgery", "topic": "Modifiers"},
+        "metadata": {
+            "source": "CMS MPFS",
+            "chapter": "Global Surgery",
+            "topic": "Modifiers",
+        },
     },
     {
         "content": """Evaluation and Management (E/M) Coding Guidelines (2021+):
@@ -342,7 +395,11 @@ Time-Based Billing:
 - Document total time spent on the date of encounter
 - Include all qualifying activities (pre-visit, face-to-face, post-visit)
 - Use CPT-defined time thresholds for code selection""",
-        "metadata": {"source": "CMS E/M Guidelines", "chapter": "Office Visits", "topic": "E/M Coding 2021+"},
+        "metadata": {
+            "source": "CMS E/M Guidelines",
+            "chapter": "Office Visits",
+            "topic": "E/M Coding 2021+",
+        },
     },
     {
         "content": """Modifier Usage and NCCI Compliance:
@@ -362,7 +419,11 @@ Best Practices:
 2. Document the distinctness of services
 3. Avoid routine modifier application without justification
 4. Review claims with modifiers for patterns suggesting misuse""",
-        "metadata": {"source": "CMS Coding", "chapter": "Modifiers", "topic": "NCCI Compliance"},
+        "metadata": {
+            "source": "CMS Coding",
+            "chapter": "Modifiers",
+            "topic": "NCCI Compliance",
+        },
     },
     {
         "content": """Telehealth Billing Requirements:
@@ -390,7 +451,11 @@ FWA Risks in Telehealth:
 - Upcoding due to lack of physical exam
 - Prescribing without appropriate evaluation
 - Patient not present at qualifying location""",
-        "metadata": {"source": "CMS Telehealth", "chapter": "Requirements", "topic": "Telehealth Billing"},
+        "metadata": {
+            "source": "CMS Telehealth",
+            "chapter": "Requirements",
+            "topic": "Telehealth Billing",
+        },
     },
     {
         "content": """Durable Medical Equipment (DME) Fraud Prevention:
@@ -415,9 +480,12 @@ Prior Authorization:
 - Must be obtained before delivery
 - Valid for specific timeframe
 - Attached to claim for payment""",
-        "metadata": {"source": "CMS DME", "chapter": "Fraud Prevention", "topic": "DME Compliance"},
+        "metadata": {
+            "source": "CMS DME",
+            "chapter": "Fraud Prevention",
+            "topic": "DME Compliance",
+        },
     },
-
     # Clinical Guidelines
     {
         "content": """USPSTF Preventive Care Recommendations:
@@ -440,7 +508,11 @@ Coverage Implications:
 - Medicare covers Grade A and B recommendations without cost-sharing
 - Claims for screenings should align with USPSTF guidelines
 - Overutilization of screenings may indicate FWA""",
-        "metadata": {"source": "USPSTF", "chapter": "Preventive Care", "topic": "Screening Recommendations"},
+        "metadata": {
+            "source": "USPSTF",
+            "chapter": "Preventive Care",
+            "topic": "Screening Recommendations",
+        },
     },
     {
         "content": """Choosing Wisely - Low-Value Care to Avoid:
@@ -461,9 +533,12 @@ Implications for Claims Review:
 - Lack of supporting diagnosis for tests raises questions
 - Pattern analysis can identify providers with outlier ordering patterns
 - Documentation should support medical necessity for any ordered test""",
-        "metadata": {"source": "Choosing Wisely", "chapter": "Low-Value Care", "topic": "Overutilization"},
+        "metadata": {
+            "source": "Choosing Wisely",
+            "chapter": "Low-Value Care",
+            "topic": "Overutilization",
+        },
     },
-
     # Specific Service Line Policies
     {
         "content": """Laboratory Testing Medical Necessity:
@@ -491,7 +566,11 @@ LCD Compliance:
 - Check frequency limitations
 - Ensure ordering provider is eligible
 - Document clinical need for each test""",
-        "metadata": {"source": "CMS Lab", "chapter": "Medical Necessity", "topic": "Laboratory Compliance"},
+        "metadata": {
+            "source": "CMS Lab",
+            "chapter": "Medical Necessity",
+            "topic": "Laboratory Compliance",
+        },
     },
     {
         "content": """Physical Therapy and Rehabilitation Services:
@@ -520,7 +599,11 @@ Modifier Usage:
 - GP: Physical therapy services
 - GO: Occupational therapy services
 - GN: Speech-language pathology services""",
-        "metadata": {"source": "CMS Therapy", "chapter": "Rehabilitation", "topic": "Therapy Services"},
+        "metadata": {
+            "source": "CMS Therapy",
+            "chapter": "Rehabilitation",
+            "topic": "Therapy Services",
+        },
     },
     {
         "content": """Pain Management and Controlled Substances:
@@ -548,7 +631,11 @@ Intervention Guidelines:
 - Epidural steroid injections typically 3 per year
 - Documentation of failed conservative treatment
 - Imaging to support anatomic diagnosis""",
-        "metadata": {"source": "CMS Pain Management", "chapter": "Controlled Substances", "topic": "Pain Management"},
+        "metadata": {
+            "source": "CMS Pain Management",
+            "chapter": "Controlled Substances",
+            "topic": "Pain Management",
+        },
     },
     {
         "content": """Cardiac Testing Medical Necessity:
@@ -577,7 +664,11 @@ LCD Coverage:
 - Frequency limitations may apply
 - Prior testing results should be reviewed
 - Documentation of symptoms/clinical findings essential""",
-        "metadata": {"source": "CMS Cardiology", "chapter": "Cardiac Testing", "topic": "Medical Necessity"},
+        "metadata": {
+            "source": "CMS Cardiology",
+            "chapter": "Cardiac Testing",
+            "topic": "Medical Necessity",
+        },
     },
 ]
 

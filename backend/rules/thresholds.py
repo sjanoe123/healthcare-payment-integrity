@@ -1,4 +1,5 @@
 """Threshold configuration for decision modes."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,7 +15,9 @@ class ThresholdConfig:
 
     def decision_mode(self, score: float) -> str:
         if score >= self.auto_approve_min:
-            return "auto_approve_fast" if score >= self.fast_path_min else "auto_approve"
+            return (
+                "auto_approve_fast" if score >= self.fast_path_min else "auto_approve"
+            )
         if score >= self.soft_hold_min:
             return "soft_hold"
         if score >= self.recommendation_min:

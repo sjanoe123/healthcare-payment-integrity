@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Test the fraud analysis endpoint."""
+
 from __future__ import annotations
 
 import requests
@@ -80,7 +81,9 @@ def test_analysis():
 
         print(f"\n  Rule Hits ({len(result['rule_hits'])}):")
         for hit in result["rule_hits"]:
-            print(f"    - [{hit['severity'].upper()}] {hit['rule_id']}: {hit['description']}")
+            print(
+                f"    - [{hit['severity'].upper()}] {hit['rule_id']}: {hit['description']}"
+            )
 
         if result.get("claude_analysis"):
             claude = result["claude_analysis"]

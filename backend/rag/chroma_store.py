@@ -1,4 +1,5 @@
 """ChromaDB vector store for RAG."""
+
 from __future__ import annotations
 
 import os
@@ -11,8 +12,12 @@ from chromadb.config import Settings
 class ChromaStore:
     """Simple ChromaDB wrapper for policy document retrieval."""
 
-    def __init__(self, persist_dir: str | None = None, collection_name: str = "policies"):
-        self.persist_dir = persist_dir or os.getenv("CHROMA_PERSIST_DIR", "./data/chroma")
+    def __init__(
+        self, persist_dir: str | None = None, collection_name: str = "policies"
+    ):
+        self.persist_dir = persist_dir or os.getenv(
+            "CHROMA_PERSIST_DIR", "./data/chroma"
+        )
         self.collection_name = collection_name
 
         # Initialize ChromaDB client with persistence
@@ -66,12 +71,18 @@ class ChromaStore:
         formatted = []
         if results["documents"] and results["documents"][0]:
             for i, doc in enumerate(results["documents"][0]):
-                formatted.append({
-                    "content": doc,
-                    "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
-                    "distance": results["distances"][0][i] if results["distances"] else None,
-                    "id": results["ids"][0][i] if results["ids"] else None,
-                })
+                formatted.append(
+                    {
+                        "content": doc,
+                        "metadata": results["metadatas"][0][i]
+                        if results["metadatas"]
+                        else {},
+                        "distance": results["distances"][0][i]
+                        if results["distances"]
+                        else None,
+                        "id": results["ids"][0][i] if results["ids"] else None,
+                    }
+                )
 
         return formatted
 

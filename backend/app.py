@@ -1,4 +1,5 @@
 """FastAPI backend for Healthcare Payment Integrity prototype."""
+
 from __future__ import annotations
 
 import json
@@ -80,7 +81,12 @@ app = FastAPI(
 # CORS for local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -271,7 +277,9 @@ async def analyze_claim(job_id: str, claim: ClaimSubmission):
     store = get_store()
     if store.count() > 0:
         # Search for relevant policy context
-        search_query = f"Procedure codes: {', '.join(i.procedure_code for i in claim.items)}"
+        search_query = (
+            f"Procedure codes: {', '.join(i.procedure_code for i in claim.items)}"
+        )
         rag_results = store.search(search_query, n_results=3)
         if rag_results:
             rag_context = "\n\n".join(
@@ -346,7 +354,9 @@ async def get_results(job_id: str):
     conn.close()
 
     if not row:
-        raise HTTPException(status_code=404, detail=f"Results not found for job {job_id}")
+        raise HTTPException(
+            status_code=404, detail=f"Results not found for job {job_id}"
+        )
 
     return {
         "job_id": row[0],

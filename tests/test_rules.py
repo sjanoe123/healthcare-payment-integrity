@@ -1,4 +1,5 @@
 """Tests for the rules engine."""
+
 from __future__ import annotations
 
 from rules import evaluate_baseline, ThresholdConfig

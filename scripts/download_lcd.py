@@ -12,6 +12,7 @@ https://www.cms.gov/medicare-coverage-database/downloads/downloads.aspx
 Output:
 - data/lcd.json: LCD coverage information with procedure codes
 """
+
 from __future__ import annotations
 
 import csv
@@ -56,7 +57,7 @@ def strip_html(html: str) -> str:
         stripper.feed(html)
         text = stripper.get_text()
         # Clean up whitespace
-        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r"\s+", " ", text)
         return text[:500]  # Limit length
     except Exception:
         return ""
@@ -70,7 +71,9 @@ def download_file(url: str, timeout: int = 120) -> bytes:
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
 
-    request = Request(url, headers={"User-Agent": "Mozilla/5.0 (Healthcare Payment Integrity)"})
+    request = Request(
+        url, headers={"User-Agent": "Mozilla/5.0 (Healthcare Payment Integrity)"}
+    )
     try:
         with urlopen(request, timeout=timeout, context=ctx) as response:
             data = response.read()
@@ -100,7 +103,9 @@ def parse_lcd_data(zip_data: bytes) -> dict[str, dict[str, Any]]:
             with zipfile.ZipFile(io.BytesIO(nested_zip)) as zf2:
                 # First, read code mappings
                 print("  Processing LCD code mappings...")
-                hcpc_content = zf2.read("lcd_x_hcpc_code.csv").decode("utf-8", errors="ignore")
+                hcpc_content = zf2.read("lcd_x_hcpc_code.csv").decode(
+                    "utf-8", errors="ignore"
+                )
                 hcpc_reader = csv.DictReader(io.StringIO(hcpc_content))
                 for row in hcpc_reader:
                     lcd_id = row.get("lcd_id", "")
@@ -110,7 +115,9 @@ def parse_lcd_data(zip_data: bytes) -> dict[str, dict[str, Any]]:
 
                 # Read contractor mappings
                 print("  Processing contractor mappings...")
-                contractor_content = zf2.read("lcd_x_contractor.csv").decode("utf-8", errors="ignore")
+                contractor_content = zf2.read("lcd_x_contractor.csv").decode(
+                    "utf-8", errors="ignore"
+                )
                 contractor_reader = csv.DictReader(io.StringIO(contractor_content))
                 lcd_contractors = {}
                 for row in contractor_reader:
@@ -147,35 +154,67 @@ def parse_lcd_data(zip_data: bytes) -> dict[str, dict[str, Any]]:
                         row = next(reader)
 
                         lcd_id = row[col_map.get("lcd_id", 0)]
-                        status = row[col_map.get("status", -1)] if col_map.get("status", -1) >= 0 else ""
+                        status = (
+                            row[col_map.get("status", -1)]
+                            if col_map.get("status", -1) >= 0
+                            else ""
+                        )
 
                         # Only include current/active LCDs
-                        if status and status.lower() not in ("", "current", "final", "active"):
+                        if status and status.lower() not in (
+                            "",
+                            "current",
+                            "final",
+                            "active",
+                        ):
                             continue
 
-                        title = row[col_map.get("title", 1)] if col_map.get("title", 1) < len(row) else ""
-                        display_id = row[col_map.get("display_id", -1)] if col_map.get("display_id", -1) >= 0 and col_map.get("display_id", -1) < len(row) else ""
+                        title = (
+                            row[col_map.get("title", 1)]
+                            if col_map.get("title", 1) < len(row)
+                            else ""
+                        )
+                        display_id = (
+                            row[col_map.get("display_id", -1)]
+                            if col_map.get("display_id", -1) >= 0
+                            and col_map.get("display_id", -1) < len(row)
+                            else ""
+                        )
 
                         # Extract key coverage info
                         indication = ""
-                        if col_map.get("indication", -1) >= 0 and col_map.get("indication", -1) < len(row):
+                        if col_map.get("indication", -1) >= 0 and col_map.get(
+                            "indication", -1
+                        ) < len(row):
                             indication = strip_html(row[col_map["indication"]])
 
                         diagnoses = ""
-                        if col_map.get("diagnoses_support", -1) >= 0 and col_map.get("diagnoses_support", -1) < len(row):
+                        if col_map.get("diagnoses_support", -1) >= 0 and col_map.get(
+                            "diagnoses_support", -1
+                        ) < len(row):
                             diagnoses = strip_html(row[col_map["diagnoses_support"]])
 
                         coding = ""
-                        if col_map.get("coding_guidelines", -1) >= 0 and col_map.get("coding_guidelines", -1) < len(row):
+                        if col_map.get("coding_guidelines", -1) >= 0 and col_map.get(
+                            "coding_guidelines", -1
+                        ) < len(row):
                             coding = strip_html(row[col_map["coding_guidelines"]])
 
                         doc_reqs = ""
-                        if col_map.get("doc_reqs", -1) >= 0 and col_map.get("doc_reqs", -1) < len(row):
+                        if col_map.get("doc_reqs", -1) >= 0 and col_map.get(
+                            "doc_reqs", -1
+                        ) < len(row):
                             doc_reqs = strip_html(row[col_map["doc_reqs"]])
 
                         eff_date = ""
-                        if col_map.get("rev_eff_date", -1) >= 0 and col_map.get("rev_eff_date", -1) < len(row):
-                            eff_date = row[col_map["rev_eff_date"]][:10] if row[col_map["rev_eff_date"]] else ""
+                        if col_map.get("rev_eff_date", -1) >= 0 and col_map.get(
+                            "rev_eff_date", -1
+                        ) < len(row):
+                            eff_date = (
+                                row[col_map["rev_eff_date"]][:10]
+                                if row[col_map["rev_eff_date"]]
+                                else ""
+                            )
 
                         lcd_data[lcd_id] = {
                             "lcd_id": lcd_id,
@@ -184,7 +223,9 @@ def parse_lcd_data(zip_data: bytes) -> dict[str, dict[str, Any]]:
                             "status": status,
                             "effective_date": eff_date,
                             "contractors": lcd_contractors.get(lcd_id, []),
-                            "indication_summary": indication[:500] if indication else "",
+                            "indication_summary": indication[:500]
+                            if indication
+                            else "",
                             "diagnoses_summary": diagnoses[:500] if diagnoses else "",
                             "coding_summary": coding[:500] if coding else "",
                             "documentation_summary": doc_reqs[:500] if doc_reqs else "",

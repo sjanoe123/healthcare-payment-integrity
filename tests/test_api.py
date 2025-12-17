@@ -1,4 +1,5 @@
 """Tests for the FastAPI endpoints."""
+
 from __future__ import annotations
 
 import os
@@ -65,7 +66,9 @@ class TestUploadEndpoint:
         assert "claim_id" in data
         assert data["claim_id"] == sample_claim["claim_id"]
 
-    def test_upload_returns_pending_status(self, client: TestClient, sample_claim: dict):
+    def test_upload_returns_pending_status(
+        self, client: TestClient, sample_claim: dict
+    ):
         """Test upload returns pending status."""
         response = client.post("/api/upload", json=sample_claim)
         data = response.json()
@@ -147,7 +150,11 @@ class TestAnalyzeEndpoint:
         self, mock_claude, client: TestClient, sample_claim: dict
     ):
         """Test analyze detects fraud indicators in sample claim."""
-        mock_claude.return_value = {"explanation": "Test", "model": "test", "tokens_used": 0}
+        mock_claude.return_value = {
+            "explanation": "Test",
+            "model": "test",
+            "tokens_used": 0,
+        }
 
         upload_response = client.post("/api/upload", json=sample_claim)
         job_id = upload_response.json()["job_id"]

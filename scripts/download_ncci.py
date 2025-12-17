@@ -12,6 +12,7 @@ Output:
 - data/ncci_ptp.json: PTP column 1/2 code pairs with modifier indicators
 - data/ncci_mue.json: MUE (Medically Unlikely Edits) unit limits
 """
+
 from __future__ import annotations
 
 import io
@@ -37,25 +38,81 @@ NCCI_FILES = {
 # Focus on codes that commonly appear in claims and have high fraud risk
 HIGH_PRIORITY_CODES = {
     # E/M codes (office visits, hospital visits, ED)
-    "99202", "99203", "99204", "99205", "99211", "99212", "99213", "99214", "99215",
-    "99221", "99222", "99223", "99231", "99232", "99233", "99238", "99239",
-    "99281", "99282", "99283", "99284", "99285", "99291", "99292",
+    "99202",
+    "99203",
+    "99204",
+    "99205",
+    "99211",
+    "99212",
+    "99213",
+    "99214",
+    "99215",
+    "99221",
+    "99222",
+    "99223",
+    "99231",
+    "99232",
+    "99233",
+    "99238",
+    "99239",
+    "99281",
+    "99282",
+    "99283",
+    "99284",
+    "99285",
+    "99291",
+    "99292",
     # Lab panels
-    "80048", "80050", "80053", "80061", "85025", "85027", "36415",
+    "80048",
+    "80050",
+    "80053",
+    "80061",
+    "85025",
+    "85027",
+    "36415",
     # Common imaging
-    "71046", "71045", "72148", "72149", "73721", "74177",
-    "93000", "93005", "93010",  # EKG
+    "71046",
+    "71045",
+    "72148",
+    "72149",
+    "73721",
+    "74177",
+    "93000",
+    "93005",
+    "93010",  # EKG
     # Therapy
-    "97110", "97112", "97140", "97530", "97535", "97542",
+    "97110",
+    "97112",
+    "97140",
+    "97530",
+    "97535",
+    "97542",
     # Common procedures
-    "43235", "43239", "45378", "45380", "45385",  # GI scopes
-    "29881", "29880", "29876",  # Knee arthroscopy
-    "20610", "20605", "20600",  # Joint injections
+    "43235",
+    "43239",
+    "45378",
+    "45380",
+    "45385",  # GI scopes
+    "29881",
+    "29880",
+    "29876",  # Knee arthroscopy
+    "20610",
+    "20605",
+    "20600",  # Joint injections
     # DME/Supplies often flagged
-    "A4253", "A4259", "E0601", "E0424", "E0260",
+    "A4253",
+    "A4259",
+    "E0601",
+    "E0424",
+    "E0260",
     # Drug administration
-    "96372", "96373", "96374", "96375",
-    "J0696", "J1100", "J3490",  # Common injectables
+    "96372",
+    "96373",
+    "96374",
+    "96375",
+    "J0696",
+    "J1100",
+    "J3490",  # Common injectables
 }
 
 # Also include these code ranges for comprehensive coverage
@@ -68,7 +125,9 @@ PRIORITY_CODE_PREFIXES = [
     "364",  # Venipuncture
     "930",  # EKG
     "971",  # Physical therapy
-    "433", "453", "458",  # GI procedures
+    "433",
+    "453",
+    "458",  # GI procedures
 ]
 
 
@@ -81,7 +140,9 @@ def download_file(url: str, timeout: int = 120) -> bytes:
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
 
-    request = Request(url, headers={"User-Agent": "Mozilla/5.0 (Healthcare Payment Integrity)"})
+    request = Request(
+        url, headers={"User-Agent": "Mozilla/5.0 (Healthcare Payment Integrity)"}
+    )
     try:
         with urlopen(request, timeout=timeout, context=ctx) as response:
             data = response.read()
@@ -146,15 +207,17 @@ def parse_ptp_file(zip_data: bytes, active_only: bool = True) -> list[dict[str, 
                         if not col1 or not col2:
                             continue
 
-                        ptp_pairs.append({
-                            "codes": sorted([col1, col2]),
-                            "column1": col1,
-                            "column2": col2,
-                            "modifier": modifier,  # 0=not allowed, 1=allowed, 9=N/A
-                            "effective_date": eff_date,
-                            "deletion_date": del_date if del_date else None,
-                            "rationale": rationale,
-                        })
+                        ptp_pairs.append(
+                            {
+                                "codes": sorted([col1, col2]),
+                                "column1": col1,
+                                "column2": col2,
+                                "modifier": modifier,  # 0=not allowed, 1=allowed, 9=N/A
+                                "effective_date": eff_date,
+                                "deletion_date": del_date if del_date else None,
+                                "rationale": rationale,
+                            }
+                        )
                     break
 
     except Exception as e:
@@ -227,7 +290,9 @@ def parse_mue_file(zip_data: bytes) -> dict[str, dict[str, Any]]:
     return mue_limits
 
 
-def filter_priority_codes(ptp_pairs: list[dict], mue_limits: dict) -> tuple[list[dict], dict]:
+def filter_priority_codes(
+    ptp_pairs: list[dict], mue_limits: dict
+) -> tuple[list[dict], dict]:
     """Filter to priority codes for smaller file size.
 
     This reduces the dataset to common high-volume codes that are most
@@ -252,49 +317,74 @@ def filter_priority_codes(ptp_pairs: list[dict], mue_limits: dict) -> tuple[list
     # Filter PTP pairs where AT LEAST ONE code is high-priority
     # (captures edits involving common codes)
     filtered_ptp = [
-        p for p in ptp_pairs
-        if is_priority(p["column1"]) or is_priority(p["column2"])
+        p for p in ptp_pairs if is_priority(p["column1"]) or is_priority(p["column2"])
     ]
 
     # Further filter to pairs where both are core clinical codes
     def is_core_code(code: str) -> bool:
         # Focus on E/M, key labs, common radiology, common medicine
-        return (
-            code.startswith(("99",  # E/M
-                           "800", "850", "851", "852",  # Key labs
-                           "710", "720", "730", "740",  # Common imaging
-                           "930", "931", "932", "933",  # Cardio diagnostics
-                           "971", "972",  # Physical therapy
-                           "963", "964",  # Drug admin
-                           "364",  # Venipuncture
-                           "432", "433", "453", "454",  # GI scopes
-                           "298",  # Arthroscopy
-                           "206",  # Joint injections
-                           ))
+        return code.startswith(
+            (
+                "99",  # E/M
+                "800",
+                "850",
+                "851",
+                "852",  # Key labs
+                "710",
+                "720",
+                "730",
+                "740",  # Common imaging
+                "930",
+                "931",
+                "932",
+                "933",  # Cardio diagnostics
+                "971",
+                "972",  # Physical therapy
+                "963",
+                "964",  # Drug admin
+                "364",  # Venipuncture
+                "432",
+                "433",
+                "453",
+                "454",  # GI scopes
+                "298",  # Arthroscopy
+                "206",  # Joint injections
+            )
         )
 
     # Apply filter to keep dataset manageable
     filtered_ptp = [
-        p for p in filtered_ptp
+        p
+        for p in filtered_ptp
         if is_core_code(p["column1"]) and is_core_code(p["column2"])
     ]
 
     # For MUE, keep more codes (they're small records)
     # Include E/M, labs, radiology, medicine, therapy, procedures
     def is_mue_relevant(code: str) -> bool:
-        return (
-            code.startswith(("99",  # E/M
-                           "8",  # Labs/pathology
-                           "7",  # Radiology
-                           "9",  # Medicine
-                           "36", "43", "45", "29", "20", "27",  # Common procedures
-                           "A", "E", "G", "J", "L", "Q",  # HCPCS
-                           ))
+        return code.startswith(
+            (
+                "99",  # E/M
+                "8",  # Labs/pathology
+                "7",  # Radiology
+                "9",  # Medicine
+                "36",
+                "43",
+                "45",
+                "29",
+                "20",
+                "27",  # Common procedures
+                "A",
+                "E",
+                "G",
+                "J",
+                "L",
+                "Q",  # HCPCS
+            )
         )
 
     filtered_mue = {
-        code: info for code, info in mue_limits.items()
-        if is_mue_relevant(code)
+        code: info for code, info in mue_limits.items() if is_mue_relevant(code)
     }
 
     print(f"  PTP: {len(ptp_pairs):,} -> {len(filtered_ptp):,} pairs")
@@ -328,15 +418,69 @@ def generate_sample_data() -> tuple[list[dict], dict]:
     print("  Generating fallback sample data...")
 
     ptp_pairs = [
-        {"codes": ["99213", "99214"], "column1": "99213", "column2": "99214", "modifier": "0", "rationale": "E/M level conflict"},
-        {"codes": ["99214", "99215"], "column1": "99214", "column2": "99215", "modifier": "0", "rationale": "E/M level conflict"},
-        {"codes": ["80053", "80048"], "column1": "80053", "column2": "80048", "modifier": "0", "rationale": "CMP includes BMP"},
-        {"codes": ["85025", "85027"], "column1": "85025", "column2": "85027", "modifier": "0", "rationale": "CBC with diff includes CBC"},
-        {"codes": ["93000", "93005"], "column1": "93000", "column2": "93005", "modifier": "0", "rationale": "EKG global includes tracing"},
-        {"codes": ["43239", "43235"], "column1": "43239", "column2": "43235", "modifier": "0", "rationale": "EGD with biopsy includes diagnostic"},
-        {"codes": ["45380", "45378"], "column1": "45380", "column2": "45378", "modifier": "0", "rationale": "Colonoscopy with biopsy includes diagnostic"},
-        {"codes": ["99213", "36415"], "column1": "99213", "column2": "36415", "modifier": "1", "rationale": "E/M with venipuncture - modifier allowed"},
-        {"codes": ["71046", "71045"], "column1": "71046", "column2": "71045", "modifier": "0", "rationale": "Chest X-ray 2v includes 1v"},
+        {
+            "codes": ["99213", "99214"],
+            "column1": "99213",
+            "column2": "99214",
+            "modifier": "0",
+            "rationale": "E/M level conflict",
+        },
+        {
+            "codes": ["99214", "99215"],
+            "column1": "99214",
+            "column2": "99215",
+            "modifier": "0",
+            "rationale": "E/M level conflict",
+        },
+        {
+            "codes": ["80053", "80048"],
+            "column1": "80053",
+            "column2": "80048",
+            "modifier": "0",
+            "rationale": "CMP includes BMP",
+        },
+        {
+            "codes": ["85025", "85027"],
+            "column1": "85025",
+            "column2": "85027",
+            "modifier": "0",
+            "rationale": "CBC with diff includes CBC",
+        },
+        {
+            "codes": ["93000", "93005"],
+            "column1": "93000",
+            "column2": "93005",
+            "modifier": "0",
+            "rationale": "EKG global includes tracing",
+        },
+        {
+            "codes": ["43239", "43235"],
+            "column1": "43239",
+            "column2": "43235",
+            "modifier": "0",
+            "rationale": "EGD with biopsy includes diagnostic",
+        },
+        {
+            "codes": ["45380", "45378"],
+            "column1": "45380",
+            "column2": "45378",
+            "modifier": "0",
+            "rationale": "Colonoscopy with biopsy includes diagnostic",
+        },
+        {
+            "codes": ["99213", "36415"],
+            "column1": "99213",
+            "column2": "36415",
+            "modifier": "1",
+            "rationale": "E/M with venipuncture - modifier allowed",
+        },
+        {
+            "codes": ["71046", "71045"],
+            "column1": "71046",
+            "column2": "71045",
+            "modifier": "0",
+            "rationale": "Chest X-ray 2v includes 1v",
+        },
     ]
 
     mue_limits = {
@@ -350,7 +494,11 @@ def generate_sample_data() -> tuple[list[dict], dict]:
         "36415": {"limit": 3, "unit": "services", "rationale": "Venipuncture"},
         "85025": {"limit": 2, "unit": "services", "rationale": "CBC"},
         "80053": {"limit": 2, "unit": "services", "rationale": "CMP"},
-        "97110": {"limit": 12, "unit": "services", "rationale": "Therapeutic exercises"},
+        "97110": {
+            "limit": 12,
+            "unit": "services",
+            "rationale": "Therapeutic exercises",
+        },
     }
 
     return ptp_pairs, mue_limits
@@ -366,7 +514,9 @@ def main():
     print("NCCI Data Download Script")
     print("=" * 60)
     print("\nSource: CMS Medicaid NCCI Edit Files")
-    print("https://www.cms.gov/medicare/coding-billing/ncci-medicaid/medicaid-ncci-edit-files\n")
+    print(
+        "https://www.cms.gov/medicare/coding-billing/ncci-medicaid/medicaid-ncci-edit-files\n"
+    )
 
     # Download and process MUE data
     print("Step 1: Downloading MUE (Medically Unlikely Edits)...")
@@ -403,13 +553,17 @@ def main():
     with open(ptp_output, "w") as f:
         json.dump(ptp_pairs, f, separators=(",", ":"))
     ptp_size = ptp_output.stat().st_size
-    print(f"  Written {len(ptp_pairs):,} PTP pairs to: {ptp_output} ({ptp_size / 1024 / 1024:.1f} MB)")
+    print(
+        f"  Written {len(ptp_pairs):,} PTP pairs to: {ptp_output} ({ptp_size / 1024 / 1024:.1f} MB)"
+    )
 
     mue_output = output_dir / "ncci_mue.json"
     with open(mue_output, "w") as f:
         json.dump(mue_limits, f, indent=2)
     mue_size = mue_output.stat().st_size
-    print(f"  Written {len(mue_limits):,} MUE limits to: {mue_output} ({mue_size:,} bytes)")
+    print(
+        f"  Written {len(mue_limits):,} MUE limits to: {mue_output} ({mue_size:,} bytes)"
+    )
 
     print("\n" + "=" * 60)
     print("NCCI data download complete!")
@@ -428,7 +582,7 @@ def main():
     if mue_limits:
         common_limits = sorted(
             [(k, v["limit"]) for k, v in mue_limits.items() if k.startswith("99")],
-            key=lambda x: x[0]
+            key=lambda x: x[0],
         )[:5]
         print(f"    Sample E/M limits: {common_limits}")
 

@@ -13,6 +13,7 @@ https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-
 Output:
 - data/mpfs.json: Procedure codes with RVUs and national payment rates
 """
+
 from __future__ import annotations
 
 import csv
@@ -51,15 +52,50 @@ COL_CONV_FACTOR = 24
 # Filter to relevant procedure codes
 RELEVANT_CODE_PREFIXES = (
     "99",  # E/M codes
-    "80", "81", "82", "83", "84", "85", "86", "87", "88", "89",  # Lab/Pathology
-    "70", "71", "72", "73", "74", "75", "76", "77", "78", "79",  # Radiology
-    "90", "91", "92", "93", "94", "95", "96", "97",  # Medicine
+    "80",
+    "81",
+    "82",
+    "83",
+    "84",
+    "85",
+    "86",
+    "87",
+    "88",
+    "89",  # Lab/Pathology
+    "70",
+    "71",
+    "72",
+    "73",
+    "74",
+    "75",
+    "76",
+    "77",
+    "78",
+    "79",  # Radiology
+    "90",
+    "91",
+    "92",
+    "93",
+    "94",
+    "95",
+    "96",
+    "97",  # Medicine
     "36",  # Vascular access
-    "43", "45",  # GI procedures
+    "43",
+    "45",  # GI procedures
     "29",  # Arthroscopy
-    "10", "11", "12",  # Integumentary
-    "20", "21", "27",  # Musculoskeletal
-    "A", "E", "G", "J", "L", "Q",  # HCPCS Level II
+    "10",
+    "11",
+    "12",  # Integumentary
+    "20",
+    "21",
+    "27",  # Musculoskeletal
+    "A",
+    "E",
+    "G",
+    "J",
+    "L",
+    "Q",  # HCPCS Level II
 )
 
 
@@ -71,7 +107,9 @@ def download_file(url: str, timeout: int = 60) -> bytes:
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
 
-    request = Request(url, headers={"User-Agent": "Mozilla/5.0 (Healthcare Payment Integrity)"})
+    request = Request(
+        url, headers={"User-Agent": "Mozilla/5.0 (Healthcare Payment Integrity)"}
+    )
     try:
         with urlopen(request, timeout=timeout, context=ctx) as response:
             data = response.read()
@@ -129,7 +167,7 @@ def parse_mpfs_csv(zip_data: bytes) -> dict[str, dict[str, Any]]:
                     break
 
             # Process data rows
-            for row in rows[header_row + 1:]:
+            for row in rows[header_row + 1 :]:
                 if len(row) < 15:
                     continue
 
@@ -156,7 +194,9 @@ def parse_mpfs_csv(zip_data: bytes) -> dict[str, dict[str, Any]]:
                 mp_rvu = safe_float(row[COL_MP_RVU])
                 nonfac_total = safe_float(row[COL_NONFAC_TOTAL])
                 fac_total = safe_float(row[COL_FAC_TOTAL])
-                global_surgery = row[COL_GLOBAL].strip() if len(row) > COL_GLOBAL else "XXX"
+                global_surgery = (
+                    row[COL_GLOBAL].strip() if len(row) > COL_GLOBAL else "XXX"
+                )
 
                 # Calculate national payment (Total RVU * Conversion Factor)
                 nonfac_payment = round(nonfac_total * CONVERSION_FACTOR, 2)
@@ -245,7 +285,9 @@ def main():
     print("MPFS Fee Schedule Download Script")
     print("=" * 60)
     print("\nSource: CMS PFS Relative Value Files")
-    print("https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files\n")
+    print(
+        "https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files\n"
+    )
 
     # Download and process MPFS data
     print("Step 1: Downloading MPFS RVU file...")
@@ -291,7 +333,9 @@ def main():
         print("\n  Sample - 99213:")
         print(f"    Description: {sample.get('description', 'N/A')}")
         print(f"    Work RVU: {sample.get('work_rvu', 'N/A')}")
-        print(f"    National Payment: ${sample.get('regions', {}).get('national_nonfac', 'N/A')}")
+        print(
+            f"    National Payment: ${sample.get('regions', {}).get('national_nonfac', 'N/A')}"
+        )
 
     return 0
 
