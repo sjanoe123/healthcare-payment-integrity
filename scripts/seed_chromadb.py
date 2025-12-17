@@ -4,12 +4,65 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 # Add backend to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 from rag import ChromaStore
+
+# Policy content effective dates
+POLICY_EFFECTIVE_DATE = "2024-01-01"  # When CMS policies became effective
+LAST_REVIEWED_DATE = "2024-12-17"  # When content was last verified
+
+
+def validate_policies(policies: list[dict]) -> tuple[bool, list[str]]:
+    """Validate policy document structure and content.
+
+    Args:
+        policies: List of policy dictionaries to validate
+
+    Returns:
+        Tuple of (is_valid, list of error messages)
+    """
+    errors = []
+    topics = []
+
+    for i, policy in enumerate(policies):
+        # Check required fields
+        if "content" not in policy:
+            errors.append(f"Policy {i}: missing content")
+        elif len(policy["content"]) < 100:
+            errors.append(
+                f"Policy {i}: content too short ({len(policy['content'])} chars)"
+            )
+
+        if "metadata" not in policy:
+            errors.append(f"Policy {i}: missing metadata")
+        else:
+            metadata = policy["metadata"]
+            required_keys = ["source", "chapter", "topic"]
+            for key in required_keys:
+                if key not in metadata:
+                    errors.append(f"Policy {i}: missing metadata.{key}")
+
+            # Track topics for duplicate check
+            if "topic" in metadata:
+                topics.append(metadata["topic"])
+
+    # Check for duplicate topics
+    seen = set()
+    duplicates = []
+    for topic in topics:
+        if topic in seen:
+            duplicates.append(topic)
+        seen.add(topic)
+
+    if duplicates:
+        errors.append(f"Duplicate topics found: {duplicates}")
+
+    return len(errors) == 0, errors
 
 
 # Comprehensive policy documents for the prototype RAG system
@@ -184,7 +237,7 @@ Documentation must be made at the time of service or prior to service for pre-au
         "metadata": {
             "source": "CMS LCD Guidelines",
             "chapter": "Documentation",
-            "topic": "Medical Necessity",
+            "topic": "LCD Documentation Requirements",
         },
     },
     # OIG and Compliance Documents
@@ -667,7 +720,7 @@ LCD Coverage:
         "metadata": {
             "source": "CMS Cardiology",
             "chapter": "Cardiac Testing",
-            "topic": "Medical Necessity",
+            "topic": "Cardiac Testing Guidelines",
         },
     },
     # ============================================================
@@ -3157,8 +3210,42 @@ Appeals Based on Medical Necessity:
 ]
 
 
-def seed_chromadb():
-    """Seed the ChromaDB with sample policy documents."""
+def seed_chromadb(skip_validation: bool = False) -> dict:
+    """Seed the ChromaDB with sample policy documents.
+
+    Args:
+        skip_validation: If True, skip policy validation (faster but less safe)
+
+    Returns:
+        Dictionary with performance metrics
+    """
+    metrics = {
+        "document_count": len(SAMPLE_POLICIES),
+        "validation_time_ms": 0,
+        "embedding_time_ms": 0,
+        "total_time_ms": 0,
+        "validation_passed": True,
+    }
+
+    total_start = time.time()
+
+    # Validate policies before seeding
+    if not skip_validation:
+        print("Validating policy documents...")
+        validation_start = time.time()
+        is_valid, errors = validate_policies(SAMPLE_POLICIES)
+        metrics["validation_time_ms"] = round(
+            (time.time() - validation_start) * 1000, 2
+        )
+
+        if not is_valid:
+            print("Validation FAILED:")
+            for error in errors:
+                print(f"  - {error}")
+            metrics["validation_passed"] = False
+            return metrics
+        print(f"Validation passed ({metrics['validation_time_ms']}ms)")
+
     print("Initializing ChromaDB...")
     store = ChromaStore(persist_dir="./data/chroma", collection_name="policies")
 
@@ -3170,19 +3257,40 @@ def seed_chromadb():
 
     print(f"Adding {len(SAMPLE_POLICIES)} policy documents...")
 
+    # Add effective_date and last_reviewed to metadata
     documents = [p["content"] for p in SAMPLE_POLICIES]
-    metadatas = [p["metadata"] for p in SAMPLE_POLICIES]
+    metadatas = []
+    for p in SAMPLE_POLICIES:
+        metadata = p["metadata"].copy()
+        metadata["effective_date"] = POLICY_EFFECTIVE_DATE
+        metadata["last_reviewed"] = LAST_REVIEWED_DATE
+        metadatas.append(metadata)
     ids = [f"policy_{i}" for i in range(len(SAMPLE_POLICIES))]
 
+    # Benchmark embedding/storage
+    embedding_start = time.time()
     store.add_documents(documents=documents, metadatas=metadatas, ids=ids)
+    metrics["embedding_time_ms"] = round((time.time() - embedding_start) * 1000, 2)
+
+    metrics["total_time_ms"] = round((time.time() - total_start) * 1000, 2)
 
     print(f"Done! Total documents: {store.count()}")
+    print("\nPerformance Metrics:")
+    print(f"  - Documents: {metrics['document_count']}")
+    print(f"  - Validation: {metrics['validation_time_ms']}ms")
+    print(f"  - Embedding/Storage: {metrics['embedding_time_ms']}ms")
+    print(f"  - Total Time: {metrics['total_time_ms']}ms")
 
-    # Test search
+    # Test search with timing
     print("\nTesting search...")
+    search_start = time.time()
     results = store.search("NCCI PTP edits billing", n_results=2)
+    search_time = round((time.time() - search_start) * 1000, 2)
+    print(f"Search completed in {search_time}ms")
     for r in results:
         print(f"  - {r['metadata'].get('topic', 'Unknown')}: {r['content'][:100]}...")
+
+    return metrics
 
 
 if __name__ == "__main__":
