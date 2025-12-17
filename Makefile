@@ -1,4 +1,4 @@
-.PHONY: help install run seed test docker-build docker-up docker-down clean data-all data-leie data-ncci data-mpfs data-lcd
+.PHONY: help install run seed test test-integration lint lint-fix docker-build docker-up docker-down clean data-all data-leie data-ncci data-mpfs data-lcd
 
 help:
 	@echo "Healthcare Payment Integrity Prototype"
@@ -7,7 +7,10 @@ help:
 	@echo "  make install     Install Python dependencies locally"
 	@echo "  make run         Run the backend locally (no Docker)"
 	@echo "  make seed        Seed ChromaDB with policy documents (24 docs)"
-	@echo "  make test        Run the test script against running server"
+	@echo "  make test        Run unit tests with pytest"
+	@echo "  make test-integration  Run integration tests against running server"
+	@echo "  make lint        Run linting checks (ruff)"
+	@echo "  make lint-fix    Auto-fix linting issues"
 	@echo ""
 	@echo "Data Commands (Phase 2 - Real CMS Data):"
 	@echo "  make data-all    Download all CMS reference data (~10 min)"
@@ -33,7 +36,18 @@ seed:
 	cd backend && PYTHONPATH=. python ../scripts/seed_chromadb.py
 
 test:
+	PYTHONPATH=backend pytest tests/ -v
+
+test-integration:
 	python scripts/test_analysis.py
+
+lint:
+	ruff check backend/ scripts/
+	ruff format --check backend/ scripts/
+
+lint-fix:
+	ruff check backend/ scripts/ --fix
+	ruff format backend/ scripts/
 
 # Data generation targets
 data-leie:

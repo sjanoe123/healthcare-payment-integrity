@@ -1,4 +1,5 @@
 """Healthcare fraud detection rules."""
+
 from __future__ import annotations
 
 from collections import Counter
@@ -33,7 +34,9 @@ def register_default_rules(registry: RuleRegistry) -> None:
 
 def high_dollar_rule(context: RuleContext) -> list[RuleHit]:
     tiers = context.config.get("high_dollar_tiers", [(10000, 0.1), (25000, 0.15)])
-    total_billed = sum(item.get("line_amount", 0) for item in context.claim.get("items", []))
+    total_billed = sum(
+        item.get("line_amount", 0) for item in context.claim.get("items", [])
+    )
     hits: list[RuleHit] = []
     for threshold, weight in sorted(tiers):
         if total_billed >= threshold:
@@ -191,7 +194,9 @@ def lcd_age_gender_rule(context: RuleContext) -> list[RuleHit]:
         if age is not None:
             ranges = lcd_entry.get("age_ranges", [])
             if ranges:
-                in_range = any((r.get("min", 0) <= age <= r.get("max", age)) for r in ranges if r)
+                in_range = any(
+                    (r.get("min", 0) <= age <= r.get("max", age)) for r in ranges if r
+                )
                 if not in_range:
                     hits.append(
                         RuleHit(
@@ -253,7 +258,9 @@ def lcd_experimental_rule(context: RuleContext) -> list[RuleHit]:
 def global_surgery_modifier_rule(context: RuleContext) -> list[RuleHit]:
     mpfs: dict[str, dict[str, Any]] = context.datasets.get("mpfs", {})
     items = context.claim.get("items", [])
-    has_eval = any((str(item.get("procedure_code", "")).startswith("99")) for item in items)
+    has_eval = any(
+        (str(item.get("procedure_code", "")).startswith("99")) for item in items
+    )
     hits: list[RuleHit] = []
     if not has_eval:
         return hits
@@ -352,7 +359,9 @@ def provider_outlier_rule(context: RuleContext) -> list[RuleHit]:
         )
 
     if distance_limit:
-        distance = context.claim.get("service_distance_km") or provider.get("distance_km")
+        distance = context.claim.get("service_distance_km") or provider.get(
+            "distance_km"
+        )
         if distance is None:
             for item in context.claim.get("items", []):
                 if item.get("service_distance_km") is not None:
@@ -424,7 +433,9 @@ def provider_outlier_rule(context: RuleContext) -> list[RuleHit]:
 
 def duplicate_line_rule(context: RuleContext) -> list[RuleHit]:
     items = context.claim.get("items", [])
-    counter = Counter((item.get("procedure_code"), item.get("modifier")) for item in items)
+    counter = Counter(
+        (item.get("procedure_code"), item.get("modifier")) for item in items
+    )
     hits: list[RuleHit] = []
     for (code, modifier), count in counter.items():
         if code and count > 1:
@@ -435,7 +446,11 @@ def duplicate_line_rule(context: RuleContext) -> list[RuleHit]:
                     weight=0.08,
                     severity="medium",
                     flag="duplicate_line",
-                    metadata={"category": "financial", "modifier": modifier, "count": count},
+                    metadata={
+                        "category": "financial",
+                        "modifier": modifier,
+                        "count": count,
+                    },
                 )
             )
     return hits

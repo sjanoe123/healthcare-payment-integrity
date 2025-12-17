@@ -1,4 +1,5 @@
 """FastAPI backend for Healthcare Payment Integrity prototype."""
+
 from __future__ import annotations
 
 import json
@@ -27,38 +28,37 @@ DB_PATH = os.getenv("DB_PATH", "./data/prototype.db")
 def init_db():
     """Initialize SQLite database."""
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS jobs (
-            job_id TEXT PRIMARY KEY,
-            claim_id TEXT,
-            status TEXT DEFAULT 'pending',
-            created_at TEXT,
-            completed_at TEXT
-        )
-    """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS jobs (
+                job_id TEXT PRIMARY KEY,
+                claim_id TEXT,
+                status TEXT DEFAULT 'pending',
+                created_at TEXT,
+                completed_at TEXT
+            )
+        """)
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS results (
-            job_id TEXT PRIMARY KEY,
-            claim_id TEXT,
-            fraud_score REAL,
-            decision_mode TEXT,
-            rule_hits TEXT,
-            ncci_flags TEXT,
-            coverage_flags TEXT,
-            provider_flags TEXT,
-            roi_estimate REAL,
-            claude_explanation TEXT,
-            created_at TEXT,
-            FOREIGN KEY (job_id) REFERENCES jobs(job_id)
-        )
-    """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS results (
+                job_id TEXT PRIMARY KEY,
+                claim_id TEXT,
+                fraud_score REAL,
+                decision_mode TEXT,
+                rule_hits TEXT,
+                ncci_flags TEXT,
+                coverage_flags TEXT,
+                provider_flags TEXT,
+                roi_estimate REAL,
+                claude_explanation TEXT,
+                created_at TEXT,
+                FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+            )
+        """)
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
 
 @asynccontextmanager
@@ -80,7 +80,12 @@ app = FastAPI(
 # CORS for local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -223,15 +228,13 @@ async def upload_claim(claim: ClaimSubmission):
     """Submit a claim for analysis."""
     job_id = str(uuid.uuid4())
 
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute(
-        "INSERT INTO jobs (job_id, claim_id, status, created_at) VALUES (?, ?, ?, ?)",
-        (job_id, claim.claim_id, "pending", datetime.utcnow().isoformat()),
-    )
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO jobs (job_id, claim_id, status, created_at) VALUES (?, ?, ?, ?)",
+            (job_id, claim.claim_id, "pending", datetime.utcnow().isoformat()),
+        )
+        conn.commit()
 
     return {
         "job_id": job_id,
@@ -271,7 +274,9 @@ async def analyze_claim(job_id: str, claim: ClaimSubmission):
     store = get_store()
     if store.count() > 0:
         # Search for relevant policy context
-        search_query = f"Procedure codes: {', '.join(i.procedure_code for i in claim.items)}"
+        search_query = (
+            f"Procedure codes: {', '.join(i.procedure_code for i in claim.items)}"
+        )
         rag_results = store.search(search_query, n_results=3)
         if rag_results:
             rag_context = "\n\n".join(
@@ -289,37 +294,36 @@ async def analyze_claim(job_id: str, claim: ClaimSubmission):
     )
 
     # Store results
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        """INSERT OR REPLACE INTO results
-           (job_id, claim_id, fraud_score, decision_mode, rule_hits,
-            ncci_flags, coverage_flags, provider_flags, roi_estimate,
-            claude_explanation, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            job_id,
-            claim.claim_id,
-            outcome.decision.score,
-            outcome.decision.decision_mode,
-            json.dumps([asdict(h) for h in outcome.rule_result.hits]),
-            json.dumps(outcome.ncci_flags),
-            json.dumps(outcome.coverage_flags),
-            json.dumps(outcome.provider_flags),
-            outcome.roi_estimate,
-            json.dumps(claude_result),
-            datetime.utcnow().isoformat(),
-        ),
-    )
+        cursor.execute(
+            """INSERT OR REPLACE INTO results
+               (job_id, claim_id, fraud_score, decision_mode, rule_hits,
+                ncci_flags, coverage_flags, provider_flags, roi_estimate,
+                claude_explanation, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                job_id,
+                claim.claim_id,
+                outcome.decision.score,
+                outcome.decision.decision_mode,
+                json.dumps([asdict(h) for h in outcome.rule_result.hits]),
+                json.dumps(outcome.ncci_flags),
+                json.dumps(outcome.coverage_flags),
+                json.dumps(outcome.provider_flags),
+                outcome.roi_estimate,
+                json.dumps(claude_result),
+                datetime.utcnow().isoformat(),
+            ),
+        )
 
-    cursor.execute(
-        "UPDATE jobs SET status = ?, completed_at = ? WHERE job_id = ?",
-        ("completed", datetime.utcnow().isoformat(), job_id),
-    )
+        cursor.execute(
+            "UPDATE jobs SET status = ?, completed_at = ? WHERE job_id = ?",
+            ("completed", datetime.utcnow().isoformat(), job_id),
+        )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
     return AnalysisResult(
         job_id=job_id,
@@ -338,15 +342,15 @@ async def analyze_claim(job_id: str, claim: ClaimSubmission):
 @app.get("/api/results/{job_id}")
 async def get_results(job_id: str):
     """Get analysis results for a job."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM results WHERE job_id = ?", (job_id,))
-    row = cursor.fetchone()
-    conn.close()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM results WHERE job_id = ?", (job_id,))
+        row = cursor.fetchone()
 
     if not row:
-        raise HTTPException(status_code=404, detail=f"Results not found for job {job_id}")
+        raise HTTPException(
+            status_code=404, detail=f"Results not found for job {job_id}"
+        )
 
     return {
         "job_id": row[0],
@@ -386,19 +390,17 @@ async def search_policies(query: SearchQuery):
 @app.get("/api/stats")
 async def get_stats():
     """Get prototype statistics."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("SELECT COUNT(*) FROM jobs")
-    total_jobs = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM jobs")
+        total_jobs = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM jobs WHERE status = 'completed'")
-    completed_jobs = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM jobs WHERE status = 'completed'")
+        completed_jobs = cursor.fetchone()[0]
 
-    cursor.execute("SELECT AVG(fraud_score) FROM results")
-    avg_score = cursor.fetchone()[0] or 0
-
-    conn.close()
+        cursor.execute("SELECT AVG(fraud_score) FROM results")
+        avg_score = cursor.fetchone()[0] or 0
 
     return {
         "total_jobs": total_jobs,

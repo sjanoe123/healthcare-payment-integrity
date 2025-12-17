@@ -1,4 +1,5 @@
 """Data models for the rules engine."""
+
 from __future__ import annotations
 
 from contextlib import suppress

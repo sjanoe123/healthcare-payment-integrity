@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Test the fraud analysis endpoint."""
+
 from __future__ import annotations
 
 import requests
-import json
 
 BASE_URL = "http://localhost:8080"
 
@@ -71,7 +71,7 @@ def test_analysis():
 
     if analyze_resp.status_code == 200:
         result = analyze_resp.json()
-        print(f"\n  === ANALYSIS RESULTS ===")
+        print("\n  === ANALYSIS RESULTS ===")
         print(f"  Fraud Score: {result['fraud_score']:.2f}")
         print(f"  Decision Mode: {result['decision_mode']}")
         print(f"  NCCI Flags: {result['ncci_flags']}")
@@ -81,11 +81,13 @@ def test_analysis():
 
         print(f"\n  Rule Hits ({len(result['rule_hits'])}):")
         for hit in result["rule_hits"]:
-            print(f"    - [{hit['severity'].upper()}] {hit['rule_id']}: {hit['description']}")
+            print(
+                f"    - [{hit['severity'].upper()}] {hit['rule_id']}: {hit['description']}"
+            )
 
         if result.get("claude_analysis"):
             claude = result["claude_analysis"]
-            print(f"\n  === CLAUDE ANALYSIS ===")
+            print("\n  === CLAUDE ANALYSIS ===")
             print(f"  Model: {claude.get('model', 'N/A')}")
             print(f"  Tokens: {claude.get('tokens_used', 0)}")
             if claude.get("explanation"):
