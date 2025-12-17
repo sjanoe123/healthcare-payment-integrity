@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import os
 import sys
 import tempfile
@@ -18,7 +19,28 @@ if backend_path not in sys.path:
 # Set test database path before importing app
 # Use a temp file instead of :memory: for SQLite compatibility with FastAPI
 _temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-os.environ["DB_PATH"] = _temp_db.name
+_temp_db_path = _temp_db.name
+os.environ["DB_PATH"] = _temp_db_path
+
+
+def _cleanup_test_db() -> None:
+    """Clean up temporary test database file."""
+    if os.path.exists(_temp_db_path):
+        try:
+            os.unlink(_temp_db_path)
+        except OSError:
+            pass  # File may already be deleted or locked
+
+
+# Register cleanup to run at exit
+atexit.register(_cleanup_test_db)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_db() -> None:
+    """Pytest fixture to ensure test database cleanup after session."""
+    yield
+    _cleanup_test_db()
 
 
 @pytest.fixture
