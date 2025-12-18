@@ -33,9 +33,9 @@ if env_file.exists():
                 key, value = line.split("=", 1)
                 os.environ[key] = value
 
-from kirk_config import KIRK_CONFIG
-from claude_client import get_kirk_analysis
-from rules import RuleHit
+from kirk_config import KIRK_CONFIG  # noqa: E402
+from claude_client import get_kirk_analysis  # noqa: E402
+from rules import RuleHit  # noqa: E402
 
 
 def check_api_key():
@@ -48,7 +48,10 @@ def check_api_key():
         print("  OR")
         print("  Create .env file with ANTHROPIC_API_KEY=your-key-here")
         sys.exit(1)
-    print(f"API Key: {api_key[:20]}...{api_key[-4:]}")
+    if os.getenv("DEBUG"):
+        print(f"API Key: {api_key[:20]}...{api_key[-4:]}")
+    else:
+        print("API Key: [REDACTED] (set DEBUG=1 to show)")
     return True
 
 
@@ -89,7 +92,7 @@ def test_kirk_analyzes_clean_claim():
     print(f"Tokens: {result['tokens_used']}")
     print(f"Agent: {result['agent']}")
     print(f"\n--- Kirk's Analysis ---\n{result['explanation']}")
-    print(f"\n--- Recommendations ---")
+    print("\n--- Recommendations ---")
     for rec in result["recommendations"]:
         print(f"  - {rec}")
 
@@ -187,10 +190,10 @@ def test_kirk_with_high_risk_claim():
     print(f"Tokens: {result['tokens_used']}")
     print(f"Agent: {result['agent']}")
     print(f"\n--- Kirk's Analysis ---\n{result['explanation']}")
-    print(f"\n--- Recommendations ---")
+    print("\n--- Recommendations ---")
     for rec in result["recommendations"]:
         print(f"  - {rec}")
-    print(f"\n--- Risk Factors ---")
+    print("\n--- Risk Factors ---")
     for factor in result["risk_factors"]:
         print(f"  - {factor}")
 
@@ -256,7 +259,7 @@ def test_kirk_response_format():
         "has_agent": result["agent"] == "Kirk",
     }
 
-    print(f"\n--- Format Checks ---")
+    print("\n--- Format Checks ---")
     for check, passed in checks.items():
         status = "" if passed else ""
         print(f"  {status} {check}: {passed}")
@@ -270,7 +273,7 @@ def main():
     print("=" * 60)
     print("KIRK LIVE INTEGRATION TESTS")
     print("=" * 60)
-    print(f"\nConfiguration:")
+    print("\nConfiguration:")
     print(f"  Name: {KIRK_CONFIG.name}")
     print(f"  Model: {KIRK_CONFIG.model}")
     print(f"  Max Tokens: {KIRK_CONFIG.max_tokens}")

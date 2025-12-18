@@ -11,8 +11,6 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 # Add backend to path for imports
 backend_path = str(Path(__file__).parent.parent / "backend")
 if backend_path not in sys.path:
