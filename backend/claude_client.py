@@ -269,7 +269,9 @@ def get_kirk_analysis(
         return {
             "explanation": content,
             "risk_factors": [h.description for h in rule_hits],
-            "recommendations": extract_recommendations(content)[: config.max_recommendations],
+            "recommendations": extract_recommendations(content)[
+                : config.max_recommendations
+            ],
             "model": config.model,
             "tokens_used": response.usage.input_tokens + response.usage.output_tokens,
             "agent": config.name,

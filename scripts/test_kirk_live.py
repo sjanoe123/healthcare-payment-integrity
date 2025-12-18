@@ -254,7 +254,9 @@ def test_kirk_response_format():
         "has_summary": any(
             word in explanation for word in ["summary", "risk", "assessment"]
         ),
-        "has_findings": any(word in explanation for word in ["finding", "issue", "concern"]),
+        "has_findings": any(
+            word in explanation for word in ["finding", "issue", "concern"]
+        ),
         "has_recommendations": len(result["recommendations"]) > 0,
         "has_agent": result["agent"] == "Kirk",
     }
