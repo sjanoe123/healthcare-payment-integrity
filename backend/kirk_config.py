@@ -19,7 +19,7 @@ class KirkConfig:
     role: str = "Healthcare Payment Integrity Auditor"
 
     # Model Settings
-    model: str = "claude-sonnet-4-20250514"
+    model: str = "claude-sonnet-4-5-20250929"
     max_tokens: int = 1000
     temperature: float = 0.3  # Lower for more consistent, formal responses
 

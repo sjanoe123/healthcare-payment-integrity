@@ -32,7 +32,7 @@ class TestKirkConfig:
 
         assert config.name == "Kirk"
         assert config.role == "Healthcare Payment Integrity Auditor"
-        assert config.model == "claude-sonnet-4-20250514"
+        assert config.model == "claude-sonnet-4-5-20250929"
         assert config.max_tokens == 1000
         assert config.temperature == 0.3
         assert config.verbosity == "detailed"
