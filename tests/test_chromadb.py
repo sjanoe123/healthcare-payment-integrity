@@ -226,9 +226,14 @@ class TestChromaDBIntegration:
 class TestRAGSearchRelevance:
     """Test RAG search returns relevant results for various query types."""
 
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def full_chroma_store(self):
-        """Create a ChromaDB store with all 75 policies for testing."""
+        """Create a ChromaDB store with all 75 policies for testing.
+
+        Scope is 'class' to avoid recreating the store for each test method.
+        This significantly improves test performance as ChromaDB seeding with
+        75 documents takes several seconds.
+        """
         from rag import ChromaStore
         from seed_chromadb import (
             LAST_REVIEWED_DATE,

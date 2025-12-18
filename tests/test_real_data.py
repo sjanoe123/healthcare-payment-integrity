@@ -5,6 +5,10 @@ These tests validate the fraud detection rules against actual CMS data:
 - NCCI MUE: 8,253 real MUE limits
 - OIG Exclusions: 8,172 real excluded NPIs
 - MPFS: 10,622 real fee schedule codes
+
+Data Schema Notes:
+- PTP entries may have "column1"/"column2" fields OR a "codes" array
+- Both formats are supported for compatibility with different CMS export versions
 """
 
 from __future__ import annotations
@@ -24,22 +28,45 @@ from rules import ThresholdConfig, evaluate_baseline  # noqa: E402
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 
+# Expected minimum counts for real CMS data validation
+# These thresholds ensure we're testing with comprehensive data, not stubs
+EXPECTED_MIN_PTP_PAIRS = 20_000
+EXPECTED_MIN_MUE_CODES = 8_000
+EXPECTED_MIN_OIG_EXCLUSIONS = 8_000
+EXPECTED_MIN_MPFS_CODES = 10_000
+
 
 @pytest.fixture(scope="module")
 def real_datasets() -> dict:
-    """Load real CMS datasets for testing."""
+    """Load real CMS datasets for testing.
+
+    Returns:
+        Dictionary containing loaded datasets with keys:
+        - ncci_ptp: Dict with tuple(code1, code2) keys for bidirectional lookup
+        - ncci_mue: Dict with procedure code keys
+        - oig_exclusions: Set of excluded NPI strings
+        - mpfs: Dict with HCPCS code keys
+        - lcd: Dict with procedure code keys
+        - fwa_watchlist: Empty set (placeholder)
+        - utilization: Empty dict (placeholder)
+        - fwa_config: Basic configuration dict
+    """
     datasets = {}
 
     # Load NCCI PTP (convert list to dict with tuple keys)
+    # Schema supports both "column1/column2" fields and "codes" array format
     ptp_path = DATA_DIR / "ncci_ptp.json"
     if ptp_path.exists():
         with open(ptp_path) as f:
             ptp_list = json.load(f)
             ptp_dict = {}
             for entry in ptp_list:
+                # Support both schema versions for compatibility
                 col1 = entry.get("column1") or entry.get("codes", [None, None])[0]
                 col2 = entry.get("column2") or entry.get("codes", [None, None])[1]
                 if col1 and col2:
+                    # Sort codes to create bidirectional lookup key
+                    # This allows (code1, code2) and (code2, code1) to match the same entry
                     key = tuple(sorted((col1, col2)))
                     ptp_dict[key] = {
                         "citation": entry.get("rationale", "NCCI PTP Edit"),
@@ -86,22 +113,30 @@ class TestDataLoading:
     def test_ncci_ptp_loaded(self, real_datasets: dict):
         """Verify NCCI PTP data is loaded with expected count."""
         ptp = real_datasets.get("ncci_ptp", {})
-        assert len(ptp) > 20000, f"Expected 20K+ PTP pairs, got {len(ptp)}"
+        assert len(ptp) > EXPECTED_MIN_PTP_PAIRS, (
+            f"Expected {EXPECTED_MIN_PTP_PAIRS:,}+ PTP pairs, got {len(ptp):,}"
+        )
 
     def test_ncci_mue_loaded(self, real_datasets: dict):
         """Verify NCCI MUE data is loaded with expected count."""
         mue = real_datasets.get("ncci_mue", {})
-        assert len(mue) > 8000, f"Expected 8K+ MUE entries, got {len(mue)}"
+        assert len(mue) > EXPECTED_MIN_MUE_CODES, (
+            f"Expected {EXPECTED_MIN_MUE_CODES:,}+ MUE entries, got {len(mue):,}"
+        )
 
     def test_oig_exclusions_loaded(self, real_datasets: dict):
         """Verify OIG exclusions are loaded with expected count."""
         oig = real_datasets.get("oig_exclusions", set())
-        assert len(oig) > 8000, f"Expected 8K+ excluded NPIs, got {len(oig)}"
+        assert len(oig) > EXPECTED_MIN_OIG_EXCLUSIONS, (
+            f"Expected {EXPECTED_MIN_OIG_EXCLUSIONS:,}+ excluded NPIs, got {len(oig):,}"
+        )
 
     def test_mpfs_loaded(self, real_datasets: dict):
         """Verify MPFS data is loaded with expected count."""
         mpfs = real_datasets.get("mpfs", {})
-        assert len(mpfs) > 10000, f"Expected 10K+ MPFS codes, got {len(mpfs)}"
+        assert len(mpfs) > EXPECTED_MIN_MPFS_CODES, (
+            f"Expected {EXPECTED_MIN_MPFS_CODES:,}+ MPFS codes, got {len(mpfs):,}"
+        )
 
 
 class TestRealNCCIPTPEdits:
@@ -133,7 +168,6 @@ class TestRealNCCIPTPEdits:
 
     def test_detects_real_ptp_edit_em_codes(self, real_datasets: dict):
         """Test detection of common E/M PTP edits."""
-        # Check if 99213/99214 is in the data (common E/M bundling)
         ptp = real_datasets.get("ncci_ptp", {})
 
         # Find a real E/M code pair from the data
@@ -143,34 +177,36 @@ class TestRealNCCIPTPEdits:
                 em_pair = (c1, c2)
                 break
 
-        if em_pair:
-            claim = {
-                "claim_id": "PTP-EM-001",
-                "items": [
-                    {
-                        "procedure_code": em_pair[0],
-                        "quantity": 1,
-                        "line_amount": 150.00,
-                    },
-                    {
-                        "procedure_code": em_pair[1],
-                        "quantity": 1,
-                        "line_amount": 200.00,
-                    },
-                ],
-                "provider": {"npi": "9999999999"},
-                "diagnosis_codes": ["J06.9"],
-            }
+        if not em_pair:
+            pytest.skip("No E/M code pairs found in PTP data")
 
-            outcome = evaluate_baseline(
-                claim=claim,
-                datasets=real_datasets,
-                config={"base_score": 0.5},
-                threshold_config=ThresholdConfig(),
-            )
+        claim = {
+            "claim_id": "PTP-EM-001",
+            "items": [
+                {
+                    "procedure_code": em_pair[0],
+                    "quantity": 1,
+                    "line_amount": 150.00,
+                },
+                {
+                    "procedure_code": em_pair[1],
+                    "quantity": 1,
+                    "line_amount": 200.00,
+                },
+            ],
+            "provider": {"npi": "9999999999"},
+            "diagnosis_codes": ["J06.9"],
+        }
 
-            ptp_hits = [h for h in outcome.rule_result.hits if h.rule_id == "NCCI_PTP"]
-            assert len(ptp_hits) > 0, f"Expected PTP edit for {em_pair}"
+        outcome = evaluate_baseline(
+            claim=claim,
+            datasets=real_datasets,
+            config={"base_score": 0.5},
+            threshold_config=ThresholdConfig(),
+        )
+
+        ptp_hits = [h for h in outcome.rule_result.hits if h.rule_id == "NCCI_PTP"]
+        assert len(ptp_hits) > 0, f"Expected PTP edit for {em_pair}"
 
     def test_no_ptp_for_unrelated_codes(self, real_datasets: dict):
         """Test that unrelated codes don't trigger PTP edits."""
@@ -215,31 +251,31 @@ class TestRealNCCIMUELimits:
                 test_code = code
                 break
 
-        if test_code:
-            claim = {
-                "claim_id": "MUE-TEST-001",
-                "items": [
-                    {
-                        "procedure_code": test_code,
-                        "quantity": 3,  # Exceeds MUE limit of 1
-                        "line_amount": 150.00,
-                    },
-                ],
-                "provider": {"npi": "9999999999"},
-                "diagnosis_codes": ["J06.9"],
-            }
+        if not test_code:
+            pytest.skip("No E/M code with MUE limit of 1 found in data")
 
-            outcome = evaluate_baseline(
-                claim=claim,
-                datasets=real_datasets,
-                config={"base_score": 0.5},
-                threshold_config=ThresholdConfig(),
-            )
+        claim = {
+            "claim_id": "MUE-TEST-001",
+            "items": [
+                {
+                    "procedure_code": test_code,
+                    "quantity": 3,  # Exceeds MUE limit of 1
+                    "line_amount": 150.00,
+                },
+            ],
+            "provider": {"npi": "9999999999"},
+            "diagnosis_codes": ["J06.9"],
+        }
 
-            mue_hits = [h for h in outcome.rule_result.hits if h.rule_id == "NCCI_MUE"]
-            assert len(mue_hits) > 0, (
-                f"Expected MUE violation for {test_code} with qty 3"
-            )
+        outcome = evaluate_baseline(
+            claim=claim,
+            datasets=real_datasets,
+            config={"base_score": 0.5},
+            threshold_config=ThresholdConfig(),
+        )
+
+        mue_hits = [h for h in outcome.rule_result.hits if h.rule_id == "NCCI_MUE"]
+        assert len(mue_hits) > 0, f"Expected MUE violation for {test_code} with qty 3"
 
     def test_no_mue_violation_within_limit(self, real_datasets: dict):
         """Test that quantities within MUE limits don't trigger violations."""
@@ -253,31 +289,31 @@ class TestRealNCCIMUELimits:
                 test_code = code
                 break
 
-        if test_code:
-            claim = {
-                "claim_id": "MUE-CLEAN-001",
-                "items": [
-                    {
-                        "procedure_code": test_code,
-                        "quantity": 1,  # Within limit
-                        "line_amount": 100.00,
-                    },
-                ],
-                "provider": {"npi": "9999999999"},
-                "diagnosis_codes": ["M54.5"],
-            }
+        if not test_code:
+            pytest.skip("No code with MUE limit >= 3 found in data")
 
-            outcome = evaluate_baseline(
-                claim=claim,
-                datasets=real_datasets,
-                config={"base_score": 0.5},
-                threshold_config=ThresholdConfig(),
-            )
+        claim = {
+            "claim_id": "MUE-CLEAN-001",
+            "items": [
+                {
+                    "procedure_code": test_code,
+                    "quantity": 1,  # Within limit
+                    "line_amount": 100.00,
+                },
+            ],
+            "provider": {"npi": "9999999999"},
+            "diagnosis_codes": ["M54.5"],
+        }
 
-            mue_hits = [h for h in outcome.rule_result.hits if h.rule_id == "NCCI_MUE"]
-            assert len(mue_hits) == 0, (
-                f"Expected no MUE violation for {test_code} qty 1"
-            )
+        outcome = evaluate_baseline(
+            claim=claim,
+            datasets=real_datasets,
+            config={"base_score": 0.5},
+            threshold_config=ThresholdConfig(),
+        )
+
+        mue_hits = [h for h in outcome.rule_result.hits if h.rule_id == "NCCI_MUE"]
+        assert len(mue_hits) == 0, f"Expected no MUE violation for {test_code} qty 1"
 
 
 class TestRealOIGExclusions:
@@ -401,33 +437,41 @@ class TestRealMPFSBenchmarking:
                     benchmark = national
                     break
 
-        if test_code and benchmark > 0:
-            # Bill at 3x the benchmark to trigger outlier
-            billed_amount = benchmark * 3
+        if not (test_code and benchmark > 0):
+            pytest.skip("No E/M code with payment rate > $50 found in MPFS data")
 
-            claim = {
-                "claim_id": "MPFS-OUTLIER-001",
-                "items": [
-                    {
-                        "procedure_code": test_code,
-                        "quantity": 1,
-                        "line_amount": billed_amount,
-                    },
-                ],
-                "provider": {"npi": "9999999999", "region": "national"},
-                "diagnosis_codes": ["J06.9"],
-            }
+        # Bill at 3x the benchmark to trigger outlier
+        billed_amount = benchmark * 3
 
-            outcome = evaluate_baseline(
-                claim=claim,
-                datasets=real_datasets,
-                config={"base_score": 0.5},
-                threshold_config=ThresholdConfig(),
-            )
+        claim = {
+            "claim_id": "MPFS-OUTLIER-001",
+            "items": [
+                {
+                    "procedure_code": test_code,
+                    "quantity": 1,
+                    "line_amount": billed_amount,
+                },
+            ],
+            "provider": {"npi": "9999999999", "region": "national"},
+            "diagnosis_codes": ["J06.9"],
+        }
 
-            # Note: outlier rule uses percentile threshold, may not trigger
-            # Just verify execution completes
-            assert outcome.rule_result is not None
+        outcome = evaluate_baseline(
+            claim=claim,
+            datasets=real_datasets,
+            config={"base_score": 0.5},
+            threshold_config=ThresholdConfig(),
+        )
+
+        # Outlier rule may or may not trigger depending on percentile threshold
+        # At minimum, verify the claim is evaluated and score reflects overbilling
+        assert outcome.rule_result is not None
+        assert outcome.decision is not None
+        # Billing 3x benchmark should elevate score above baseline
+        assert outcome.decision.score >= 0.5, (
+            f"Expected elevated score for 3x overbilling ({billed_amount:.2f} vs "
+            f"benchmark {benchmark:.2f})"
+        )
 
     def test_reasonable_billing_not_flagged_as_outlier(self, real_datasets: dict):
         """Test that reasonable billing amounts don't trigger outlier flags."""
@@ -447,32 +491,34 @@ class TestRealMPFSBenchmarking:
                     benchmark = national
                     break
 
-        if test_code and benchmark > 0:
-            # Bill at exactly the benchmark
-            claim = {
-                "claim_id": "MPFS-REASONABLE-001",
-                "items": [
-                    {
-                        "procedure_code": test_code,
-                        "quantity": 1,
-                        "line_amount": benchmark,
-                    },
-                ],
-                "provider": {"npi": "9999999999", "region": "national"},
-                "diagnosis_codes": ["J06.9"],
-            }
+        if not (test_code and benchmark > 0):
+            pytest.skip("No E/M code with payment rate > $50 found in MPFS data")
 
-            outcome = evaluate_baseline(
-                claim=claim,
-                datasets=real_datasets,
-                config={"base_score": 0.5},
-                threshold_config=ThresholdConfig(),
-            )
+        # Bill at exactly the benchmark
+        claim = {
+            "claim_id": "MPFS-REASONABLE-001",
+            "items": [
+                {
+                    "procedure_code": test_code,
+                    "quantity": 1,
+                    "line_amount": benchmark,
+                },
+            ],
+            "provider": {"npi": "9999999999", "region": "national"},
+            "diagnosis_codes": ["J06.9"],
+        }
 
-            outlier_hits = [
-                h for h in outcome.rule_result.hits if h.rule_id == "REIMB_OUTLIER"
-            ]
-            assert len(outlier_hits) == 0, "Reasonable billing should not be flagged"
+        outcome = evaluate_baseline(
+            claim=claim,
+            datasets=real_datasets,
+            config={"base_score": 0.5},
+            threshold_config=ThresholdConfig(),
+        )
+
+        outlier_hits = [
+            h for h in outcome.rule_result.hits if h.rule_id == "REIMB_OUTLIER"
+        ]
+        assert len(outlier_hits) == 0, "Reasonable billing should not be flagged"
 
 
 class TestComplexClaimScenarios:
@@ -609,3 +655,187 @@ class TestDataConsistency:
             assert isinstance(npi, str), f"NPI should be string: {npi}"
             assert len(npi) == 10, f"NPI should be 10 digits: {npi}"
             assert npi.isdigit(), f"NPI should be all digits: {npi}"
+
+
+class TestBoundaryConditions:
+    """Test edge cases and boundary conditions."""
+
+    def test_mue_at_exact_limit_no_violation(self, real_datasets: dict):
+        """Test that quantity exactly at MUE limit does not trigger violation."""
+        mue = real_datasets.get("ncci_mue", {})
+
+        # Find a code with MUE limit > 1 to test boundary
+        test_code = None
+        limit_value = None
+        for code, entry in mue.items():
+            limit = entry.get("limit") if isinstance(entry, dict) else entry
+            if limit and limit > 1:
+                test_code = code
+                limit_value = limit
+                break
+
+        if not test_code:
+            pytest.skip("No code with MUE limit > 1 found in data")
+
+        claim = {
+            "claim_id": "MUE-BOUNDARY-001",
+            "items": [
+                {
+                    "procedure_code": test_code,
+                    "quantity": limit_value,  # Exactly at limit
+                    "line_amount": 100.00,
+                },
+            ],
+            "provider": {"npi": "9999999999"},
+            "diagnosis_codes": ["M54.5"],
+        }
+
+        outcome = evaluate_baseline(
+            claim=claim,
+            datasets=real_datasets,
+            config={"base_score": 0.5},
+            threshold_config=ThresholdConfig(),
+        )
+
+        mue_hits = [h for h in outcome.rule_result.hits if h.rule_id == "NCCI_MUE"]
+        assert len(mue_hits) == 0, (
+            f"Quantity {limit_value} at exact MUE limit for {test_code} "
+            "should not trigger violation"
+        )
+
+    def test_mue_one_over_limit_triggers_violation(self, real_datasets: dict):
+        """Test that quantity one over MUE limit triggers violation."""
+        mue = real_datasets.get("ncci_mue", {})
+
+        # Find a code with MUE limit
+        test_code = None
+        limit_value = None
+        for code, entry in mue.items():
+            limit = entry.get("limit") if isinstance(entry, dict) else entry
+            if limit and limit >= 1:
+                test_code = code
+                limit_value = limit
+                break
+
+        if not test_code:
+            pytest.skip("No code with MUE limit found in data")
+
+        claim = {
+            "claim_id": "MUE-BOUNDARY-002",
+            "items": [
+                {
+                    "procedure_code": test_code,
+                    "quantity": limit_value + 1,  # One over limit
+                    "line_amount": 100.00,
+                },
+            ],
+            "provider": {"npi": "9999999999"},
+            "diagnosis_codes": ["M54.5"],
+        }
+
+        outcome = evaluate_baseline(
+            claim=claim,
+            datasets=real_datasets,
+            config={"base_score": 0.5},
+            threshold_config=ThresholdConfig(),
+        )
+
+        mue_hits = [h for h in outcome.rule_result.hits if h.rule_id == "NCCI_MUE"]
+        assert len(mue_hits) > 0, (
+            f"Quantity {limit_value + 1} (limit+1) for {test_code} "
+            "should trigger MUE violation"
+        )
+
+    def test_zero_quantity_items(self, real_datasets: dict):
+        """Test handling of claim items with zero quantity."""
+        claim = {
+            "claim_id": "ZERO-QTY-001",
+            "items": [
+                {
+                    "procedure_code": "99214",
+                    "quantity": 0,  # Zero quantity
+                    "line_amount": 0.00,
+                },
+            ],
+            "provider": {"npi": "9999999999"},
+            "diagnosis_codes": ["J06.9"],
+        }
+
+        # Should not raise an exception
+        outcome = evaluate_baseline(
+            claim=claim,
+            datasets=real_datasets,
+            config={"base_score": 0.5},
+            threshold_config=ThresholdConfig(),
+        )
+
+        # Zero quantity should not trigger MUE violation
+        mue_hits = [h for h in outcome.rule_result.hits if h.rule_id == "NCCI_MUE"]
+        assert len(mue_hits) == 0, "Zero quantity should not trigger MUE"
+
+    def test_empty_claim_items(self, real_datasets: dict):
+        """Test handling of claim with empty items list."""
+        claim = {
+            "claim_id": "EMPTY-ITEMS-001",
+            "items": [],  # Empty items
+            "provider": {"npi": "9999999999"},
+            "diagnosis_codes": ["J06.9"],
+        }
+
+        # Should not raise an exception
+        outcome = evaluate_baseline(
+            claim=claim,
+            datasets=real_datasets,
+            config={"base_score": 0.5},
+            threshold_config=ThresholdConfig(),
+        )
+
+        assert outcome.rule_result is not None
+        assert outcome.decision is not None
+        # Empty claim should have low score
+        assert outcome.decision.score <= 0.6, "Empty claim should have low risk score"
+
+    def test_missing_provider_npi(self, real_datasets: dict):
+        """Test handling of claim with missing provider NPI."""
+        claim = {
+            "claim_id": "NO-NPI-001",
+            "items": [
+                {"procedure_code": "99214", "quantity": 1, "line_amount": 100.00},
+            ],
+            "provider": {},  # Missing NPI
+            "diagnosis_codes": ["J06.9"],
+        }
+
+        # Should not raise an exception
+        outcome = evaluate_baseline(
+            claim=claim,
+            datasets=real_datasets,
+            config={"base_score": 0.5},
+            threshold_config=ThresholdConfig(),
+        )
+
+        # Should not trigger OIG exclusion for missing NPI
+        oig_hits = [h for h in outcome.rule_result.hits if h.rule_id == "OIG_EXCLUSION"]
+        assert len(oig_hits) == 0, "Missing NPI should not trigger OIG exclusion"
+
+    def test_single_item_claim(self, real_datasets: dict):
+        """Test that single-item claims don't trigger PTP edits."""
+        claim = {
+            "claim_id": "SINGLE-ITEM-001",
+            "items": [
+                {"procedure_code": "99214", "quantity": 1, "line_amount": 100.00},
+            ],
+            "provider": {"npi": "9999999999"},
+            "diagnosis_codes": ["J06.9"],
+        }
+
+        outcome = evaluate_baseline(
+            claim=claim,
+            datasets=real_datasets,
+            config={"base_score": 0.5},
+            threshold_config=ThresholdConfig(),
+        )
+
+        # Single item cannot have PTP edit (needs 2 codes)
+        ptp_hits = [h for h in outcome.rule_result.hits if h.rule_id == "NCCI_PTP"]
+        assert len(ptp_hits) == 0, "Single-item claim cannot have PTP edit"
