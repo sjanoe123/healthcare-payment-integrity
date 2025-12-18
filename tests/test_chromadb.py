@@ -223,6 +223,131 @@ class TestChromaDBIntegration:
         assert len(results) > 0
 
 
+class TestRAGSearchRelevance:
+    """Test RAG search returns relevant results for various query types."""
+
+    @pytest.fixture
+    def full_chroma_store(self):
+        """Create a ChromaDB store with all 75 policies for testing."""
+        from rag import ChromaStore
+        from seed_chromadb import (
+            LAST_REVIEWED_DATE,
+            POLICY_EFFECTIVE_DATE,
+            SAMPLE_POLICIES,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = ChromaStore(persist_dir=temp_dir, collection_name="full_policies")
+
+            documents = [p["content"] for p in SAMPLE_POLICIES]
+            metadatas = []
+            for p in SAMPLE_POLICIES:
+                metadata = p["metadata"].copy()
+                metadata["effective_date"] = POLICY_EFFECTIVE_DATE
+                metadata["last_reviewed"] = LAST_REVIEWED_DATE
+                metadatas.append(metadata)
+            ids = [f"policy_{i}" for i in range(len(SAMPLE_POLICIES))]
+
+            store.add_documents(documents=documents, metadatas=metadatas, ids=ids)
+            yield store
+
+    def test_search_ncci_ptp_content(self, full_chroma_store):
+        """Verify search returns relevant NCCI PTP content."""
+        results = full_chroma_store.search(
+            "procedure to procedure edits bundling column codes", n_results=3
+        )
+        assert len(results) > 0
+        # First result should be PTP-related
+        content = results[0]["content"].lower()
+        assert "ptp" in content or "procedure" in content
+
+    def test_search_mue_content(self, full_chroma_store):
+        """Verify search returns relevant MUE content."""
+        results = full_chroma_store.search(
+            "medically unlikely edits units limit quantity", n_results=3
+        )
+        assert len(results) > 0
+        content = results[0]["content"].lower()
+        assert "mue" in content or "unit" in content or "limit" in content
+
+    def test_search_modifier_25_content(self, full_chroma_store):
+        """Verify search returns modifier 25 guidelines."""
+        results = full_chroma_store.search(
+            "modifier 25 significant separately identifiable E/M", n_results=3
+        )
+        assert len(results) > 0
+        content = results[0]["content"].lower()
+        assert "modifier" in content or "e/m" in content or "separately" in content
+
+    def test_search_oig_exclusion_content(self, full_chroma_store):
+        """Verify search returns OIG exclusion content."""
+        results = full_chroma_store.search(
+            "OIG excluded provider LEIE sanctions debarred", n_results=3
+        )
+        assert len(results) > 0
+        content = results[0]["content"].lower()
+        assert "oig" in content or "exclusion" in content or "leie" in content
+
+    def test_search_hipaa_content(self, full_chroma_store):
+        """Verify search returns HIPAA compliance content."""
+        results = full_chroma_store.search(
+            "HIPAA privacy protected health information PHI", n_results=3
+        )
+        assert len(results) > 0
+        content = results[0]["content"].lower()
+        assert "hipaa" in content or "phi" in content or "privacy" in content
+
+    def test_search_appeals_content(self, full_chroma_store):
+        """Verify search returns appeals process content."""
+        results = full_chroma_store.search(
+            "Medicare appeals redetermination ALJ hearing", n_results=3
+        )
+        assert len(results) > 0
+        content = results[0]["content"].lower()
+        assert "appeal" in content or "redetermination" in content or "alj" in content
+
+    def test_search_surgical_global_content(self, full_chroma_store):
+        """Verify search returns global surgery content."""
+        results = full_chroma_store.search(
+            "global surgery period 090 010 postoperative", n_results=3
+        )
+        assert len(results) > 0
+        content = results[0]["content"].lower()
+        assert "global" in content or "surgery" in content or "postoperative" in content
+
+    def test_search_stark_law_content(self, full_chroma_store):
+        """Verify search returns Stark Law content."""
+        results = full_chroma_store.search(
+            "Stark physician self-referral designated health services", n_results=3
+        )
+        assert len(results) > 0
+        content = results[0]["content"].lower()
+        assert "stark" in content or "self-referral" in content or "dhs" in content
+
+    def test_search_abn_content(self, full_chroma_store):
+        """Verify search returns ABN content."""
+        results = full_chroma_store.search(
+            "advance beneficiary notice Medicare coverage denial patient", n_results=3
+        )
+        assert len(results) > 0
+        content = results[0]["content"].lower()
+        assert "abn" in content or "beneficiary" in content or "notice" in content
+
+    def test_search_radiology_content(self, full_chroma_store):
+        """Verify search returns radiology imaging content."""
+        results = full_chroma_store.search(
+            "CT MRI diagnostic imaging technical professional component", n_results=3
+        )
+        assert len(results) > 0
+        content = results[0]["content"].lower()
+        assert (
+            "radiology" in content
+            or "imaging" in content
+            or "ct" in content
+            or "mri" in content
+        )
+
+
 class TestSeedingPerformance:
     """Test seeding performance metrics."""
 
