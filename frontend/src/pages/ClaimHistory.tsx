@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { History, FileSearch, Clock } from 'lucide-react';
+import { History, FileSearch } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export function ClaimHistory() {

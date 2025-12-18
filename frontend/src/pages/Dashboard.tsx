@@ -63,8 +63,8 @@ function StatCard({ title, value, subtitle, icon: Icon, color, delay = 0 }: Stat
 }
 
 export function Dashboard() {
-  const { data: stats, isLoading: statsLoading } = useStats();
-  const { data: health, isLoading: healthLoading } = useHealth();
+  const { data: stats } = useStats();
+  const { data: health } = useHealth();
 
   return (
     <div className="space-y-8">

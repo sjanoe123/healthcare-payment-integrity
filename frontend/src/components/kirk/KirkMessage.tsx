@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { KirkAvatar } from './KirkAvatar';
-import { AlertTriangle, CheckCircle, Info, XCircle, Lightbulb } from 'lucide-react';
+import { AlertTriangle, Info, XCircle, Lightbulb } from 'lucide-react';
 import type { RiskLevel, Severity } from '@/api/types';
 
 type MessageType = 'greeting' | 'finding' | 'recommendation' | 'summary';

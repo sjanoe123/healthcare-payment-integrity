@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { KirkAvatar } from './KirkAvatar';
 import { Search, FileText, Scale, CheckCircle } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface KirkThinkingProps {
   isLoading: boolean;
@@ -16,47 +16,39 @@ const thinkingSteps = [
   { icon: CheckCircle, text: 'Preparing recommendations...', duration: 1200 },
 ];
 
-export function KirkThinking({ isLoading, className }: KirkThinkingProps) {
+function KirkThinkingContent({ className }: { className?: string }) {
   const [currentStep, setCurrentStep] = useState(0);
+  const stepIndexRef = useRef(0);
 
+  // Cycle through steps
   useEffect(() => {
-    if (!isLoading) {
-      setCurrentStep(0);
-      return;
-    }
+    // Reset to initial state when effect starts
+    stepIndexRef.current = 0;
 
-    const totalSteps = thinkingSteps.length;
-    let stepIndex = 0;
-
-    const advanceStep = () => {
-      stepIndex = (stepIndex + 1) % totalSteps;
-      setCurrentStep(stepIndex);
-    };
-
-    // Cycle through steps
     const intervals: NodeJS.Timeout[] = [];
     let elapsed = 0;
+    const totalDuration = thinkingSteps.reduce((sum, step) => sum + step.duration, 0);
 
     thinkingSteps.forEach((step, i) => {
       const timeout = setTimeout(() => {
+        stepIndexRef.current = i;
         setCurrentStep(i);
       }, elapsed);
       intervals.push(timeout);
       elapsed += step.duration;
     });
 
-    // Loop back
+    // Loop back through steps
     const loopInterval = setInterval(() => {
-      advanceStep();
-    }, elapsed);
+      stepIndexRef.current = (stepIndexRef.current + 1) % thinkingSteps.length;
+      setCurrentStep(stepIndexRef.current);
+    }, totalDuration);
 
     return () => {
       intervals.forEach(clearTimeout);
       clearInterval(loopInterval);
     };
-  }, [isLoading]);
-
-  if (!isLoading) return null;
+  }, []);
 
   const CurrentIcon = thinkingSteps[currentStep].icon;
 
@@ -120,4 +112,11 @@ export function KirkThinking({ isLoading, className }: KirkThinkingProps) {
       </div>
     </motion.div>
   );
+}
+
+export function KirkThinking({ isLoading, className }: KirkThinkingProps) {
+  // Render content component only when loading, which naturally resets state
+  if (!isLoading) return null;
+
+  return <KirkThinkingContent className={className} />;
 }

@@ -3,21 +3,8 @@ import { motion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { cn } from '@/lib/utils';
-import { useState, createContext, useContext } from 'react';
-
-interface LayoutContextType {
-  sidebarCollapsed: boolean;
-  setSidebarCollapsed: (collapsed: boolean) => void;
-}
-
-const LayoutContext = createContext<LayoutContextType>({
-  sidebarCollapsed: false,
-  setSidebarCollapsed: () => {},
-});
-
-export function useLayout() {
-  return useContext(LayoutContext);
-}
+import { useState } from 'react';
+import { LayoutContext } from './LayoutContext';
 
 export function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
