@@ -20,8 +20,10 @@ class KirkConfig:
 
     # Model Settings
     model: str = "claude-sonnet-4-5-20250929"
+    # 1000 tokens ~= 750 words, sufficient for structured analysis with citations
     max_tokens: int = 1000
-    temperature: float = 0.3  # Lower for more consistent, formal responses
+    # 0.3 temperature for consistent, formal regulatory analysis (lower = more deterministic)
+    temperature: float = 0.3
 
     # Response Settings
     verbosity: str = "detailed"  # "concise", "detailed", "comprehensive"

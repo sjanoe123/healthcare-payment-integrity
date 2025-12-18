@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 from typing import Any
 
 import anthropic
@@ -38,7 +39,17 @@ def get_fraud_explanation(
     decision_mode: str,
     rag_context: str | None = None,
 ) -> dict[str, Any]:
-    """Get Claude's analysis and explanation of the fraud risk."""
+    """Get Claude's analysis and explanation of the fraud risk.
+
+    .. deprecated:: 1.0.0
+        Use :func:`get_kirk_analysis` instead. This function will be removed
+        in version 2.0.0 (Q2 2026).
+    """
+    warnings.warn(
+        "get_fraud_explanation is deprecated, use get_kirk_analysis instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
