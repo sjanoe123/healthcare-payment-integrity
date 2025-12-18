@@ -132,16 +132,19 @@ class TestResultsEndpoint:
 class TestAnalyzeEndpoint:
     """Test the analysis endpoint."""
 
-    @patch("app.get_fraud_explanation")
+    @patch("app.get_kirk_analysis")
     def test_analyze_returns_results(
-        self, mock_claude, client: TestClient, sample_claim: dict
+        self, mock_kirk, client: TestClient, sample_claim: dict
     ):
         """Test analyze endpoint returns fraud analysis."""
-        # Mock Claude response
-        mock_claude.return_value = {
+        # Mock Kirk response
+        mock_kirk.return_value = {
             "explanation": "Test explanation",
-            "model": "claude-3-haiku",
+            "model": "claude-sonnet-4-5-20241022",
             "tokens_used": 100,
+            "risk_factors": [],
+            "recommendations": [],
+            "agent": "Kirk",
         }
 
         # First upload the claim
@@ -157,15 +160,18 @@ class TestAnalyzeEndpoint:
         assert "rule_hits" in data
         assert "decision_mode" in data
 
-    @patch("app.get_fraud_explanation")
+    @patch("app.get_kirk_analysis")
     def test_analyze_detects_fraud_indicators(
-        self, mock_claude, client: TestClient, sample_claim: dict
+        self, mock_kirk, client: TestClient, sample_claim: dict
     ):
         """Test analyze detects fraud indicators in sample claim."""
-        mock_claude.return_value = {
+        mock_kirk.return_value = {
             "explanation": "Test",
-            "model": "test",
+            "model": "claude-sonnet-4-5-20241022",
             "tokens_used": 0,
+            "risk_factors": [],
+            "recommendations": [],
+            "agent": "Kirk",
         }
 
         upload_response = client.post("/api/upload", json=sample_claim)

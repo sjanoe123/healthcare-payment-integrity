@@ -1,13 +1,20 @@
-"""Claude API client for fraud analysis explanations."""
+"""Claude API client for fraud analysis explanations.
+
+This module provides two analysis functions:
+- get_kirk_analysis: Uses Kirk persona with Claude Sonnet 4.5 (recommended)
+- get_fraud_explanation: Legacy function using Claude 3 Haiku (deprecated)
+"""
 
 from __future__ import annotations
 
 import json
 import os
+import warnings
 from typing import Any
 
 import anthropic
 
+from kirk_config import KIRK_CONFIG, KIRK_SYSTEM_PROMPT, KirkConfig
 from rules import RuleHit
 
 
@@ -32,7 +39,17 @@ def get_fraud_explanation(
     decision_mode: str,
     rag_context: str | None = None,
 ) -> dict[str, Any]:
-    """Get Claude's analysis and explanation of the fraud risk."""
+    """Get Claude's analysis and explanation of the fraud risk.
+
+    .. deprecated:: 1.0.0
+        Use :func:`get_kirk_analysis` instead. This function will be removed
+        in version 2.0.0 (Q2 2026).
+    """
+    warnings.warn(
+        "get_fraud_explanation is deprecated, use get_kirk_analysis instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
@@ -139,3 +156,144 @@ def extract_recommendations(text: str) -> list[str]:
         ]
 
     return recommendations[:5]  # Limit to 5 recommendations
+
+
+def build_kirk_prompt(
+    claim: dict[str, Any],
+    rule_hits: list[RuleHit],
+    fraud_score: float,
+    decision_mode: str,
+    rag_context: str | None = None,
+) -> str:
+    """Build the user prompt for Kirk's analysis.
+
+    This function constructs the detailed prompt that Kirk will analyze,
+    including claim data, rule violations, and relevant policy context.
+
+    Args:
+        claim: The claim data dictionary
+        rule_hits: List of rule violations detected
+        fraud_score: Calculated fraud score (0.0-1.0)
+        decision_mode: The decision mode based on score thresholds
+        rag_context: Optional policy context from RAG retrieval
+
+    Returns:
+        Formatted prompt string for Kirk's analysis
+    """
+    claim_summary = json.dumps(claim, indent=2, default=str)
+    rule_summary = format_rule_hits(rule_hits)
+
+    context_section = ""
+    if rag_context:
+        context_section = f"""
+## Relevant Policy Context
+{rag_context}
+"""
+
+    return f"""Analyze this healthcare claim for potential fraud, waste, and abuse (FWA).
+
+## Claim Data
+```json
+{claim_summary}
+```
+
+## Rule Violations Detected
+{rule_summary}
+
+## Current Assessment
+- Fraud Score: {fraud_score:.2f} (0 = lowest risk, 1 = highest risk)
+- Decision Mode: {decision_mode}
+{context_section}
+Provide your expert analysis following the response format specified in your instructions."""
+
+
+def get_kirk_analysis(
+    claim: dict[str, Any],
+    rule_hits: list[RuleHit],
+    fraud_score: float,
+    decision_mode: str,
+    rag_context: str | None = None,
+    config: KirkConfig | None = None,
+) -> dict[str, Any]:
+    """Get Kirk's expert analysis of the claim.
+
+    Kirk is an expert Healthcare Payment Integrity Auditor persona
+    powered by Claude Sonnet 4.5. He provides formal, thorough analysis
+    with regulatory citations and prioritized recommendations.
+
+    Args:
+        claim: The claim data dictionary
+        rule_hits: List of rule violations detected
+        fraud_score: Calculated fraud score (0.0-1.0)
+        decision_mode: The decision mode based on score thresholds
+        rag_context: Optional policy context from RAG retrieval
+        config: Optional Kirk configuration (uses KIRK_CONFIG if not provided)
+
+    Returns:
+        Dictionary containing:
+        - explanation: Kirk's detailed analysis
+        - risk_factors: List of identified risk factors
+        - recommendations: Prioritized action items
+        - model: The Claude model used
+        - tokens_used: Total tokens consumed
+        - agent: "Kirk" identifier
+    """
+    if config is None:
+        config = KIRK_CONFIG
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return {
+            "explanation": (
+                "Kirk is not available - Anthropic API key not configured. "
+                "Rule-based analysis only."
+            ),
+            "risk_factors": [h.description for h in rule_hits],
+            "recommendations": ["Review flagged items manually"],
+            "model": "none",
+            "tokens_used": 0,
+            "agent": config.name,
+        }
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    # Build the prompt for Kirk
+    user_prompt = build_kirk_prompt(
+        claim=claim,
+        rule_hits=rule_hits,
+        fraud_score=fraud_score,
+        decision_mode=decision_mode,
+        rag_context=rag_context,
+    )
+
+    try:
+        response = client.messages.create(
+            model=config.model,
+            max_tokens=config.max_tokens,
+            temperature=config.temperature,
+            system=KIRK_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+
+        content = response.content[0].text if response.content else ""
+
+        return {
+            "explanation": content,
+            "risk_factors": [h.description for h in rule_hits],
+            "recommendations": extract_recommendations(content)[
+                : config.max_recommendations
+            ],
+            "model": config.model,
+            "tokens_used": response.usage.input_tokens + response.usage.output_tokens,
+            "agent": config.name,
+        }
+
+    except anthropic.APIError as e:
+        return {
+            "explanation": f"Kirk encountered an API error: {e!s}. Using rule-based analysis only.",
+            "risk_factors": [h.description for h in rule_hits],
+            "recommendations": ["Review flagged items manually"],
+            "model": "error",
+            "tokens_used": 0,
+            "agent": config.name,
+        }

@@ -18,7 +18,8 @@ from pydantic import BaseModel
 
 from rules import evaluate_baseline, ThresholdConfig
 from rag import get_store
-from claude_client import get_fraud_explanation
+from claude_client import get_kirk_analysis
+from kirk_config import KIRK_CONFIG
 
 
 # Database setup
@@ -284,13 +285,14 @@ async def analyze_claim(job_id: str, claim: ClaimSubmission):
                 for r in rag_results
             )
 
-    # Get Claude explanation
-    claude_result = get_fraud_explanation(
+    # Get Kirk's expert analysis
+    claude_result = get_kirk_analysis(
         claim=claim_dict,
         rule_hits=outcome.rule_result.hits,
         fraud_score=outcome.decision.score,
         decision_mode=outcome.decision.decision_mode,
         rag_context=rag_context,
+        config=KIRK_CONFIG,
     )
 
     # Store results
