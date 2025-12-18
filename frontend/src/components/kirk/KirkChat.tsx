@@ -2,23 +2,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { KirkAvatar } from './KirkAvatar';
 import { KirkMessage } from './KirkMessage';
-import { KirkTyping } from './KirkTyping';
 import { KirkThinking } from './KirkThinking';
 import { MessageSquare, Sparkles } from 'lucide-react';
 import type { AnalysisResult, RuleHit } from '@/api/types';
 import { getRiskLevel } from '@/api/types';
 
+/** Maximum number of rule hits to display in the chat */
+const MAX_DISPLAYED_HITS = 5;
+
 interface KirkChatProps {
   result?: AnalysisResult | null;
   isLoading?: boolean;
   className?: string;
-}
-
-function getSeverityFromScore(score: number): 'low' | 'medium' | 'high' | 'critical' {
-  if (score < 0.3) return 'low';
-  if (score < 0.6) return 'medium';
-  if (score < 0.8) return 'high';
-  return 'critical';
 }
 
 function getRuleTypeLabel(rule: RuleHit): string {
@@ -43,6 +38,8 @@ export function KirkChat({ result, isLoading = false, className }: KirkChatProps
         'bg-navy-900/50 border-l border-navy-700/50',
         className
       )}
+      role="region"
+      aria-label="Kirk AI Analysis"
     >
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-navy-700/50">
@@ -50,15 +47,15 @@ export function KirkChat({ result, isLoading = false, className }: KirkChatProps
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-white">Kirk</h3>
-            <Sparkles className="w-3.5 h-3.5 text-kirk" />
+            <Sparkles className="w-3.5 h-3.5 text-kirk" aria-hidden="true" />
           </div>
           <p className="text-xs text-navy-400">AI Compliance Analyst</p>
         </div>
-        <MessageSquare className="w-5 h-5 text-navy-500" />
+        <MessageSquare className="w-5 h-5 text-navy-500" aria-hidden="true" />
       </div>
 
       {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4" role="log" aria-live="polite">
         <AnimatePresence mode="wait">
           {/* Loading State */}
           {isLoading && (
@@ -90,8 +87,8 @@ export function KirkChat({ result, isLoading = false, className }: KirkChatProps
                 type="greeting"
                 mood={riskLevel}
                 content={
-                  claudeAnalysis?.summary ||
-                  `I've completed my analysis of claim ${result.claim_id}. Here's what I found.`
+                  claudeAnalysis?.summary ??
+                  `I've completed my analysis of claim ${result?.claim_id ?? 'unknown'}. Here's what I found.`
                 }
                 delay={0}
               />
@@ -120,7 +117,7 @@ export function KirkChat({ result, isLoading = false, className }: KirkChatProps
                       Findings ({result.rule_hits.length})
                     </span>
                   </div>
-                  {result.rule_hits.slice(0, 5).map((hit, i) => (
+                  {result.rule_hits.slice(0, MAX_DISPLAYED_HITS).map((hit: RuleHit, i: number) => (
                     <KirkMessage
                       key={`${hit.rule_id}-${i}`}
                       type="finding"
@@ -133,13 +130,13 @@ export function KirkChat({ result, isLoading = false, className }: KirkChatProps
                       delay={i + 2}
                     />
                   ))}
-                  {result.rule_hits.length > 5 && (
+                  {result.rule_hits.length > MAX_DISPLAYED_HITS && (
                     <motion.p
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       className="text-xs text-navy-500 text-center py-2"
                     >
-                      + {result.rule_hits.length - 5} more findings
+                      + {result.rule_hits.length - MAX_DISPLAYED_HITS} more findings
                     </motion.p>
                   )}
                 </>
@@ -154,7 +151,7 @@ export function KirkChat({ result, isLoading = false, className }: KirkChatProps
                         Recommendations
                       </span>
                     </div>
-                    {claudeAnalysis.recommendations.map((rec, i) => (
+                    {claudeAnalysis.recommendations.map((rec: string, i: number) => (
                       <KirkMessage
                         key={i}
                         type="recommendation"
@@ -191,13 +188,21 @@ export function KirkChat({ result, isLoading = false, className }: KirkChatProps
       {/* Future: Input for follow-up questions */}
       <div className="p-3 border-t border-navy-700/50">
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-navy-800/50 border border-navy-700/50">
+          <label htmlFor="kirk-followup" className="sr-only">
+            Ask Kirk a follow-up question
+          </label>
           <input
+            id="kirk-followup"
             type="text"
             placeholder="Ask Kirk a follow-up question..."
             disabled
-            className="flex-1 bg-transparent text-sm text-navy-300 placeholder:text-navy-600 focus:outline-none"
+            aria-disabled="true"
+            aria-describedby="kirk-followup-note"
+            className="flex-1 bg-transparent text-sm text-navy-300 placeholder:text-navy-600 focus:outline-none disabled:cursor-not-allowed"
           />
-          <span className="text-xs text-navy-600">Coming soon</span>
+          <span id="kirk-followup-note" className="text-xs text-navy-600">
+            Coming soon
+          </span>
         </div>
       </div>
     </div>

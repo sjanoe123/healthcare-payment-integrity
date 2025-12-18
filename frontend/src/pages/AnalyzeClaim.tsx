@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAnalyzeClaim } from '@/api/hooks/useAnalyzeClaim';
+import { getErrorMessage } from '@/api/client';
+import { validateClaimJson } from '@/api/validation';
 import { KirkChat } from '@/components/kirk';
 import { FraudScoreGauge, DecisionModeBadge, RuleHitsPanel } from '@/components/analysis';
 import { sampleClaims } from '@/utils/sampleClaims';
-import type { ClaimSubmission, AnalysisResult } from '@/api/types';
+import type { AnalysisResult, ClaimSubmission } from '@/api/types';
 import {
-  Upload,
   Play,
   FileJson,
   Beaker,
@@ -25,19 +26,27 @@ export function AnalyzeClaim() {
 
   const handleSubmit = () => {
     setParseError(null);
-    try {
-      const claim: ClaimSubmission = JSON.parse(claimJson);
-      analyze(claim, {
-        onSuccess: (data) => {
-          setResult(data);
-        },
-        onError: (error) => {
-          setParseError(error.message);
-        },
-      });
-    } catch {
-      setParseError('Invalid JSON format. Please check your claim data.');
+
+    // Validate JSON with Zod schema
+    const validationResult = validateClaimJson(claimJson);
+
+    if (!validationResult.success) {
+      setParseError(validationResult.error);
+      return;
     }
+
+    const claim: ClaimSubmission = validationResult.data;
+
+    analyze(claim, {
+      onSuccess: (data: AnalysisResult) => {
+        setResult(data);
+      },
+      onError: (error: unknown) => {
+        // Use safe error message handler
+        const userMessage = getErrorMessage(error);
+        setParseError(userMessage);
+      },
+    });
   };
 
   const loadSampleClaim = (claim: ClaimSubmission) => {
@@ -72,7 +81,7 @@ export function AnalyzeClaim() {
             className="flex flex-wrap gap-2"
           >
             <span className="flex items-center gap-2 text-sm text-navy-400 mr-2">
-              <Beaker className="w-4 h-4" />
+              <Beaker className="w-4 h-4" aria-hidden="true" />
               Demo claims:
             </span>
             {sampleClaims.map((sample) => (
@@ -86,6 +95,7 @@ export function AnalyzeClaim() {
                   'transition-colors'
                 )}
                 title={sample.description}
+                aria-label={`Load ${sample.name} demo claim: ${sample.description}`}
               >
                 {sample.name}
               </button>
@@ -100,24 +110,34 @@ export function AnalyzeClaim() {
             className="flex-shrink-0"
           >
             <div className="flex items-center justify-between mb-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-navy-300">
-                <FileJson className="w-4 h-4" />
+              <label
+                htmlFor="claim-json-input"
+                className="flex items-center gap-2 text-sm font-medium text-navy-300"
+              >
+                <FileJson className="w-4 h-4" aria-hidden="true" />
                 Claim JSON
               </label>
               {parseError && (
-                <span className="flex items-center gap-1 text-sm text-risk-critical">
-                  <AlertCircle className="w-4 h-4" />
+                <span
+                  className="flex items-center gap-1 text-sm text-risk-critical"
+                  role="alert"
+                  aria-live="polite"
+                >
+                  <AlertCircle className="w-4 h-4" aria-hidden="true" />
                   {parseError}
                 </span>
               )}
             </div>
             <textarea
+              id="claim-json-input"
               value={claimJson}
               onChange={(e) => {
                 setClaimJson(e.target.value);
                 setParseError(null);
               }}
               placeholder='{\n  "claim_id": "TEST-001",\n  "patient_id": "PT-1234",\n  "provider_npi": "1234567890",\n  ...\n}'
+              aria-invalid={parseError ? 'true' : 'false'}
+              aria-describedby={parseError ? 'claim-error' : undefined}
               className={cn(
                 'w-full h-48 p-4 rounded-xl',
                 'bg-navy-900/50 border',
@@ -131,6 +151,7 @@ export function AnalyzeClaim() {
             <button
               onClick={handleSubmit}
               disabled={!claimJson.trim() || isPending}
+              aria-busy={isPending}
               className={cn(
                 'mt-4 w-full flex items-center justify-center gap-2',
                 'px-6 py-3 rounded-xl font-medium',
@@ -143,12 +164,12 @@ export function AnalyzeClaim() {
             >
               {isPending ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
                   Analyzing...
                 </>
               ) : (
                 <>
-                  <Play className="w-5 h-5" />
+                  <Play className="w-5 h-5" aria-hidden="true" />
                   Analyze Claim
                 </>
               )}
@@ -164,6 +185,8 @@ export function AnalyzeClaim() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 className="flex-1 space-y-6"
+                role="region"
+                aria-label="Analysis Results"
               >
                 {/* Score & Decision Banner */}
                 <div className="p-6 rounded-2xl bg-navy-800/30 border border-navy-700/50">
@@ -196,7 +219,7 @@ export function AnalyzeClaim() {
                 {/* No Issues Found */}
                 {result.rule_hits.length === 0 && (
                   <div className="p-8 rounded-2xl bg-risk-safe/5 border border-risk-safe/20 text-center">
-                    <CheckCircle className="w-12 h-12 text-risk-safe mx-auto mb-3" />
+                    <CheckCircle className="w-12 h-12 text-risk-safe mx-auto mb-3" aria-hidden="true" />
                     <h3 className="text-lg font-semibold text-white mb-1">
                       Clean Claim
                     </h3>
@@ -216,6 +239,8 @@ export function AnalyzeClaim() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.3 }}
           className="hidden lg:block h-full rounded-2xl overflow-hidden"
+          role="complementary"
+          aria-label="Kirk AI Analysis Chat"
         >
           <KirkChat result={result} isLoading={isPending} className="h-full" />
         </motion.div>
@@ -223,3 +248,5 @@ export function AnalyzeClaim() {
     </div>
   );
 }
+
+export default AnalyzeClaim;

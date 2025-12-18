@@ -58,3 +58,5 @@ export function ClaimHistory() {
     </div>
   );
 }
+
+export default ClaimHistory;

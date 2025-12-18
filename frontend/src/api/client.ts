@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import type {
   ClaimSubmission,
   UploadResponse,
@@ -11,12 +11,103 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
+// Validate API URL in production
+if (import.meta.env.PROD && !import.meta.env.VITE_API_URL) {
+  console.warn('VITE_API_URL not set in production. Using default localhost.');
+}
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000, // 30 second timeout
 });
+
+// Response interceptor for global error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    // Log error for monitoring
+    console.error('API Error:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      message: error.message,
+    });
+
+    // Handle specific error types
+    if (error.response?.status === 401) {
+      // Handle unauthorized - could redirect to login
+      console.warn('Unauthorized request');
+    }
+
+    if (error.response?.status === 503) {
+      // Service unavailable
+      console.warn('Service temporarily unavailable');
+    }
+
+    if (!error.response) {
+      // Network error
+      console.error('Network error - check backend connectivity');
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+// Request interceptor for adding auth headers if needed
+api.interceptors.request.use(
+  (config) => {
+    // Add auth token if available (for future auth implementation)
+    // const token = getAuthToken();
+    // if (token) {
+    //   config.headers.Authorization = `Bearer ${token}`;
+    // }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+/**
+ * Get user-friendly error message from API error
+ */
+export function getErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const axiosError = error as AxiosError<{ message?: string; detail?: string }>;
+
+    // Check for backend error message
+    const backendMessage = axiosError.response?.data?.message || axiosError.response?.data?.detail;
+
+    switch (axiosError.response?.status) {
+      case 400:
+        return backendMessage || 'Invalid request. Please check your input.';
+      case 401:
+        return 'Authentication required. Please log in.';
+      case 403:
+        return 'You do not have permission to perform this action.';
+      case 404:
+        return 'The requested resource was not found.';
+      case 422:
+        return backendMessage || 'Invalid data format. Please check your input.';
+      case 500:
+        return 'An error occurred on the server. Please try again later.';
+      case 503:
+        return 'Service temporarily unavailable. Please try again later.';
+      default:
+        if (!axiosError.response) {
+          return 'Unable to connect to the server. Please check your connection.';
+        }
+        return 'An unexpected error occurred. Please try again.';
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'An unexpected error occurred.';
+}
 
 // Health check
 export async function getHealth(): Promise<HealthResponse> {

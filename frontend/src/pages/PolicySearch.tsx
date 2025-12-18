@@ -210,3 +210,5 @@ export function PolicySearch() {
     </div>
   );
 }
+
+export default PolicySearch;

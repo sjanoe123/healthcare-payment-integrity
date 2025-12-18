@@ -32,14 +32,14 @@ jobs:
         run: |
           cd backend && ruff check .
           cd backend && ruff format --check .
-        continue-on-error: true
+        # Linting is enforced - failures will block merge
 
       - name: Run tests
         run: |
-          pytest tests/ -v --ignore=tests/test_real_data.py
+          pytest tests/ -v --ignore=tests/test_real_data.py --ignore=tests/test_kirk.py
         env:
           TESTING: "true"
-        continue-on-error: true
+        # Tests are enforced - failures will block merge
 
   # Frontend Tests & Build
   frontend:
@@ -64,13 +64,15 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
+        # TypeScript errors will block merge
 
       - name: Lint
         run: npm run lint
-        continue-on-error: true
+        # ESLint errors will block merge
 
       - name: Build
         run: npm run build
+        # Build failures will block merge
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

@@ -60,16 +60,8 @@ export function FraudScoreGauge({
   const cy = config.height - 10;
   const radius = config.width / 2 - config.strokeWidth;
 
-  // Arc path (semi-circle)
-  const startAngle = Math.PI;
-  const endAngle = 0;
-  const arcLength = Math.PI * radius;
-
   // Needle position (0-180 degrees mapped to score 0-1)
-  const needleAngle = Math.PI - score * Math.PI;
   const needleLength = radius - 10;
-  const needleX = cx + needleLength * Math.cos(needleAngle);
-  const needleY = cy - needleLength * Math.sin(needleAngle);
 
   const createArc = (startDeg: number, endDeg: number) => {
     const start = {
@@ -91,7 +83,10 @@ export function FraudScoreGauge({
         height={config.height}
         viewBox={`0 0 ${config.width} ${config.height}`}
         className="overflow-visible"
+        role="img"
+        aria-label={`Fraud risk score: ${(score * 100).toFixed(0)}%, ${riskLabels[riskLevel]}`}
       >
+        <title>Fraud Risk Score: {(score * 100).toFixed(0)}%</title>
         <defs>
           {/* Gradients for each risk level */}
           <linearGradient id="gradient-safe" x1="0%" y1="0%" x2="100%" y2="0%">
