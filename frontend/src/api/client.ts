@@ -9,12 +9,15 @@ import type {
   SearchResponse,
 } from './types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-
-// Validate API URL in production
+// Validate API URL in production - throw error to prevent misconfiguration
 if (import.meta.env.PROD && !import.meta.env.VITE_API_URL) {
-  console.warn('VITE_API_URL not set in production. Using default localhost.');
+  throw new Error(
+    'VITE_API_URL environment variable must be set in production. ' +
+    'Please configure your deployment with the correct API URL.'
+  );
 }
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -69,15 +72,32 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+/** Backend error response structure */
+interface ApiErrorResponse {
+  message?: string;
+  detail?: string;
+  errors?: Array<{ loc: string[]; msg: string; type: string }>;
+}
+
 /**
  * Get user-friendly error message from API error
+ * @param error - The error to extract a message from
+ * @returns A user-friendly error message string
  */
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError<{ message?: string; detail?: string }>;
+    const axiosError = error as AxiosError<ApiErrorResponse>;
 
     // Check for backend error message
-    const backendMessage = axiosError.response?.data?.message || axiosError.response?.data?.detail;
+    const data = axiosError.response?.data;
+
+    // Handle FastAPI validation errors
+    if (data?.errors && Array.isArray(data.errors)) {
+      const errorMessages = data.errors.map(e => `${e.loc.join('.')}: ${e.msg}`);
+      return errorMessages.join('; ');
+    }
+
+    const backendMessage = data?.message || data?.detail;
 
     switch (axiosError.response?.status) {
       case 400:

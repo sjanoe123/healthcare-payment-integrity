@@ -2,50 +2,50 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { KirkAvatar } from './KirkAvatar';
 import { Search, FileText, Scale, CheckCircle } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 
 interface KirkThinkingProps {
   isLoading: boolean;
   className?: string;
 }
 
+/** Steps displayed during analysis with their icons and durations */
 const thinkingSteps = [
   { icon: FileText, text: 'Parsing claim data...', duration: 1500 },
   { icon: Search, text: 'Checking NCCI edits & policies...', duration: 2000 },
   { icon: Scale, text: 'Analyzing compliance rules...', duration: 1800 },
   { icon: CheckCircle, text: 'Preparing recommendations...', duration: 1200 },
-];
+] as const;
 
+const TOTAL_DURATION = thinkingSteps.reduce((sum, step) => sum + step.duration, 0);
+
+/**
+ * Inner content component that manages the step cycling animation.
+ * Separated to ensure clean state reset when loading restarts.
+ */
 function KirkThinkingContent({ className }: { className?: string }) {
   const [currentStep, setCurrentStep] = useState(0);
-  const stepIndexRef = useRef(0);
 
-  // Cycle through steps
   useEffect(() => {
-    // Reset to initial state when effect starts
-    stepIndexRef.current = 0;
-
-    const intervals: NodeJS.Timeout[] = [];
+    const timeouts: NodeJS.Timeout[] = [];
     let elapsed = 0;
-    const totalDuration = thinkingSteps.reduce((sum, step) => sum + step.duration, 0);
 
-    thinkingSteps.forEach((step, i) => {
-      const timeout = setTimeout(() => {
-        stepIndexRef.current = i;
-        setCurrentStep(i);
-      }, elapsed);
-      intervals.push(timeout);
-      elapsed += step.duration;
+    // Schedule each step transition
+    thinkingSteps.forEach((_, i) => {
+      if (i > 0) {
+        const timeout = setTimeout(() => setCurrentStep(i), elapsed);
+        timeouts.push(timeout);
+      }
+      elapsed += thinkingSteps[i].duration;
     });
 
-    // Loop back through steps
+    // Loop back through steps after all complete
     const loopInterval = setInterval(() => {
-      stepIndexRef.current = (stepIndexRef.current + 1) % thinkingSteps.length;
-      setCurrentStep(stepIndexRef.current);
-    }, totalDuration);
+      setCurrentStep(prev => (prev + 1) % thinkingSteps.length);
+    }, TOTAL_DURATION);
 
     return () => {
-      intervals.forEach(clearTimeout);
+      timeouts.forEach(clearTimeout);
       clearInterval(loopInterval);
     };
   }, []);

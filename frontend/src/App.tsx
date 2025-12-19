@@ -10,11 +10,24 @@ const AnalyzeClaim = lazy(() => import('./pages/AnalyzeClaim'));
 const ClaimHistory = lazy(() => import('./pages/ClaimHistory'));
 const PolicySearch = lazy(() => import('./pages/PolicySearch'));
 
+/**
+ * React Query client configuration
+ * - staleTime: Data considered fresh for 5 minutes (no background refetches)
+ * - gcTime: Unused data garbage collected after 10 minutes
+ * - retry: Only retry failed requests once
+ * - refetchOnWindowFocus: Disabled to prevent unnecessary API calls
+ */
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 10 * 60 * 1000, // 10 minutes (was cacheTime)
       retry: 1,
       refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+    },
+    mutations: {
+      retry: 0, // Don't retry mutations
     },
   },
 });
