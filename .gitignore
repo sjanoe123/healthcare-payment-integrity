@@ -43,3 +43,4 @@ htmlcov/
 
 # Type checking
 .mypy_cache/
+.vercel

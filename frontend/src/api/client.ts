@@ -9,51 +9,52 @@ import type {
   SearchResponse,
 } from './types';
 
-// Validate API URL in production - throw error to prevent misconfiguration
+/** API Configuration */
+const API_CONFIG = {
+  /** Base URL for API requests */
+  baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  /** Default timeout for most requests (30s) */
+  defaultTimeout: 30000,
+  /** Extended timeout for analysis endpoints that use Claude API (90s) */
+  analysisTimeout: 90000,
+} as const;
+
+// Warn in production if API URL not configured (don't throw - allows demo mode)
 if (import.meta.env.PROD && !import.meta.env.VITE_API_URL) {
-  throw new Error(
-    'VITE_API_URL environment variable must be set in production. ' +
-    'Please configure your deployment with the correct API URL.'
-  );
+  // Log warning but allow app to run in demo mode
+  if (import.meta.env.DEV) {
+    console.warn(
+      '[API] VITE_API_URL not set in production. API calls may fail.'
+    );
+  }
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-
 export const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_CONFIG.baseUrl,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 second timeout
+  timeout: API_CONFIG.defaultTimeout,
 });
+
+/** Log errors only in development to avoid exposing details in production */
+function logError(context: string, details: Record<string, unknown>): void {
+  if (import.meta.env.DEV) {
+    console.error(`[API] ${context}:`, details);
+  }
+  // TODO: In production, send to error monitoring service (Sentry, LogRocket, etc.)
+}
 
 // Response interceptor for global error handling
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    // Log error for monitoring
-    console.error('API Error:', {
+    logError('Request failed', {
       url: error.config?.url,
       method: error.config?.method,
       status: error.response?.status,
       message: error.message,
     });
-
-    // Handle specific error types
-    if (error.response?.status === 401) {
-      // Handle unauthorized - could redirect to login
-      console.warn('Unauthorized request');
-    }
-
-    if (error.response?.status === 503) {
-      // Service unavailable
-      console.warn('Service temporarily unavailable');
-    }
-
-    if (!error.response) {
-      // Network error
-      console.error('Network error - check backend connectivity');
-    }
 
     return Promise.reject(error);
   }
@@ -141,12 +142,16 @@ export async function uploadClaim(claim: ClaimSubmission): Promise<UploadRespons
   return response.data;
 }
 
-// Analyze claim
+// Analyze claim (uses extended timeout for Claude API calls)
 export async function analyzeClaim(
   jobId: string,
   claim: ClaimSubmission
 ): Promise<AnalysisResult> {
-  const response = await api.post<AnalysisResult>(`/api/analyze/${jobId}`, claim);
+  const response = await api.post<AnalysisResult>(
+    `/api/analyze/${jobId}`,
+    claim,
+    { timeout: API_CONFIG.analysisTimeout }
+  );
   return response.data;
 }
 

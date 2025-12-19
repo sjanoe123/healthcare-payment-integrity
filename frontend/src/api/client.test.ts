@@ -1,31 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import axios, { AxiosError } from 'axios';
+import { describe, it, expect } from 'vitest';
+import { AxiosError, AxiosHeaders, type InternalAxiosRequestConfig } from 'axios';
 import { getErrorMessage } from './client';
 
-// Mock axios
-vi.mock('axios', async () => {
-  const actual = await vi.importActual('axios');
-  return {
-    ...actual,
-    default: {
-      create: vi.fn(() => ({
-        get: vi.fn(),
-        post: vi.fn(),
-        interceptors: {
-          request: { use: vi.fn() },
-          response: { use: vi.fn() },
-        },
-      })),
-      isAxiosError: (actual as typeof axios).isAxiosError,
-    },
-  };
-});
-
 describe('getErrorMessage', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('returns message for 400 Bad Request', () => {
     const error = createAxiosError(400);
     expect(getErrorMessage(error)).toBe('Invalid request. Please check your input.');
@@ -94,28 +71,33 @@ describe('getErrorMessage', () => {
   });
 });
 
-// Helper function to create mock Axios errors
+/**
+ * Helper function to create mock Axios errors for testing
+ */
 function createAxiosError(
   status: number | null,
   data?: { message?: string; detail?: string }
 ): AxiosError {
-  const error = new Error('Request failed') as AxiosError;
-  error.isAxiosError = true;
-  error.name = 'AxiosError';
-  error.config = { headers: {} as AxiosError['config']['headers'] };
-  error.toJSON = () => ({});
+  const headers = new AxiosHeaders();
+  const config: InternalAxiosRequestConfig = {
+    headers,
+  };
 
-  if (status !== null) {
-    error.response = {
-      status,
-      statusText: 'Error',
-      headers: {},
-      config: { headers: {} as AxiosError['config']['headers'] },
-      data: data || {},
-    };
-  } else {
-    error.response = undefined;
-  }
+  const error = new AxiosError(
+    'Request failed',
+    status ? String(status) : 'ERR_NETWORK',
+    config,
+    null,
+    status !== null
+      ? {
+          status,
+          statusText: 'Error',
+          headers: {},
+          config,
+          data: data || {},
+        }
+      : undefined
+  );
 
   return error;
 }
