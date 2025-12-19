@@ -19,14 +19,10 @@ const API_CONFIG = {
   analysisTimeout: 90000,
 } as const;
 
-// Warn in production if API URL not configured (don't throw - allows demo mode)
-if (import.meta.env.PROD && !import.meta.env.VITE_API_URL) {
-  // Log warning but allow app to run in demo mode
-  if (import.meta.env.DEV) {
-    console.warn(
-      '[API] VITE_API_URL not set in production. API calls may fail.'
-    );
-  }
+// Log warning in development if API URL not configured
+// In production without VITE_API_URL, app runs in demo mode (API calls will fail gracefully)
+if (import.meta.env.DEV && !import.meta.env.VITE_API_URL) {
+  console.info('[API] Using default localhost:8080. Set VITE_API_URL for production.');
 }
 
 export const api = axios.create({
