@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 import uuid
@@ -12,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -21,9 +22,31 @@ from rag import get_store
 from claude_client import get_kirk_analysis
 from kirk_config import KIRK_CONFIG
 
+# Configure logging
+logger = logging.getLogger(__name__)
+
 
 # Database setup
 DB_PATH = os.getenv("DB_PATH", "./data/prototype.db")
+
+# Pagination limits
+DEFAULT_JOBS_LIMIT = 100
+MAX_JOBS_LIMIT = 1000
+
+
+def safe_json_loads(
+    data: str | None, default: list | dict | None = None
+) -> list | dict:
+    """Safely parse JSON, returning default on error."""
+    if default is None:
+        default = []
+    if not data:
+        return default
+    try:
+        return json.loads(data)
+    except json.JSONDecodeError:
+        logger.warning(f"Failed to parse JSON: {data[:100]}...")
+        return default
 
 
 def init_db():
@@ -59,6 +82,12 @@ def init_db():
             )
         """)
 
+        # Create indices for performance
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_results_created_at ON results(created_at DESC)"
+        )
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
+
         conn.commit()
 
 
@@ -91,7 +120,7 @@ CORS_ORIGINS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_origin_regex=r"https://healthcare-payment-integrity.*\.vercel\.app",
+    allow_origin_regex=r"https://healthcare-payment-integrity-[a-z0-9-]+\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -395,44 +424,55 @@ async def search_policies(query: SearchQuery):
 
 
 @app.get("/api/jobs")
-async def list_jobs():
-    """List all analyzed claims."""
+async def list_jobs(
+    limit: int = Query(default=DEFAULT_JOBS_LIMIT, ge=1, le=MAX_JOBS_LIMIT),
+    offset: int = Query(default=0, ge=0),
+):
+    """List analyzed claims with pagination."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT r.job_id, r.claim_id, r.fraud_score, r.decision_mode,
                    r.rule_hits, r.ncci_flags, r.coverage_flags, r.provider_flags,
                    r.roi_estimate, r.created_at, j.status
             FROM results r
             JOIN jobs j ON r.job_id = j.job_id
             ORDER BY r.created_at DESC
-            LIMIT 100
-        """)
+            LIMIT ? OFFSET ?
+        """,
+            (limit, offset),
+        )
         rows = cursor.fetchall()
 
     jobs = []
     for row in rows:
-        rule_hits = json.loads(row[4]) if row[4] else []
-        ncci_flags = json.loads(row[5]) if row[5] else []
-        coverage_flags = json.loads(row[6]) if row[6] else []
-        provider_flags = json.loads(row[7]) if row[7] else []
+        rule_hits = safe_json_loads(row[4])
+        ncci_flags = safe_json_loads(row[5])
+        coverage_flags = safe_json_loads(row[6])
+        provider_flags = safe_json_loads(row[7])
 
-        jobs.append({
-            "job_id": row[0],
-            "claim_id": row[1],
-            "fraud_score": row[2],
-            "decision_mode": row[3],
-            "rule_hits": rule_hits,
-            "ncci_flags": ncci_flags,
-            "coverage_flags": coverage_flags,
-            "provider_flags": provider_flags,
-            "roi_estimate": row[8],
-            "created_at": row[9],
-            "status": row[10],
-            "flags_count": len(rule_hits) + len(ncci_flags) + len(coverage_flags) + len(provider_flags),
-        })
+        jobs.append(
+            {
+                "job_id": row[0],
+                "claim_id": row[1],
+                "fraud_score": row[2],
+                "decision_mode": row[3],
+                "rule_hits": rule_hits,
+                "ncci_flags": ncci_flags,
+                "coverage_flags": coverage_flags,
+                "provider_flags": provider_flags,
+                "roi_estimate": row[8],
+                "created_at": row[9],
+                "status": row[10],
+                "flags_count": len(rule_hits)
+                + len(ncci_flags)
+                + len(coverage_flags)
+                + len(provider_flags),
+            }
+        )
 
-    return {"jobs": jobs, "total": len(jobs)}
+    return {"jobs": jobs, "total": len(jobs), "limit": limit, "offset": offset}
 
 
 @app.get("/api/stats")
@@ -451,22 +491,30 @@ async def get_stats():
         avg_score = cursor.fetchone()[0] or 0
 
         # Count flags
-        cursor.execute("SELECT rule_hits, ncci_flags, coverage_flags, provider_flags FROM results")
+        cursor.execute(
+            "SELECT rule_hits, ncci_flags, coverage_flags, provider_flags FROM results"
+        )
         rows = cursor.fetchall()
         total_flags = 0
-        total_roi = 0.0
         auto_approved = 0
         for row in rows:
-            rule_hits = json.loads(row[0]) if row[0] else []
-            ncci_flags = json.loads(row[1]) if row[1] else []
-            coverage_flags = json.loads(row[2]) if row[2] else []
-            provider_flags = json.loads(row[3]) if row[3] else []
-            flags = len(rule_hits) + len(ncci_flags) + len(coverage_flags) + len(provider_flags)
+            rule_hits = safe_json_loads(row[0])
+            ncci_flags = safe_json_loads(row[1])
+            coverage_flags = safe_json_loads(row[2])
+            provider_flags = safe_json_loads(row[3])
+            flags = (
+                len(rule_hits)
+                + len(ncci_flags)
+                + len(coverage_flags)
+                + len(provider_flags)
+            )
             total_flags += flags
             if flags == 0:
                 auto_approved += 1
 
-        cursor.execute("SELECT SUM(roi_estimate) FROM results WHERE roi_estimate IS NOT NULL")
+        cursor.execute(
+            "SELECT SUM(roi_estimate) FROM results WHERE roi_estimate IS NOT NULL"
+        )
         total_roi = cursor.fetchone()[0] or 0
 
     return {

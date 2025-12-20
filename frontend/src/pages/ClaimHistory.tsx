@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { History, FileSearch, AlertTriangle, CheckCircle, Clock, ExternalLink } from 'lucide-react';
+import { History, FileSearch, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useJobs } from '@/api/hooks';
 import { getRiskLevel, formatScore } from '@/api/types';
@@ -33,8 +33,8 @@ export function ClaimHistory() {
 
       {/* Loading State */}
       {isLoading && (
-        <div className="py-16 text-center">
-          <div className="w-8 h-8 mx-auto mb-4 border-2 border-kirk border-t-transparent rounded-full animate-spin" />
+        <div className="py-16 text-center" role="status" aria-live="polite" aria-busy="true">
+          <div className="w-8 h-8 mx-auto mb-4 border-2 border-kirk border-t-transparent rounded-full animate-spin" aria-hidden="true" />
           <p className="text-navy-400">Loading claims...</p>
         </div>
       )}
@@ -146,8 +146,8 @@ export function ClaimHistory() {
                       </div>
 
                       {/* Flags Summary */}
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {job.flags_count > 0 ? (
+                      <div className="flex flex-wrap gap-2 mb-3" role="list" aria-label="Claim flags">
+                        {(job.flags_count ?? 0) > 0 ? (
                           <>
                             {job.ncci_flags.length > 0 && (
                               <span className="px-2 py-0.5 rounded text-xs bg-risk-caution/10 text-risk-caution border border-risk-caution/20">
