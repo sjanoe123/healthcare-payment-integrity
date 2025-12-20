@@ -147,7 +147,6 @@ def format_invalid_code_rule(context: RuleContext) -> list[RuleHit]:
     hits: list[RuleHit] = []
     valid_codes = context.datasets.get("valid_codes", {})
     cpt_codes = valid_codes.get("cpt", set())
-    hcpcs_codes = valid_codes.get("hcpcs", set())
     icd10_codes = valid_codes.get("icd10", set())
 
     icd10_pattern = re.compile(r"^[A-Z]\d{2}(\.\d{1,4})?$")

@@ -365,7 +365,6 @@ def get_kirk_analysis(
         # Extract data from structured response if available
         if structured:
             risk_summary = structured.get("risk_summary", content)
-            findings = structured.get("findings", [])
             recommendations = [
                 r.get("action", str(r)) for r in structured.get("recommendations", [])
             ][:config.max_recommendations]
@@ -373,7 +372,6 @@ def get_kirk_analysis(
                 recommendations = extract_recommendations(content)[:config.max_recommendations]
         else:
             risk_summary = content
-            findings = []
             recommendations = extract_recommendations(content)[:config.max_recommendations]
 
         return {

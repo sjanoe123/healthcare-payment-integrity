@@ -92,7 +92,6 @@ def eligibility_non_covered_rule(context: RuleContext) -> list[RuleHit]:
     """Check if services are covered under member's benefit plan."""
     benefit_exclusions = context.datasets.get("benefit_exclusions", {})
     claim = context.claim
-    member_id = claim.get("member", {}).get("member_id")
     plan_id = claim.get("member", {}).get("plan_id")
 
     if not plan_id:
@@ -208,7 +207,6 @@ def eligibility_no_auth_rule(context: RuleContext) -> list[RuleHit]:
     authorizations = context.datasets.get("authorizations", {})
     claim = context.claim
     member_id = claim.get("member", {}).get("member_id")
-    service_date = claim.get("service_date") or claim.get("dos")
 
     if not member_id:
         return []

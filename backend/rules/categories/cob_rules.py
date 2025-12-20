@@ -51,7 +51,6 @@ def cob_incomplete_rule(context: RuleContext) -> list[RuleHit]:
     has_other_coverage = claim.get("has_other_coverage", False)
     member = claim.get("member", {})
     has_medicare = member.get("has_medicare", False)
-    has_medicaid = member.get("has_medicaid", False)
 
     hits: list[RuleHit] = []
 
