@@ -394,6 +394,47 @@ async def search_policies(query: SearchQuery):
     }
 
 
+@app.get("/api/jobs")
+async def list_jobs():
+    """List all analyzed claims."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT r.job_id, r.claim_id, r.fraud_score, r.decision_mode,
+                   r.rule_hits, r.ncci_flags, r.coverage_flags, r.provider_flags,
+                   r.roi_estimate, r.created_at, j.status
+            FROM results r
+            JOIN jobs j ON r.job_id = j.job_id
+            ORDER BY r.created_at DESC
+            LIMIT 100
+        """)
+        rows = cursor.fetchall()
+
+    jobs = []
+    for row in rows:
+        rule_hits = json.loads(row[4]) if row[4] else []
+        ncci_flags = json.loads(row[5]) if row[5] else []
+        coverage_flags = json.loads(row[6]) if row[6] else []
+        provider_flags = json.loads(row[7]) if row[7] else []
+
+        jobs.append({
+            "job_id": row[0],
+            "claim_id": row[1],
+            "fraud_score": row[2],
+            "decision_mode": row[3],
+            "rule_hits": rule_hits,
+            "ncci_flags": ncci_flags,
+            "coverage_flags": coverage_flags,
+            "provider_flags": provider_flags,
+            "roi_estimate": row[8],
+            "created_at": row[9],
+            "status": row[10],
+            "flags_count": len(rule_hits) + len(ncci_flags) + len(coverage_flags) + len(provider_flags),
+        })
+
+    return {"jobs": jobs, "total": len(jobs)}
+
+
 @app.get("/api/stats")
 async def get_stats():
     """Get prototype statistics."""
@@ -409,11 +450,35 @@ async def get_stats():
         cursor.execute("SELECT AVG(fraud_score) FROM results")
         avg_score = cursor.fetchone()[0] or 0
 
+        # Count flags
+        cursor.execute("SELECT rule_hits, ncci_flags, coverage_flags, provider_flags FROM results")
+        rows = cursor.fetchall()
+        total_flags = 0
+        total_roi = 0.0
+        auto_approved = 0
+        for row in rows:
+            rule_hits = json.loads(row[0]) if row[0] else []
+            ncci_flags = json.loads(row[1]) if row[1] else []
+            coverage_flags = json.loads(row[2]) if row[2] else []
+            provider_flags = json.loads(row[3]) if row[3] else []
+            flags = len(rule_hits) + len(ncci_flags) + len(coverage_flags) + len(provider_flags)
+            total_flags += flags
+            if flags == 0:
+                auto_approved += 1
+
+        cursor.execute("SELECT SUM(roi_estimate) FROM results WHERE roi_estimate IS NOT NULL")
+        total_roi = cursor.fetchone()[0] or 0
+
     return {
         "total_jobs": total_jobs,
         "completed_jobs": completed_jobs,
         "avg_fraud_score": round(avg_score, 3),
         "rag_documents": get_store().count(),
+        # Frontend expected fields
+        "claims_analyzed": completed_jobs,
+        "flags_detected": total_flags,
+        "auto_approved": auto_approved,
+        "potential_savings": round(total_roi, 2),
     }
 
 

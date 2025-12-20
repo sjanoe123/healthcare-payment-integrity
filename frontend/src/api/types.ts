@@ -105,6 +105,27 @@ export interface StatsResponse {
   potential_savings?: number;
 }
 
+// Job summary for listing
+export interface JobSummary {
+  job_id: string;
+  claim_id: string;
+  fraud_score: number;
+  decision_mode: DecisionMode;
+  rule_hits: RuleHit[];
+  ncci_flags: string[];
+  coverage_flags: string[];
+  provider_flags: string[];
+  roi_estimate: number | null;
+  created_at: string;
+  status: string;
+  flags_count: number;
+}
+
+export interface JobsResponse {
+  jobs: JobSummary[];
+  total: number;
+}
+
 // Search types
 export interface SearchQuery {
   query: string;

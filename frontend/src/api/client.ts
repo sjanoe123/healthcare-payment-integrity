@@ -7,6 +7,7 @@ import type {
   StatsResponse,
   SearchQuery,
   SearchResponse,
+  JobsResponse,
 } from './types';
 
 /** API Configuration */
@@ -166,6 +167,12 @@ export async function searchPolicies(query: SearchQuery): Promise<SearchResponse
 // Get stats
 export async function getStats(): Promise<StatsResponse> {
   const response = await api.get<StatsResponse>('/api/stats');
+  return response.data;
+}
+
+// Get jobs list
+export async function getJobs(): Promise<JobsResponse> {
+  const response = await api.get<JobsResponse>('/api/jobs');
   return response.data;
 }
 
