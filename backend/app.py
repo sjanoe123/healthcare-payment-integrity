@@ -78,15 +78,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for local development
+# CORS configuration
+CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "https://healthcare-payment-integrity.vercel.app",
+    "https://healthcare-payment-integrity-*.vercel.app",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ],
+    allow_origins=CORS_ORIGINS,
+    allow_origin_regex=r"https://healthcare-payment-integrity.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
