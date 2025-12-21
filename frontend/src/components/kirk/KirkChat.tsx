@@ -87,9 +87,10 @@ export function KirkChat({ result, isLoading = false, className, onFollowUp }: K
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Clear follow-up messages when a new result is loaded
+  // Clear follow-up messages and input when a new result is loaded
   useEffect(() => {
     setFollowUpMessages([]);
+    setInputValue('');
   }, [result?.claim_id]);
 
   // Scroll to bottom when new messages arrive
@@ -133,7 +134,10 @@ export function KirkChat({ result, isLoading = false, className, onFollowUp }: K
       };
 
       setFollowUpMessages(prev => [...prev, kirkMessage]);
-    } catch {
+    } catch (error) {
+      // Log the error for debugging
+      console.error('Kirk follow-up error:', error);
+
       const errorMessage: FollowUpMessage = {
         id: `kirk-error-${Date.now()}`,
         type: 'kirk',

@@ -48,8 +48,8 @@ def parse_structured_response(text: str) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         pass
 
-    # Try to find JSON object pattern
-    json_match = re.search(r"\{[\s\S]*\}", text)
+    # Try to find JSON object pattern (non-greedy to avoid catastrophic backtracking)
+    json_match = re.search(r"\{[\s\S]*?\}", text)
     if json_match:
         try:
             return json.loads(json_match.group(0))
@@ -80,7 +80,7 @@ def get_primary_category(rule_hits: list[RuleHit]) -> str | None:
     if not category_weights:
         return None
 
-    return max(category_weights, key=category_weights.get)
+    return max(category_weights, key=lambda k: category_weights.get(k, 0.0))
 
 
 def format_rule_hits(hits: list[RuleHit]) -> str:
@@ -180,11 +180,12 @@ Be specific and cite the relevant rules or policies. Keep the response under 300
 
     except anthropic.APIError as e:
         return {
-            "explanation": f"Claude API error: {str(e)}. Using rule-based analysis only.",
+            "explanation": f"Claude API error: {e!s}. Using rule-based analysis only.",
             "risk_factors": [h.description for h in rule_hits],
             "recommendations": ["Review flagged items manually"],
-            "model": "error",
+            "model": None,
             "tokens_used": 0,
+            "error": str(e),
         }
 
 
@@ -365,9 +366,9 @@ def get_kirk_analysis(
         # Extract data from structured response if available
         if structured:
             risk_summary = structured.get("risk_summary", content)
-            recommendations = [
-                r.get("action", str(r)) for r in structured.get("recommendations", [])
-            ][: config.max_recommendations]
+            # Slice before list comprehension to avoid creating unused items
+            recs = structured.get("recommendations", [])[: config.max_recommendations]
+            recommendations = [r.get("action", str(r)) for r in recs]
             if not recommendations:
                 recommendations = extract_recommendations(content)[
                     : config.max_recommendations
@@ -394,8 +395,9 @@ def get_kirk_analysis(
             "explanation": f"Kirk encountered an API error: {e!s}. Using rule-based analysis only.",
             "risk_factors": [h.description for h in rule_hits],
             "recommendations": ["Review flagged items manually"],
-            "model": "error",
+            "model": None,
             "tokens_used": 0,
             "agent": config.name,
             "structured": None,
+            "error": str(e),
         }
