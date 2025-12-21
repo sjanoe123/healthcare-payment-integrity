@@ -43,6 +43,33 @@ export interface RuleHit {
   metadata?: Record<string, unknown>;
 }
 
+// Kirk structured JSON response types (matches kirk_config.py format)
+export type KirkSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+export type KirkCategory = 'ncci' | 'coverage' | 'provider' | 'financial' | 'format' | 'modifier' | 'eligibility';
+
+export interface KirkFinding {
+  category: KirkCategory;
+  issue: string;
+  evidence: string;
+  regulation: string;
+  severity: KirkSeverity;
+}
+
+export interface KirkRecommendation {
+  priority: number;
+  action: string;
+  rationale: string;
+}
+
+export interface KirkStructuredResponse {
+  risk_summary: string;
+  severity: KirkSeverity;
+  chain_of_thought: string;
+  findings: KirkFinding[];
+  recommendations: KirkRecommendation[];
+  confidence: number;
+}
+
 // Claude/Kirk analysis types
 export interface ClaudeAnalysis {
   summary?: string;
@@ -52,6 +79,8 @@ export interface ClaudeAnalysis {
   model: string;
   tokens_used: number;
   agent: 'Kirk';
+  // Optional structured response when JSON parsing succeeds
+  structured_response?: KirkStructuredResponse;
 }
 
 // Decision modes
@@ -193,4 +222,53 @@ export function formatCurrency(amount: number): string {
 
 export function formatScore(score: number): string {
   return (score * 100).toFixed(0) + '%';
+}
+
+// Kirk structured response utilities
+export function parseKirkResponse(explanation: string): KirkStructuredResponse | null {
+  try {
+    // Try to extract JSON from the explanation
+    const jsonMatch = explanation.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[0]) as KirkStructuredResponse;
+
+    // Validate required fields
+    if (
+      typeof parsed.risk_summary !== 'string' ||
+      !['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(parsed.severity) ||
+      !Array.isArray(parsed.findings) ||
+      !Array.isArray(parsed.recommendations) ||
+      typeof parsed.confidence !== 'number'
+    ) {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function getKirkSeverityColor(severity: KirkSeverity): string {
+  const colors: Record<KirkSeverity, string> = {
+    CRITICAL: '#EF4444',
+    HIGH: '#F97316',
+    MEDIUM: '#F59E0B',
+    LOW: '#10B981',
+  };
+  return colors[severity];
+}
+
+export function getKirkCategoryLabel(category: KirkCategory): string {
+  const labels: Record<KirkCategory, string> = {
+    ncci: 'NCCI Edits',
+    coverage: 'Coverage',
+    provider: 'Provider',
+    financial: 'Financial',
+    format: 'Format',
+    modifier: 'Modifier',
+    eligibility: 'Eligibility',
+  };
+  return labels[category];
 }

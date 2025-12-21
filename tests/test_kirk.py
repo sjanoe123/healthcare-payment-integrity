@@ -82,11 +82,12 @@ class TestKirkSystemPrompt:
 
     def test_system_prompt_contains_format(self):
         """Verify system prompt includes response format instructions."""
-        assert "Risk Summary" in KIRK_SYSTEM_PROMPT
-        assert "Findings" in KIRK_SYSTEM_PROMPT
-        assert "Regulatory Citations" in KIRK_SYSTEM_PROMPT
-        assert "Recommendations" in KIRK_SYSTEM_PROMPT
-        assert "Confidence Level" in KIRK_SYSTEM_PROMPT
+        # Check for JSON format fields (updated from plain text format)
+        assert "risk_summary" in KIRK_SYSTEM_PROMPT
+        assert "severity" in KIRK_SYSTEM_PROMPT
+        assert "findings" in KIRK_SYSTEM_PROMPT
+        assert "recommendations" in KIRK_SYSTEM_PROMPT
+        assert "confidence" in KIRK_SYSTEM_PROMPT
 
     def test_system_prompt_contains_style(self):
         """Verify system prompt includes communication style."""

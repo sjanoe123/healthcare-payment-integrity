@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useStats } from '@/api/hooks/useStats';
@@ -11,9 +12,24 @@ import {
   CheckCircle,
   AlertTriangle,
   Activity,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { KirkAvatar } from '@/components/kirk';
+import { SavingsChart, CategoryPieChart } from '@/components/charts';
+import {
+  DEMO_STATS,
+  DEMO_SAVINGS_TREND,
+  DEMO_CATEGORY_DATA,
+} from '@/utils/mockData';
+
+interface DisplayStats {
+  claimsAnalyzed: number | string;
+  flagsDetected: number | string;
+  autoApproved: number | string;
+  potentialSavings: number | string;
+}
 
 interface StatCardProps {
   title: string;
@@ -65,6 +81,28 @@ function StatCard({ title, value, subtitle, icon: Icon, color, delay = 0 }: Stat
 export function Dashboard() {
   const { data: stats } = useStats();
   const { data: health } = useHealth();
+  const [demoMode, setDemoMode] = useState(true);
+
+  // Normalize stats to a consistent format
+  const displayStats: DisplayStats = useMemo(() => {
+    if (demoMode) {
+      return DEMO_STATS;
+    }
+    if (stats) {
+      return {
+        claimsAnalyzed: stats.claims_analyzed ?? stats.total_jobs ?? '—',
+        flagsDetected: stats.flags_detected ?? '—',
+        autoApproved: stats.auto_approved ?? '—',
+        potentialSavings: stats.potential_savings ?? '—',
+      };
+    }
+    return {
+      claimsAnalyzed: '—',
+      flagsDetected: '—',
+      autoApproved: '—',
+      potentialSavings: '—',
+    };
+  }, [demoMode, stats]);
 
   return (
     <div className="space-y-8">
@@ -82,26 +120,46 @@ export function Dashboard() {
             Healthcare payment integrity monitoring and analysis
           </p>
         </div>
-        <Link
-          to="/analyze"
-          className={cn(
-            'flex items-center gap-2 px-6 py-3 rounded-xl',
-            'bg-gradient-to-r from-kirk to-electric',
-            'text-white font-medium',
-            'hover:shadow-lg hover:shadow-kirk/25',
-            'transition-all duration-200 hover:scale-105'
-          )}
-        >
-          <FileSearch className="w-5 h-5" />
-          Analyze Claim
-        </Link>
+        <div className="flex items-center gap-4">
+          {/* Demo Mode Toggle */}
+          <button
+            onClick={() => setDemoMode(!demoMode)}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-lg',
+              'border transition-all duration-200',
+              demoMode
+                ? 'bg-kirk/10 border-kirk/30 text-kirk'
+                : 'bg-navy-800/50 border-navy-600 text-navy-400 hover:text-white'
+            )}
+          >
+            {demoMode ? (
+              <ToggleRight className="w-5 h-5" />
+            ) : (
+              <ToggleLeft className="w-5 h-5" />
+            )}
+            <span className="text-sm font-medium">Demo Mode</span>
+          </button>
+          <Link
+            to="/analyze"
+            className={cn(
+              'flex items-center gap-2 px-6 py-3 rounded-xl',
+              'bg-gradient-to-r from-kirk to-electric',
+              'text-white font-medium',
+              'hover:shadow-lg hover:shadow-kirk/25',
+              'transition-all duration-200 hover:scale-105'
+            )}
+          >
+            <FileSearch className="w-5 h-5" />
+            Analyze Claim
+          </Link>
+        </div>
       </motion.div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Claims Analyzed"
-          value={stats?.claims_analyzed ?? '—'}
+          value={displayStats.claimsAnalyzed}
           subtitle="Total processed"
           icon={Shield}
           color="kirk"
@@ -109,7 +167,7 @@ export function Dashboard() {
         />
         <StatCard
           title="Flags Detected"
-          value={stats?.flags_detected ?? '—'}
+          value={displayStats.flagsDetected}
           subtitle="Compliance issues"
           icon={AlertTriangle}
           color="caution"
@@ -117,7 +175,7 @@ export function Dashboard() {
         />
         <StatCard
           title="Auto Approved"
-          value={stats?.auto_approved ?? '—'}
+          value={displayStats.autoApproved}
           subtitle="Clean claims"
           icon={CheckCircle}
           color="safe"
@@ -125,13 +183,32 @@ export function Dashboard() {
         />
         <StatCard
           title="Potential Savings"
-          value={stats?.potential_savings ? `$${stats.potential_savings.toLocaleString()}` : '—'}
+          value={
+            typeof displayStats.potentialSavings === 'number'
+              ? `$${displayStats.potentialSavings.toLocaleString()}`
+              : displayStats.potentialSavings
+          }
           subtitle="ROI estimate"
           icon={TrendingUp}
           color="teal"
           delay={3}
         />
       </div>
+
+      {/* Charts Section */}
+      {demoMode && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SavingsChart
+            data={DEMO_SAVINGS_TREND}
+            title="Monthly Savings"
+            showClaims={false}
+          />
+          <CategoryPieChart
+            data={DEMO_CATEGORY_DATA}
+            title="Flags by Category"
+          />
+        </div>
+      )}
 
       {/* Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

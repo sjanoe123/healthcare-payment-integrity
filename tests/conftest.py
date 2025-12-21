@@ -123,6 +123,7 @@ def clean_claim() -> dict[str, Any]:
         "claim_id": "CLEAN-001",
         "billed_amount": 130.00,
         "diagnosis_codes": ["J06.9"],
+        "service_date": "2024-01-15",
         "items": [
             {
                 "procedure_code": "99214",
@@ -136,6 +137,7 @@ def clean_claim() -> dict[str, Any]:
             "specialty": "family medicine",
         },
         "member": {
+            "member_id": "M123456789",
             "age": 35,
             "gender": "M",
         },
