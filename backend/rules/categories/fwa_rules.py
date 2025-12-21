@@ -58,7 +58,10 @@ def fwa_volume_spike_rule(context: RuleContext) -> list[RuleHit]:
     current_month_claims = history.get("current_month_claims", 0)
     spike_threshold = context.config.get("volume_spike_threshold", 2.0)
 
-    if avg_monthly_claims > 0 and current_month_claims > avg_monthly_claims * spike_threshold:
+    if (
+        avg_monthly_claims > 0
+        and current_month_claims > avg_monthly_claims * spike_threshold
+    ):
         return [
             RuleHit(
                 rule_id="FWA_VOLUME_SPIKE",

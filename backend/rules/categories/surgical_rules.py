@@ -51,7 +51,9 @@ def surgical_global_period_rule(context: RuleContext) -> list[RuleHit]:
             if not surgery_date:
                 continue
 
-            global_days = global_surgery_data.get(surgery_code, {}).get("global_days", 0)
+            global_days = global_surgery_data.get(surgery_code, {}).get(
+                "global_days", 0
+            )
             if not global_days:
                 continue
 
@@ -93,7 +95,9 @@ def surgical_multiple_procedure_rule(context: RuleContext) -> list[RuleHit]:
         if not code:
             continue
 
-        if code in multiple_procedure_codes or (code.isdigit() and 10000 <= int(code) <= 69999):
+        if code in multiple_procedure_codes or (
+            code.isdigit() and 10000 <= int(code) <= 69999
+        ):
             modifiers = set(item.get("modifiers", []))
             if item.get("modifier"):
                 modifiers.add(item.get("modifier"))
@@ -267,7 +271,11 @@ def surgical_bilateral_rule(context: RuleContext) -> list[RuleHit]:
                 )
             )
 
-        if bilateral_allowed and code not in bilateral_allowed and indicator not in {"0", "1", "2", "3"}:
+        if (
+            bilateral_allowed
+            and code not in bilateral_allowed
+            and indicator not in {"0", "1", "2", "3"}
+        ):
             hits.append(
                 RuleHit(
                     rule_id="SURGICAL_BILATERAL_NOT_ALLOWED",

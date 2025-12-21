@@ -70,7 +70,9 @@ def format_invalid_date_rule(context: RuleContext) -> list[RuleHit]:
 
     service_date_str = claim.get("service_date") or claim.get("dos")
     received_date_str = claim.get("received_date")
-    patient_dob_str = claim.get("member", {}).get("dob") or claim.get("patient", {}).get("dob")
+    patient_dob_str = claim.get("member", {}).get("dob") or claim.get(
+        "patient", {}
+    ).get("dob")
 
     def parse_date(date_str: str | None) -> datetime | None:
         if not date_str:
@@ -96,7 +98,11 @@ def format_invalid_date_rule(context: RuleContext) -> list[RuleHit]:
                 severity="high",
                 flag="format_error",
                 citation="EDI 837 Specification",
-                metadata={"category": "format", "field": "service_date", "value": service_date_str},
+                metadata={
+                    "category": "format",
+                    "field": "service_date",
+                    "value": service_date_str,
+                },
             )
         )
 
@@ -109,7 +115,11 @@ def format_invalid_date_rule(context: RuleContext) -> list[RuleHit]:
                 severity="critical",
                 flag="format_error",
                 citation="EDI 837 Specification",
-                metadata={"category": "format", "field": "service_date", "value": service_date_str},
+                metadata={
+                    "category": "format",
+                    "field": "service_date",
+                    "value": service_date_str,
+                },
             )
         )
 
@@ -165,15 +175,19 @@ def format_invalid_code_rule(context: RuleContext) -> list[RuleHit]:
                     severity="high",
                     flag="format_error",
                     citation="EDI 837 Specification",
-                    metadata={"category": "format", "line_index": idx, "field": "procedure_code"},
+                    metadata={
+                        "category": "format",
+                        "line_index": idx,
+                        "field": "procedure_code",
+                    },
                 )
             )
             continue
 
         is_valid_format = (
-            cpt_pattern.match(code) or
-            hcpcs_pattern.match(code) or
-            code.startswith("99")
+            cpt_pattern.match(code)
+            or hcpcs_pattern.match(code)
+            or code.startswith("99")
         )
 
         if not is_valid_format:
@@ -215,7 +229,11 @@ def format_invalid_code_rule(context: RuleContext) -> list[RuleHit]:
                     severity="medium",
                     flag="format_error",
                     citation="CMS ICD-10-CM",
-                    metadata={"category": "format", "code": dx_code, "code_type": "ICD-10"},
+                    metadata={
+                        "category": "format",
+                        "code": dx_code,
+                        "code_type": "ICD-10",
+                    },
                 )
             )
 
@@ -228,7 +246,11 @@ def format_invalid_code_rule(context: RuleContext) -> list[RuleHit]:
                     severity="high",
                     flag="format_error",
                     citation="CMS ICD-10-CM",
-                    metadata={"category": "format", "code": dx_code, "code_type": "ICD-10"},
+                    metadata={
+                        "category": "format",
+                        "code": dx_code,
+                        "code_type": "ICD-10",
+                    },
                 )
             )
 

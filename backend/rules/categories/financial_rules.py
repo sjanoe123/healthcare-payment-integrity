@@ -109,7 +109,9 @@ def misc_code_rule(context: RuleContext) -> list[RuleHit]:
     for idx, item in enumerate(context.claim.get("items", [])):
         code = item.get("procedure_code", "")
         # Check if code is an unlisted procedure code
-        if code in UNLISTED_CODES or (len(code) == 5 and code.endswith("99") and not code.startswith("99")):
+        if code in UNLISTED_CODES or (
+            len(code) == 5 and code.endswith("99") and not code.startswith("99")
+        ):
             hits.append(
                 RuleHit(
                     rule_id="MISC_CODE",

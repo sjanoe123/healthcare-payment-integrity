@@ -42,7 +42,9 @@ def duplicate_exact_rule(context: RuleContext) -> list[RuleHit]:
         claim.get("member", {}).get("member_id"),
         claim.get("provider", {}).get("npi"),
         claim.get("service_date") or claim.get("dos"),
-        tuple(sorted(item.get("procedure_code", "") for item in claim.get("items", []))),
+        tuple(
+            sorted(item.get("procedure_code", "") for item in claim.get("items", []))
+        ),
     )
 
     if claim_signature in claim_history:
@@ -115,7 +117,11 @@ def duplicate_cross_claim_rule(context: RuleContext) -> list[RuleHit]:
         return []
 
     previous_claims = cross_claim_history[lookup_key]
-    current_codes = {item.get("procedure_code") for item in claim.get("items", []) if item.get("procedure_code")}
+    current_codes = {
+        item.get("procedure_code")
+        for item in claim.get("items", [])
+        if item.get("procedure_code")
+    }
 
     hits: list[RuleHit] = []
     for prev_claim_id, prev_codes in previous_claims.items():

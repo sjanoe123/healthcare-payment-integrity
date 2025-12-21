@@ -72,7 +72,9 @@ def ncci_addon_no_primary_rule(context: RuleContext) -> list[RuleHit]:
         return []
 
     items = context.claim.get("items", [])
-    codes_present = {item.get("procedure_code") for item in items if item.get("procedure_code")}
+    codes_present = {
+        item.get("procedure_code") for item in items if item.get("procedure_code")
+    }
     hits: list[RuleHit] = []
 
     for idx, item in enumerate(items):
@@ -113,7 +115,7 @@ def ncci_mutually_exclusive_rule(context: RuleContext) -> list[RuleHit]:
     for i, (idx_a, code_a) in enumerate(codes):
         if not code_a:
             continue
-        for idx_b, code_b in codes[i + 1:]:
+        for idx_b, code_b in codes[i + 1 :]:
             if not code_b:
                 continue
             key = tuple(sorted((code_a, code_b)))

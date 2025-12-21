@@ -11,7 +11,11 @@ def oce_revenue_code_rule(context: RuleContext) -> list[RuleHit]:
     hits: list[RuleHit] = []
 
     items = context.claim.get("items", [])
-    revenue_codes = [(idx, item.get("revenue_code")) for idx, item in enumerate(items) if item.get("revenue_code")]
+    revenue_codes = [
+        (idx, item.get("revenue_code"))
+        for idx, item in enumerate(items)
+        if item.get("revenue_code")
+    ]
 
     for idx, rev_code in revenue_codes:
         if rev_code not in revenue_combinations:
@@ -106,7 +110,9 @@ def oce_observation_hours_rule(context: RuleContext) -> list[RuleHit]:
     claim = context.claim
     observation_hours = claim.get("observation_hours")
     max_observation_hours = context.config.get("max_observation_hours", 48)
-    extended_observation_threshold = context.config.get("extended_observation_threshold", 24)
+    extended_observation_threshold = context.config.get(
+        "extended_observation_threshold", 24
+    )
 
     if observation_hours is None:
         for item in claim.get("items", []):

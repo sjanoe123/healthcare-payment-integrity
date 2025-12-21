@@ -367,12 +367,16 @@ def get_kirk_analysis(
             risk_summary = structured.get("risk_summary", content)
             recommendations = [
                 r.get("action", str(r)) for r in structured.get("recommendations", [])
-            ][:config.max_recommendations]
+            ][: config.max_recommendations]
             if not recommendations:
-                recommendations = extract_recommendations(content)[:config.max_recommendations]
+                recommendations = extract_recommendations(content)[
+                    : config.max_recommendations
+                ]
         else:
             risk_summary = content
-            recommendations = extract_recommendations(content)[:config.max_recommendations]
+            recommendations = extract_recommendations(content)[
+                : config.max_recommendations
+            ]
 
         return {
             "explanation": risk_summary,

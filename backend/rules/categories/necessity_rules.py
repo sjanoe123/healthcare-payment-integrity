@@ -86,7 +86,9 @@ def necessity_frequency_rule(context: RuleContext) -> list[RuleHit]:
         max_per_lifetime = limit.get("max_per_lifetime")
         min_days_between = limit.get("min_days_between")
 
-        code_history = member_history.get(code, {"count_ytd": 0, "count_lifetime": 0, "last_date": None})
+        code_history = member_history.get(
+            code, {"count_ytd": 0, "count_lifetime": 0, "last_date": None}
+        )
 
         if max_per_year and code_history.get("count_ytd", 0) >= max_per_year:
             hits.append(
@@ -108,7 +110,10 @@ def necessity_frequency_rule(context: RuleContext) -> list[RuleHit]:
                 )
             )
 
-        if max_per_lifetime and code_history.get("count_lifetime", 0) >= max_per_lifetime:
+        if (
+            max_per_lifetime
+            and code_history.get("count_lifetime", 0) >= max_per_lifetime
+        ):
             hits.append(
                 RuleHit(
                     rule_id="NECESSITY_FREQUENCY_EXCEEDED",

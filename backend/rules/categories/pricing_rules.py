@@ -36,7 +36,7 @@ def pricing_exceeds_fee_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="PRICING_EXCEEDS_FEE",
-                    description=f"{code} billed ${billed_amount:.2f} exceeds fee schedule ${allowed:.2f} by {((billed_amount/allowed)-1)*100:.0f}%",
+                    description=f"{code} billed ${billed_amount:.2f} exceeds fee schedule ${allowed:.2f} by {((billed_amount / allowed) - 1) * 100:.0f}%",
                     weight=0.10,
                     severity="medium",
                     flag="pricing_exceeds_fee",
@@ -105,7 +105,11 @@ def pricing_drg_mismatch_rule(context: RuleContext) -> list[RuleHit]:
 
     hits: list[RuleHit] = []
     diagnosis_codes = set(claim.get("diagnosis_codes", []))
-    procedure_codes = {item.get("procedure_code") for item in claim.get("items", []) if item.get("procedure_code")}
+    procedure_codes = {
+        item.get("procedure_code")
+        for item in claim.get("items", [])
+        if item.get("procedure_code")
+    }
 
     required_dx = set(drg_info.get("required_diagnoses", []))
     required_px = set(drg_info.get("required_procedures", []))

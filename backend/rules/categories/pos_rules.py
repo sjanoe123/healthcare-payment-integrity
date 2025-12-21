@@ -100,7 +100,23 @@ def pos_provider_mismatch_rule(context: RuleContext) -> list[RuleHit]:
 
     hits: list[RuleHit] = []
 
-    facility_pos = {"21", "22", "23", "24", "31", "32", "33", "34", "51", "52", "53", "54", "55", "56", "61"}
+    facility_pos = {
+        "21",
+        "22",
+        "23",
+        "24",
+        "31",
+        "32",
+        "33",
+        "34",
+        "51",
+        "52",
+        "53",
+        "54",
+        "55",
+        "56",
+        "61",
+    }
     non_facility_pos = {"11", "12", "17", "19", "20", "49", "50", "71", "72"}
 
     is_facility_provider = provider_rules.get("is_facility", False)

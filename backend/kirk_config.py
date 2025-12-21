@@ -112,35 +112,30 @@ CATEGORY_PROMPTS = {
 3. Whether modifier 59/XE/XS/XP/XU appropriately unbundles the edit
 4. MUE unit limits and MAI type (claim line vs date of service)
 5. Add-on codes billed without required primary procedure""",
-
     "coverage": """Focus your analysis on LCD/NCD coverage compliance:
 1. Diagnosis code support for medical necessity
 2. Age and gender restrictions per coverage policy
 3. Frequency limits and prior authorization requirements
 4. Experimental/investigational procedure status
 5. Documentation requirements specified in the LCD/NCD""",
-
     "provider": """Focus your analysis on provider compliance:
 1. OIG LEIE exclusion status - CRITICAL if found
 2. Credential verification and specialty scope
 3. Billing patterns compared to peer norms
 4. Geographic service area appropriateness
 5. Sanctions, license status, and enrollment verification""",
-
     "financial": """Focus your analysis on financial integrity:
 1. Billed amounts vs MPFS fee schedule benchmarks
 2. Outlier detection (99th percentile violations)
 3. Potential duplicate billing patterns
 4. Unbundling or upcoding indicators
 5. Estimate potential recovery ROI amount""",
-
     "modifier": """Focus your analysis on modifier compliance:
 1. Modifier validity for the procedure code
 2. Required modifiers that are missing (anatomic, bilateral)
 3. Modifier 59/X usage appropriateness - check for abuse
 4. Bilateral modifier 50 vs LT/RT conflicts
 5. Global surgery modifiers 24/25/57/78/79""",
-
     "eligibility": """Focus your analysis on eligibility issues:
 1. Member coverage status on date of service
 2. Benefit plan exclusions and limitations

@@ -81,12 +81,15 @@ def timely_filing_no_exception_rule(context: RuleContext) -> list[RuleHit]:
     exception_code = claim.get("timely_filing_exception")
 
     filing_limit_days = context.config.get("filing_limit_days", 365)
-    valid_exceptions = context.config.get("timely_filing_exceptions", [
-        "cob_delay",
-        "retroactive_eligibility",
-        "provider_appeal",
-        "system_error",
-    ])
+    valid_exceptions = context.config.get(
+        "timely_filing_exceptions",
+        [
+            "cob_delay",
+            "retroactive_eligibility",
+            "provider_appeal",
+            "system_error",
+        ],
+    )
 
     if not service_date_str or not received_date_str:
         return []

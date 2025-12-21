@@ -63,7 +63,9 @@ def specialty_dme_rule(context: RuleContext) -> list[RuleHit]:
             continue
 
         member_cmns = cmn_on_file.get(member_id, {})
-        has_valid_cmn = code in member_cmns and member_cmns[code].get("status") == "valid"
+        has_valid_cmn = (
+            code in member_cmns and member_cmns[code].get("status") == "valid"
+        )
 
         if not has_valid_cmn:
             hits.append(
@@ -114,8 +116,12 @@ def specialty_dme_rule(context: RuleContext) -> list[RuleHit]:
 def specialty_telehealth_rule(context: RuleContext) -> list[RuleHit]:
     """Check for telehealth billing compliance."""
     telehealth_codes = context.datasets.get("telehealth_codes", set())
-    telehealth_eligible_providers = context.datasets.get("telehealth_eligible_providers", set())
-    telehealth_eligible_pos = context.datasets.get("telehealth_eligible_pos", {"02", "10"})
+    telehealth_eligible_providers = context.datasets.get(
+        "telehealth_eligible_providers", set()
+    )
+    telehealth_eligible_pos = context.datasets.get(
+        "telehealth_eligible_pos", {"02", "10"}
+    )
     claim = context.claim
     provider = claim.get("provider", {})
     pos = claim.get("place_of_service")
@@ -131,10 +137,10 @@ def specialty_telehealth_rule(context: RuleContext) -> list[RuleHit]:
             modifiers.add(item.get("modifier"))
 
         is_telehealth = (
-            code in telehealth_codes or
-            item_pos in telehealth_eligible_pos or
-            "95" in modifiers or
-            "GT" in modifiers
+            code in telehealth_codes
+            or item_pos in telehealth_eligible_pos
+            or "95" in modifiers
+            or "GT" in modifiers
         )
 
         if not is_telehealth:
@@ -188,7 +194,9 @@ def specialty_unbundling_rule(context: RuleContext) -> list[RuleHit]:
     hits: list[RuleHit] = []
 
     items = context.claim.get("items", [])
-    codes_billed = {item.get("procedure_code") for item in items if item.get("procedure_code")}
+    codes_billed = {
+        item.get("procedure_code") for item in items if item.get("procedure_code")
+    }
 
     for code in codes_billed:
         if code not in comprehensive_codes:
@@ -223,7 +231,9 @@ def specialty_incidental_rule(context: RuleContext) -> list[RuleHit]:
     hits: list[RuleHit] = []
 
     items = context.claim.get("items", [])
-    codes_billed = {item.get("procedure_code") for item in items if item.get("procedure_code")}
+    codes_billed = {
+        item.get("procedure_code") for item in items if item.get("procedure_code")
+    }
 
     for idx, item in enumerate(items):
         code = item.get("procedure_code")

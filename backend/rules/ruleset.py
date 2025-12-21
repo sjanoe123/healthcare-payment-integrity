@@ -121,43 +121,35 @@ def register_default_rules(registry: RuleRegistry) -> None:
             format_missing_field_rule,
             format_invalid_date_rule,
             format_invalid_code_rule,
-
             # Eligibility & Coverage
             eligibility_inactive_rule,
             eligibility_non_covered_rule,
             eligibility_benefit_limit_rule,
             eligibility_no_auth_rule,
-
             # Timely Filing
             timely_filing_late_rule,
             timely_filing_no_exception_rule,
-
             # Duplicate Detection
             duplicate_exact_rule,
             duplicate_same_day_rule,
             duplicate_cross_claim_rule,
             duplicate_line_rule,
-
             # Coordination of Benefits
             cob_wrong_primary_rule,
             cob_incomplete_rule,
-
             # NCCI Edits
             ncci_ptp_rule,
             ncci_mue_rule,
             ncci_addon_no_primary_rule,
             ncci_mutually_exclusive_rule,
-
             # Modifier Validation
             modifier_invalid_rule,
             modifier_missing_rule,
             modifier_59_abuse_rule,
             modifier_bilateral_rule,
-
             # Place of Service
             pos_invalid_rule,
             pos_provider_mismatch_rule,
-
             # Pricing & Reimbursement
             high_dollar_rule,
             reimbursement_outlier_rule,
@@ -165,7 +157,6 @@ def register_default_rules(registry: RuleRegistry) -> None:
             pricing_units_exceed_rule,
             pricing_drg_mismatch_rule,
             pricing_revenue_code_rule,
-
             # Medical Necessity
             lcd_coverage_rule,
             lcd_age_gender_rule,
@@ -173,33 +164,28 @@ def register_default_rules(registry: RuleRegistry) -> None:
             global_surgery_modifier_rule,
             necessity_experimental_rule,
             necessity_frequency_rule,
-
             # FWA Detection
             oig_exclusion_rule,
             fwa_watchlist_rule,
             fwa_volume_spike_rule,
             fwa_pattern_rule,
             provider_outlier_rule,
-
             # OCE Edits
             oce_revenue_code_rule,
             oce_inpatient_only_rule,
             oce_observation_hours_rule,
-
             # Specialty Rules
             specialty_dental_rule,
             specialty_dme_rule,
             specialty_telehealth_rule,
             specialty_unbundling_rule,
             specialty_incidental_rule,
-
             # Surgical Package
             surgical_global_period_rule,
             surgical_multiple_procedure_rule,
             surgical_assistant_rule,
             surgical_cosurgeon_rule,
             surgical_bilateral_rule,
-
             # Misc
             misc_code_rule,
         ]
