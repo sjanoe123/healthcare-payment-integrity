@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from backend.rules.models import RuleContext, RuleHit
+from backend.utils import parse_flexible_date
 
 
 def necessity_experimental_rule(context: RuleContext) -> list[RuleHit]:
@@ -61,15 +60,7 @@ def necessity_frequency_rule(context: RuleContext) -> list[RuleHit]:
     if not member_id or not frequency_limits:
         return []
 
-    def parse_date(date_str: str) -> datetime | None:
-        for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%Y%m%d"]:
-            try:
-                return datetime.strptime(date_str, fmt)
-            except ValueError:
-                continue
-        return None
-
-    service_date = parse_date(service_date_str)
+    service_date = parse_flexible_date(service_date_str)
     if not service_date:
         return []
 
@@ -134,7 +125,7 @@ def necessity_frequency_rule(context: RuleContext) -> list[RuleHit]:
             )
 
         if min_days_between and code_history.get("last_date"):
-            last_date = parse_date(code_history["last_date"])
+            last_date = parse_flexible_date(code_history["last_date"])
             if last_date:
                 days_since = (service_date - last_date).days
                 if days_since < min_days_between:

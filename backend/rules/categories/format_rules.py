@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 
 from backend.rules.models import RuleContext, RuleHit
+from backend.utils import parse_flexible_date
 
 
 def format_missing_field_rule(context: RuleContext) -> list[RuleHit]:
@@ -74,19 +75,9 @@ def format_invalid_date_rule(context: RuleContext) -> list[RuleHit]:
         "patient", {}
     ).get("dob")
 
-    def parse_date(date_str: str | None) -> datetime | None:
-        if not date_str:
-            return None
-        for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%Y%m%d"]:
-            try:
-                return datetime.strptime(date_str, fmt)
-            except ValueError:
-                continue
-        return None
-
-    service_date = parse_date(service_date_str)
-    received_date = parse_date(received_date_str)
-    patient_dob = parse_date(patient_dob_str)
+    service_date = parse_flexible_date(service_date_str)
+    received_date = parse_flexible_date(received_date_str)
+    patient_dob = parse_flexible_date(patient_dob_str)
     today = datetime.now()
 
     if service_date_str and not service_date:

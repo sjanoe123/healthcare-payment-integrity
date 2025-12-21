@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from backend.rules.models import RuleContext, RuleHit
+from backend.utils import parse_flexible_date
 
 
 def eligibility_inactive_rule(context: RuleContext) -> list[RuleHit]:
@@ -36,17 +35,9 @@ def eligibility_inactive_rule(context: RuleContext) -> list[RuleHit]:
             )
         ]
 
-    def parse_date(date_str: str) -> datetime | None:
-        for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%Y%m%d"]:
-            try:
-                return datetime.strptime(date_str, fmt)
-            except ValueError:
-                continue
-        return None
-
-    service_date = parse_date(service_date_str)
-    eff_date = parse_date(eligibility.get("effective_date", ""))
-    term_date = parse_date(eligibility.get("termination_date", ""))
+    service_date = parse_flexible_date(service_date_str)
+    eff_date = parse_flexible_date(eligibility.get("effective_date", ""))
+    term_date = parse_flexible_date(eligibility.get("termination_date", ""))
 
     if not service_date:
         return []

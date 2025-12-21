@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from backend.rules.models import RuleContext, RuleHit
+from backend.utils import parse_flexible_date
 
 
 def timely_filing_late_rule(context: RuleContext) -> list[RuleHit]:
@@ -18,16 +17,8 @@ def timely_filing_late_rule(context: RuleContext) -> list[RuleHit]:
     if not service_date_str or not received_date_str:
         return []
 
-    def parse_date(date_str: str) -> datetime | None:
-        for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%Y%m%d"]:
-            try:
-                return datetime.strptime(date_str, fmt)
-            except ValueError:
-                continue
-        return None
-
-    service_date = parse_date(service_date_str)
-    received_date = parse_date(received_date_str)
+    service_date = parse_flexible_date(service_date_str)
+    received_date = parse_flexible_date(received_date_str)
 
     if not service_date or not received_date:
         return []
@@ -94,16 +85,8 @@ def timely_filing_no_exception_rule(context: RuleContext) -> list[RuleHit]:
     if not service_date_str or not received_date_str:
         return []
 
-    def parse_date(date_str: str) -> datetime | None:
-        for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%Y%m%d"]:
-            try:
-                return datetime.strptime(date_str, fmt)
-            except ValueError:
-                continue
-        return None
-
-    service_date = parse_date(service_date_str)
-    received_date = parse_date(received_date_str)
+    service_date = parse_flexible_date(service_date_str)
+    received_date = parse_flexible_date(received_date_str)
 
     if not service_date or not received_date:
         return []

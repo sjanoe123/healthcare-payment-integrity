@@ -112,12 +112,46 @@ export function CategoryPieChart({
 }: CategoryPieChartProps) {
   const total = data.reduce((sum, d) => sum + d.value, 0);
 
+  // Generate accessible text description
+  const sortedData = [...data].sort((a, b) => b.value - a.value);
+  const topCategory = sortedData[0];
+  const accessibleDescription = `${title}. Total flags: ${total.toLocaleString()}. ` +
+    `Largest category: ${topCategory?.name} with ${topCategory?.value.toLocaleString()} flags ` +
+    `(${((topCategory?.value / total) * 100).toFixed(1)}%).`;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="bg-navy-800/50 rounded-xl border border-navy-700/50 p-6"
+      role="figure"
+      aria-label={accessibleDescription}
     >
+      {/* Screen reader summary */}
+      <div className="sr-only">
+        <h4>{title}</h4>
+        <p>Total flags: {total.toLocaleString()}</p>
+        <table>
+          <caption>Flag distribution by category</caption>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Count</th>
+              <th>Percentage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedData.map((d, idx) => (
+              <tr key={idx}>
+                <td>{d.name}</td>
+                <td>{d.value.toLocaleString()}</td>
+                <td>{((d.value / total) * 100).toFixed(1)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-white font-semibold text-lg">{title}</h3>
@@ -125,12 +159,12 @@ export function CategoryPieChart({
             Total flags: {total.toLocaleString()}
           </p>
         </div>
-        <div className="p-2 rounded-lg bg-navy-700/50">
+        <div className="p-2 rounded-lg bg-navy-700/50" aria-hidden="true">
           <PieChartIcon className="w-5 h-5 text-kirk" />
         </div>
       </div>
 
-      <div className="h-[280px]">
+      <div className="h-[280px]" aria-hidden="true">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie

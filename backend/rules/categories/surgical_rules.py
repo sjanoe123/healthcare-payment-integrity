@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from backend.rules.models import RuleContext, RuleHit
+from backend.utils import parse_flexible_date
 
 
 def surgical_global_period_rule(context: RuleContext) -> list[RuleHit]:
@@ -18,15 +17,7 @@ def surgical_global_period_rule(context: RuleContext) -> list[RuleHit]:
     if not member_id or not service_date_str:
         return []
 
-    def parse_date(date_str: str) -> datetime | None:
-        for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%Y%m%d"]:
-            try:
-                return datetime.strptime(date_str, fmt)
-            except ValueError:
-                continue
-        return None
-
-    service_date = parse_date(service_date_str)
+    service_date = parse_flexible_date(service_date_str)
     if not service_date:
         return []
 
@@ -47,7 +38,7 @@ def surgical_global_period_rule(context: RuleContext) -> list[RuleHit]:
 
         for surgery in member_surgeries:
             surgery_code = surgery.get("procedure_code")
-            surgery_date = parse_date(surgery.get("service_date", ""))
+            surgery_date = parse_flexible_date(surgery.get("service_date", ""))
             if not surgery_date:
                 continue
 

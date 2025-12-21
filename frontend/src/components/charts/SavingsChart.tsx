@@ -61,12 +61,45 @@ export function SavingsChart({
 }: SavingsChartProps) {
   const totalSavings = data.reduce((sum, d) => sum + d.savings, 0);
 
+  // Generate accessible text description
+  const accessibleDescription = `${title}. Total savings: ${formatCurrency(totalSavings)}. ` +
+    `Data shows monthly savings from ${data[0]?.month || 'start'} to ${data[data.length - 1]?.month || 'end'}. ` +
+    `Highest month: ${data.reduce((max, d) => d.savings > max.savings ? d : max, data[0])?.month} ` +
+    `with ${formatCurrency(Math.max(...data.map(d => d.savings)))}.`;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="bg-navy-800/50 rounded-xl border border-navy-700/50 p-6"
+      role="figure"
+      aria-label={accessibleDescription}
     >
+      {/* Screen reader summary */}
+      <div className="sr-only">
+        <h4>{title}</h4>
+        <p>Total savings: {formatCurrency(totalSavings)}</p>
+        <table>
+          <caption>Monthly savings data</caption>
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Savings</th>
+              {showClaims && <th>Claims</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((d, idx) => (
+              <tr key={idx}>
+                <td>{d.month}</td>
+                <td>{formatCurrency(d.savings)}</td>
+                {showClaims && <td>{d.claims}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-white font-semibold text-lg">{title}</h3>
@@ -74,13 +107,13 @@ export function SavingsChart({
             Total: {formatCurrency(totalSavings)}
           </p>
         </div>
-        <div className="flex items-center gap-2 text-safe bg-safe/10 px-3 py-1.5 rounded-lg">
+        <div className="flex items-center gap-2 text-safe bg-safe/10 px-3 py-1.5 rounded-lg" aria-hidden="true">
           <TrendingUp className="w-4 h-4" />
           <span className="text-sm font-medium">+12.4% YoY</span>
         </div>
       </div>
 
-      <div className="h-[280px]">
+      <div className="h-[280px]" aria-hidden="true">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
             data={data}
