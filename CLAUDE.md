@@ -73,32 +73,52 @@ npm run lint
 ### Backend (FastAPI)
 
 - **Entry point**: `backend/app.py` - FastAPI application with SQLite persistence
-- **Rules engine**: `backend/rules/` - 13 fraud detection rules evaluated via `evaluate_baseline()`
+- **Rules engine**: `backend/rules/` - 54+ fraud detection rules organized by category
   - `engine.py` - Core evaluation logic, aggregates rule hits into `BaselineOutcome`
-  - `ruleset.py` - Individual rule implementations (NCCI, LCD, OIG, etc.)
   - `models.py` - `RuleHit`, `RuleContext`, `BaselineOutcome` dataclasses
   - `registry.py` - Rule registration system
   - `thresholds.py` - Score thresholds and decision modes
+  - `categories/` - Rule implementations organized by category:
+    - `format_rules.py` - Field validation, date/code format checks
+    - `eligibility_rules.py` - Member eligibility, coverage, auth requirements
+    - `timely_filing_rules.py` - Filing deadline validation
+    - `duplicate_rules.py` - Duplicate claim detection
+    - `cob_rules.py` - Coordination of benefits
+    - `ncci_rules.py` - NCCI PTP, MUE, add-on code edits
+    - `modifier_rules.py` - Modifier validation and abuse detection
+    - `pos_rules.py` - Place of service validation
+    - `pricing_rules.py` - Fee schedule and pricing checks
+    - `necessity_rules.py` - Medical necessity and frequency limits
+    - `fwa_rules.py` - Fraud, waste, abuse patterns
+    - `oce_rules.py` - Outpatient code editor rules
+    - `specialty_rules.py` - Specialty-specific rules (dental, DME, telehealth)
+    - `surgical_rules.py` - Global period, multiple procedure rules
+    - `coverage_rules.py` - LCD/NCD coverage validation
+- **Shared utilities**: `backend/utils/`
+  - `date_parser.py` - Flexible date parsing with validation
 - **RAG**: `backend/rag/chroma_store.py` - ChromaDB wrapper for policy document retrieval
-- **Claude integration**: `backend/claude_client.py` - Generates fraud explanations using Claude Haiku
-- **Kirk config**: `backend/kirk_config.py` - Kirk AI assistant personality and prompts
+- **Claude integration**: `backend/claude_client.py` - Kirk AI analysis with structured JSON responses
+- **Kirk config**: `backend/kirk_config.py` - Kirk AI personality, prompts, and category-specific guidance
 
 ### Frontend (React + TypeScript)
 
 - **Entry point**: `frontend/src/main.tsx` - React app with React Query
 - **Pages**: `frontend/src/pages/`
-  - `Dashboard.tsx` - Overview with stats and system status
+  - `Dashboard.tsx` - Overview with stats, charts (Recharts), and system status
   - `AnalyzeClaim.tsx` - Claim submission and analysis
   - `ClaimHistory.tsx` - List of analyzed claims with pagination
   - `PolicySearch.tsx` - RAG-powered policy document search
 - **Components**: `frontend/src/components/`
-  - `kirk/` - Kirk AI avatar, messages, thinking animation
+  - `kirk/` - Kirk AI avatar, messages, thinking animation, follow-up chat
   - `analysis/` - FraudScoreGauge, ResultsDisplay
-  - `layout/` - AppLayout, Sidebar, Header
+  - `layout/` - AppLayout, Sidebar (with mobile drawer), Header
+  - `charts/` - SavingsChart, CategoryPieChart with accessibility support
 - **API**: `frontend/src/api/`
   - `client.ts` - Axios client with interceptors
   - `hooks/` - React Query hooks (useStats, useHealth, useJobs, etc.)
-  - `types.ts` - TypeScript types and utility functions
+  - `types.ts` - TypeScript types including Kirk structured response interfaces
+- **Utilities**: `frontend/src/utils/`
+  - `mockData.ts` - Demo mode data with dynamic date generation
 
 ### API Endpoints
 
@@ -132,11 +152,25 @@ Stored in `data/` directory as JSON files:
 
 ### Fraud Detection Rules
 
-Rules return `RuleHit` objects with weights that adjust the fraud score:
-- **NCCI rules**: `NCCI_PTP` (procedure conflicts), `NCCI_MUE` (quantity limits)
-- **Coverage rules**: `LCD_MISMATCH`, `LCD_AGE_CONFLICT`, `LCD_GENDER_CONFLICT`, `LCD_EXPERIMENTAL`
-- **Provider rules**: `OIG_EXCLUSION`, `FWA_WATCH`, high-risk specialty flags
-- **Financial rules**: `HIGH_DOLLAR`, `REIMB_OUTLIER`, `DUPLICATE_LINE`, `UTIL_OUTLIER`
+Rules return `RuleHit` objects with weights that adjust the fraud score. Organized by category:
+
+| Category | Rules | Examples |
+|----------|-------|----------|
+| Format | 3 | `FORMAT_MISSING_FIELD`, `FORMAT_INVALID_DATE`, `FORMAT_INVALID_CODE` |
+| Eligibility | 4 | `ELIGIBILITY_INACTIVE`, `ELIGIBILITY_NON_COVERED`, `ELIGIBILITY_LIMIT_EXCEEDED`, `ELIGIBILITY_NO_AUTH` |
+| Timely Filing | 3 | `TIMELY_FILING_LATE`, `TIMELY_FILING_WARNING`, `TIMELY_FILING_NO_EXCEPTION` |
+| Duplicate | 2 | `DUPLICATE_EXACT`, `DUPLICATE_LINE` |
+| COB | 2 | `COB_WRONG_PRIMARY`, `COB_INCOMPLETE` |
+| NCCI | 4 | `NCCI_PTP`, `NCCI_MUE`, `NCCI_ADDON_NO_PRIMARY`, `NCCI_MUTUALLY_EXCLUSIVE` |
+| Modifier | 4 | `MODIFIER_INVALID`, `MODIFIER_MISSING`, `MODIFIER_59_ABUSE`, `MODIFIER_BILATERAL_CONFLICT` |
+| POS | 2 | `POS_INVALID`, `POS_PROVIDER_MISMATCH` |
+| Pricing | 2 | `PRICING_EXCEEDS_FEE`, `PRICING_UNITS_EXCEED` |
+| Necessity | 3 | `NECESSITY_EXPERIMENTAL`, `NECESSITY_FREQUENCY_EXCEEDED`, `NECESSITY_FREQUENCY_TOO_SOON` |
+| FWA | 3 | `OIG_EXCLUSION`, `FWA_WATCH`, `FWA_VOLUME_SPIKE` |
+| OCE | 1 | `OCE_INPATIENT_ONLY` |
+| Coverage | 4 | `LCD_MISMATCH`, `LCD_AGE_CONFLICT`, `LCD_GENDER_CONFLICT`, `LCD_EXPERIMENTAL` |
+| Specialty | 2 | `SPECIALTY_TELEHEALTH_NOT_ELIGIBLE`, `SPECIALTY_UNBUNDLING` |
+| Surgical | 5 | `SURGICAL_GLOBAL_PERIOD`, `SURGICAL_MULTIPLE_NO_51`, `SURGICAL_ASSISTANT_NOT_ALLOWED`, `SURGICAL_COSURGEON_NOT_ALLOWED`, `SURGICAL_BILATERAL_*` |
 
 ## CI/CD
 
@@ -186,6 +220,7 @@ Rules return `RuleHit` objects with weights that adjust the fraud score:
 - Vite 7
 - TailwindCSS 3
 - TanStack Query (React Query)
+- Recharts (dashboard charts)
 - Framer Motion
 - Axios
 - Vitest + Testing Library
@@ -196,8 +231,63 @@ Rules return `RuleHit` objects with weights that adjust the fraud score:
 |------|---------|
 | `backend/app.py` | FastAPI routes and middleware |
 | `backend/rules/engine.py` | Fraud scoring logic |
-| `backend/kirk_config.py` | Kirk AI personality |
+| `backend/rules/categories/` | Rule implementations by category |
+| `backend/utils/date_parser.py` | Shared date parsing utility |
+| `backend/claude_client.py` | Kirk AI integration with structured responses |
+| `backend/kirk_config.py` | Kirk AI personality and prompts |
 | `backend/railway.json` | Railway deployment config |
 | `frontend/src/App.tsx` | React router setup |
 | `frontend/src/api/client.ts` | API client with error handling |
+| `frontend/src/api/types.ts` | TypeScript types including Kirk response interfaces |
+| `frontend/src/components/kirk/KirkChat.tsx` | Kirk chat with follow-up support |
+| `frontend/src/components/charts/` | Dashboard charts (SavingsChart, CategoryPieChart) |
+| `frontend/src/utils/mockData.ts` | Demo mode data generation |
 | `frontend/vercel.json` | Vercel SPA routing config |
+
+## Kirk AI Features
+
+Kirk is the AI-powered claims analysis assistant using Claude Sonnet 4.5.
+
+### Structured JSON Response Format
+
+Kirk responds with structured JSON for consistent parsing:
+
+```json
+{
+  "risk_summary": "2-3 sentence executive summary",
+  "severity": "CRITICAL|HIGH|MEDIUM|LOW",
+  "chain_of_thought": "Step-by-step reasoning",
+  "findings": [
+    {
+      "category": "ncci|coverage|provider|financial|format|modifier|eligibility",
+      "issue": "Specific finding",
+      "evidence": "Supporting detail",
+      "regulation": "CFR/CMS citation",
+      "severity": "CRITICAL|HIGH|MEDIUM|LOW"
+    }
+  ],
+  "recommendations": [
+    {"priority": 1, "action": "Recommended action", "rationale": "Why"}
+  ],
+  "confidence": 0.85
+}
+```
+
+### Category-Specific Analysis
+
+Kirk provides focused analysis based on the primary rule category:
+- `ncci` - NCCI column 1/2 relationships, modifier indicators, MUE limits
+- `coverage` - LCD/NCD compliance, diagnosis support, frequency limits
+- `provider` - OIG exclusions, credentials, billing patterns
+- `financial` - Fee schedule benchmarks, outlier detection, unbundling
+- `modifier` - Modifier validity, 59/X usage, bilateral conflicts
+- `eligibility` - Member coverage, benefit limits, prior authorization
+
+### Follow-up Conversations
+
+KirkChat supports follow-up questions with context-aware responses about:
+- Why specific flags were raised
+- Recommended next steps
+- NCCI/PTP/MUE details
+- Appeal and denial guidance
+- Provider and OIG concerns
