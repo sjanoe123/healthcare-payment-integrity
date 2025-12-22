@@ -26,11 +26,15 @@ logger = logging.getLogger(__name__)
 
 # Claude Haiku 4.5 for cost-effective reranking
 # ~25x cheaper than Sonnet ($0.25/M vs $3/M input)
-RERANKER_MODEL = "claude-haiku-4-5-20250514"
+RERANKER_MODEL = os.getenv("RERANKER_MODEL", "claude-haiku-4-5-20250514")
 
-# Confidence thresholds for routing decisions
-HIGH_CONFIDENCE_THRESHOLD = 85  # Auto-accept
-LOW_CONFIDENCE_THRESHOLD = 50  # Route to human review
+# Confidence thresholds for routing decisions (configurable via env vars)
+HIGH_CONFIDENCE_THRESHOLD = int(
+    os.getenv("MAPPING_HIGH_CONFIDENCE", "85")
+)  # Auto-accept
+LOW_CONFIDENCE_THRESHOLD = int(
+    os.getenv("MAPPING_LOW_CONFIDENCE", "50")
+)  # Route to human review
 
 
 @dataclass

@@ -13,9 +13,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from rules import evaluate_baseline, ThresholdConfig
 from rag import get_store
@@ -124,6 +127,13 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Rate limiting configuration
+# LLM endpoints: 10 requests/minute (costly API calls)
+# Standard endpoints: 100 requests/minute
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS configuration
 CORS_ORIGINS = [
@@ -630,6 +640,14 @@ class BatchRerankerRequest(BaseModel):
 
     mappings: list[dict[str, Any]]
 
+    @field_validator("mappings")
+    @classmethod
+    def validate_batch_size(cls, v: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Validate batch size to prevent excessive LLM API calls."""
+        if len(v) > 20:
+            raise ValueError("Batch size too large. Maximum 20 mappings per request.")
+        return v
+
 
 @app.post("/api/mappings/preview/semantic")
 async def preview_semantic_mapping(request: SemanticPreviewRequest):
@@ -683,7 +701,8 @@ async def preview_semantic_mapping(request: SemanticPreviewRequest):
 
 
 @app.post("/api/mappings/rerank")
-async def rerank_field_mapping(request: RerankerRequest):
+@limiter.limit("10/minute")
+async def rerank_field_mapping(request: Request, rerank_request: RerankerRequest):
     """Rerank semantic mapping candidates using Claude Haiku 4.5.
 
     This endpoint takes embedding candidates and uses LLM intelligence to
@@ -698,13 +717,13 @@ async def rerank_field_mapping(request: RerankerRequest):
             c.get("field") or c.get("canonical_field"),
             c.get("score") or c.get("similarity", 0.0),
         )
-        for c in request.candidates
+        for c in rerank_request.candidates
     ]
 
     result = rerank_mapping(
-        source_field=request.source_field,
+        source_field=rerank_request.source_field,
         candidates=candidates,
-        sample_values=request.sample_values,
+        sample_values=rerank_request.sample_values,
     )
 
     if result is None:
@@ -717,11 +736,13 @@ async def rerank_field_mapping(request: RerankerRequest):
 
 
 @app.post("/api/mappings/rerank/batch")
-async def batch_rerank_mappings(request: BatchRerankerRequest):
+@limiter.limit("5/minute")
+async def batch_rerank_mappings(request: Request, batch_request: BatchRerankerRequest):
     """Batch rerank multiple field mappings.
 
     Process multiple field mappings in a single request. Each mapping
     needs a source_field, candidates list, and optional sample_values.
+    Rate limited to 5 requests/minute due to multiple LLM calls per request.
     """
     from mapping.reranker import get_reranker
 
@@ -729,7 +750,7 @@ async def batch_rerank_mappings(request: BatchRerankerRequest):
 
     # Convert all mappings to internal format
     internal_mappings = []
-    for mapping in request.mappings:
+    for mapping in batch_request.mappings:
         candidates = [
             (
                 c.get("field") or c.get("canonical_field"),
@@ -758,12 +779,13 @@ async def batch_rerank_mappings(request: BatchRerankerRequest):
 
 
 @app.post("/api/mappings/smart")
-async def smart_field_mapping(request: SemanticMatchRequest):
+@limiter.limit("10/minute")
+async def smart_field_mapping(request: Request, smart_request: SemanticMatchRequest):
     """Smart field mapping: Embedding + LLM reranking pipeline.
 
     This endpoint combines PubMedBERT embeddings with Claude Haiku reranking
     for high-confidence field mapping. Use this for automated mapping with
-    confidence scoring.
+    confidence scoring. Rate limited to 10 requests/minute.
     """
     try:
         from mapping.embeddings import get_embedding_matcher
@@ -778,12 +800,12 @@ async def smart_field_mapping(request: SemanticMatchRequest):
     reranker = get_reranker()
 
     results = []
-    for source_field in request.source_fields:
+    for source_field in smart_request.source_fields:
         # Step 1: Get embedding candidates
         candidates = matcher.find_candidates(
             source_field,
-            top_k=request.top_k,
-            min_similarity=request.min_similarity,
+            top_k=smart_request.top_k,
+            min_similarity=smart_request.min_similarity,
         )
 
         if not candidates:

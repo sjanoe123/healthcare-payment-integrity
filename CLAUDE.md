@@ -355,6 +355,34 @@ For fields that don't match via aliases, the system uses **PubMedBERT embeddings
 
 Configure via `EMBEDDING_MODEL` environment variable.
 
+### Model Download & Caching Strategy
+
+**First-time model loading:**
+- PubMedBERT model (~420MB) downloads automatically on first use
+- Download takes ~1-2 minutes depending on network speed
+- Model is cached in `~/.cache/huggingface/hub/` for subsequent uses
+
+**Production deployment:**
+```bash
+# Pre-load model on startup to avoid first-request latency
+PRELOAD_EMBEDDINGS=true
+
+# Model caching is in-memory (LRU cache with 1000 entries)
+# Embeddings for canonical fields are pre-computed on initialization
+```
+
+**Performance considerations:**
+- First request: ~2-3s (model loading + embedding computation)
+- Subsequent requests: ~50-100ms (cached embeddings)
+- Memory usage: ~420MB for PubMedBERT model in RAM
+
+**Cost estimation (LLM Reranking):**
+| Operation | Model | Cost per 1K fields |
+|-----------|-------|-------------------|
+| Single rerank | Haiku 4.5 | ~$0.05 |
+| Batch rerank (20) | Haiku 4.5 | ~$0.02 |
+| Smart mapping | Haiku 4.5 | ~$0.05 |
+
 ### LLM Reranking (Confidence Scoring)
 
 The system uses **Claude Haiku 4.5** to rerank embedding candidates and provide confidence scores:
@@ -366,6 +394,20 @@ The system uses **Claude Haiku 4.5** to rerank embedding candidates and provide 
 | <50% | Flag as low confidence |
 
 Haiku is ~25x cheaper than Sonnet ($0.25/M vs $3/M input) while providing reliable structured selection.
+
+**Configurable thresholds:**
+```bash
+MAPPING_HIGH_CONFIDENCE=85   # Auto-accept threshold (default: 85)
+MAPPING_LOW_CONFIDENCE=50    # Low confidence threshold (default: 50)
+RERANKER_MODEL=claude-haiku-4-5-20250514  # LLM model for reranking
+```
+
+**Rate limits:**
+| Endpoint | Limit | Reason |
+|----------|-------|--------|
+| `/api/mappings/rerank` | 10/minute | Single LLM call |
+| `/api/mappings/rerank/batch` | 5/minute | Multiple LLM calls (max 20/batch) |
+| `/api/mappings/smart` | 10/minute | Embedding + LLM pipeline |
 
 ### API Usage
 

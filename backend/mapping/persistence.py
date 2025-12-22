@@ -492,6 +492,98 @@ class MappingStore:
                 for row in cursor.fetchall()
             ]
 
+    def archive_mapping(
+        self,
+        mapping_id: str,
+        archived_by: str,
+    ) -> SchemaMapping | None:
+        """Archive a mapping.
+
+        Args:
+            mapping_id: The mapping's ID
+            archived_by: User archiving the mapping
+
+        Returns:
+            Updated SchemaMapping or None if not found
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE schema_mappings
+                SET status = ?
+                WHERE id = ?
+                """,
+                (MappingStatus.ARCHIVED.value, mapping_id),
+            )
+            conn.commit()
+
+            if cursor.rowcount == 0:
+                return None
+
+        self._log_action(mapping_id, MappingAction.ARCHIVED, archived_by, {})
+        logger.info(f"Archived mapping {mapping_id} by {archived_by}")
+
+        return self.get_mapping_by_id(mapping_id)
+
+    def archive_old_versions(
+        self,
+        source_schema_id: str,
+        keep_versions: int = 3,
+        archived_by: str = "system",
+    ) -> int:
+        """Archive old versions of a schema mapping, keeping only the latest N versions.
+
+        Args:
+            source_schema_id: The source schema ID
+            keep_versions: Number of latest versions to keep (default: 3)
+            archived_by: User performing the archive
+
+        Returns:
+            Number of mappings archived
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            # Get all non-archived mappings for this schema, ordered by version
+            cursor.execute(
+                """
+                SELECT id, source_schema_version FROM schema_mappings
+                WHERE source_schema_id = ? AND status != ?
+                ORDER BY source_schema_version DESC
+                """,
+                (source_schema_id, MappingStatus.ARCHIVED.value),
+            )
+            rows = cursor.fetchall()
+
+            # Archive all but the latest N versions
+            to_archive = rows[keep_versions:]
+            archived_count = 0
+
+            for mapping_id, version in to_archive:
+                cursor.execute(
+                    """
+                    UPDATE schema_mappings
+                    SET status = ?
+                    WHERE id = ?
+                    """,
+                    (MappingStatus.ARCHIVED.value, mapping_id),
+                )
+                self._log_action(
+                    mapping_id,
+                    MappingAction.ARCHIVED,
+                    archived_by,
+                    {"reason": "auto_archive_old_version", "version": version},
+                )
+                archived_count += 1
+
+            conn.commit()
+
+        if archived_count > 0:
+            logger.info(f"Archived {archived_count} old versions of {source_schema_id}")
+
+        return archived_count
+
     def _get_next_version(self, source_schema_id: str) -> int:
         """Get the next version number for a source schema."""
         with sqlite3.connect(self.db_path) as conn:

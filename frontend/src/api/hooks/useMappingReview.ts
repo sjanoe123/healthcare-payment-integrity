@@ -101,3 +101,62 @@ export function useMappingQueue(status: 'pending' | 'approved' | 'rejected' | 'a
     staleTime: 30000,
   });
 }
+
+export interface SaveMappingRequest {
+  source_schema_id: string;
+  field_mappings: Array<{
+    source_field: string;
+    target_field: string;
+    confidence: number;
+    method: string;
+    reasoning?: string;
+  }>;
+  created_by?: string;
+}
+
+export function useSaveMapping() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: SaveMappingRequest) => {
+      const response = await api.post<StoredMapping>('/api/mappings/save', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mappings', 'stored'] });
+    },
+  });
+}
+
+export function useApproveMapping() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ mappingId, approvedBy }: { mappingId: string; approvedBy: string }) => {
+      const response = await api.post<StoredMapping>(`/api/mappings/stored/${mappingId}/approve`, {
+        approved_by: approvedBy,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mappings', 'stored'] });
+    },
+  });
+}
+
+export function useRejectMapping() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ mappingId, rejectedBy, reason }: { mappingId: string; rejectedBy: string; reason?: string }) => {
+      const response = await api.post<StoredMapping>(`/api/mappings/stored/${mappingId}/reject`, {
+        rejected_by: rejectedBy,
+        reason,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mappings', 'stored'] });
+    },
+  });
+}
