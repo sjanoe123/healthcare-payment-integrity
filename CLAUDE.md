@@ -96,6 +96,11 @@ npm run lint
     - `coverage_rules.py` - LCD/NCD coverage validation
 - **Shared utilities**: `backend/utils/`
   - `date_parser.py` - Flexible date parsing with validation
+- **Field mapping**: `backend/mapping/` - OMOP CDM-based schema normalization
+  - `omop_schema.py` - Canonical OMOP CDM schema with 40+ field aliases
+  - `mapper.py` - FieldMapper class for transforming claims to canonical format
+  - `embeddings.py` - PubMedBERT-based semantic field matching for unknown fields
+  - `templates/` - Pre-built mappings for EDI 837P, 837I, and CSV formats
 - **RAG**: `backend/rag/chroma_store.py` - ChromaDB wrapper for policy document retrieval
 - **Claude integration**: `backend/claude_client.py` - Kirk AI analysis with structured JSON responses
 - **Kirk config**: `backend/kirk_config.py` - Kirk AI personality, prompts, and category-specific guidance
@@ -126,20 +131,36 @@ npm run lint
 |--------|----------|-------------|
 | GET | `/health` | Health check with RAG document count |
 | POST | `/api/upload` | Submit claim, create job |
-| POST | `/api/analyze/{job_id}` | Run fraud analysis on claim |
+| POST | `/api/analyze/{job_id}?mapping_template=` | Run fraud analysis with optional field mapping |
 | GET | `/api/results/{job_id}` | Get analysis results |
 | GET | `/api/jobs?limit=100&offset=0` | List analyzed claims (paginated) |
 | GET | `/api/stats` | Dashboard statistics |
 | POST | `/api/search` | RAG policy document search |
+| GET | `/api/mappings/templates` | List available field mapping templates |
+| GET | `/api/mappings/schema` | Get canonical OMOP CDM schema definition |
+| POST | `/api/mappings/preview` | Preview field mapping transformation |
+| POST | `/api/mappings/semantic` | Find semantic matches for unknown fields (PubMedBERT) |
+| POST | `/api/mappings/preview/semantic` | Preview mapping with semantic matching enabled |
+| POST | `/api/mappings/rerank` | LLM rerank candidates with confidence scoring (Haiku) |
+| POST | `/api/mappings/rerank/batch` | Batch rerank multiple field mappings |
+| POST | `/api/mappings/smart` | Smart mapping: embeddings + LLM reranking pipeline |
+| POST | `/api/mappings/save` | Save mapping with versioning |
+| GET | `/api/mappings/stored` | List stored mappings (paginated, filter by status) |
+| GET | `/api/mappings/stored/{mapping_id}` | Get mapping by ID |
+| GET | `/api/mappings/stored/schema/{source_schema_id}` | Get mapping by source schema |
+| POST | `/api/mappings/stored/{mapping_id}/approve` | Approve a pending mapping |
+| POST | `/api/mappings/stored/{mapping_id}/reject` | Reject a pending mapping |
+| GET | `/api/mappings/stored/{mapping_id}/audit` | Get audit trail for mapping |
 
 ### Data Flow
 
 1. Claim submitted via POST `/api/upload` -> creates job
 2. Analysis triggered via POST `/api/analyze/{job_id}` with claim data
-3. Rules engine evaluates claim against datasets (NCCI, LCD, MPFS, OIG)
-4. RAG searches relevant policy documents from ChromaDB
-5. Claude generates explanation from rule hits + RAG context
-6. Results stored in SQLite, returned as `AnalysisResult`
+3. **Field mapper** normalizes claim to OMOP CDM schema (alias matching + templates)
+4. Rules engine evaluates normalized claim against datasets (NCCI, LCD, MPFS, OIG)
+5. RAG searches relevant policy documents from ChromaDB
+6. Claude generates explanation from rule hits + RAG context
+7. Results stored in SQLite, returned as `AnalysisResult`
 
 ### Reference Datasets
 
@@ -214,6 +235,8 @@ Rules return `RuleHit` objects with weights that adjust the fraud score. Organiz
 - SQLite (embedded)
 - ChromaDB (embedded vector store)
 - Anthropic Claude API
+- sentence-transformers (PubMedBERT embeddings)
+- scikit-learn (cosine similarity)
 
 ### Frontend
 - React 19 + TypeScript
@@ -232,6 +255,12 @@ Rules return `RuleHit` objects with weights that adjust the fraud score. Organiz
 | `backend/app.py` | FastAPI routes and middleware |
 | `backend/rules/engine.py` | Fraud scoring logic |
 | `backend/rules/categories/` | Rule implementations by category |
+| `backend/mapping/omop_schema.py` | OMOP CDM canonical schema with aliases |
+| `backend/mapping/mapper.py` | Field mapping transformation logic |
+| `backend/mapping/embeddings.py` | PubMedBERT semantic field matching |
+| `backend/mapping/reranker.py` | Claude Haiku LLM reranking for confidence scoring |
+| `backend/mapping/persistence.py` | SQLite storage for mapping decisions with audit trail |
+| `backend/mapping/templates/` | EDI 837P/I and CSV mapping templates |
 | `backend/utils/date_parser.py` | Shared date parsing utility |
 | `backend/claude_client.py` | Kirk AI integration with structured responses |
 | `backend/kirk_config.py` | Kirk AI personality and prompts |
@@ -291,3 +320,170 @@ KirkChat supports follow-up questions with context-aware responses about:
 - NCCI/PTP/MUE details
 - Appeal and denial guidance
 - Provider and OIG concerns
+
+## Field Mapping (OMOP CDM)
+
+The system normalizes incoming claims from various formats to a canonical OMOP CDM schema.
+
+### Supported Input Formats
+
+| Format | Template | Description |
+|--------|----------|-------------|
+| EDI 837P | `edi_837p` | Professional claims (CMS-1500) |
+| EDI 837I | `edi_837i` | Institutional claims (UB-04) |
+| CSV | `csv` | Generic CSV field naming conventions |
+| Custom | - | Alias-based automatic mapping |
+
+### Canonical Field Examples
+
+| Source Field | OMOP Canonical | Notes |
+|--------------|---------------|-------|
+| `patient_id`, `member_id`, `subscriber_id` | `person_id` | Auto-detected via aliases |
+| `dos`, `date_of_service`, `service_date` | `visit_start_date` | Date normalization |
+| `rendering_npi`, `billing_npi`, `provider_npi` | `npi` | Provider identifier |
+| `cpt_code`, `hcpcs_code`, `procedure_code` | `procedure_source_value` | Procedure codes |
+
+### Semantic Field Matching
+
+For fields that don't match via aliases, the system uses **PubMedBERT embeddings** for semantic similarity:
+
+| Model | Purpose |
+|-------|---------|
+| `pritamdeka/S-PubMedBert-MS-MARCO` | Default - Healthcare terminology |
+| `dmis-lab/biobert-base-cased-v1.2` | Alternative biomedical model |
+| `all-MiniLM-L6-v2` | Fast general-purpose fallback |
+
+Configure via `EMBEDDING_MODEL` environment variable.
+
+### LLM Reranking (Confidence Scoring)
+
+The system uses **Claude Haiku 4.5** to rerank embedding candidates and provide confidence scores:
+
+| Confidence | Action |
+|------------|--------|
+| ≥85% | Auto-accept mapping |
+| 50-84% | Route to human review |
+| <50% | Flag as low confidence |
+
+Haiku is ~25x cheaper than Sonnet ($0.25/M vs $3/M input) while providing reliable structured selection.
+
+### API Usage
+
+```bash
+# Analyze with default alias mapping
+POST /api/analyze/{job_id}
+
+# Analyze with EDI 837P template
+POST /api/analyze/{job_id}?mapping_template=edi_837p
+
+# Preview mapping transformation
+POST /api/mappings/preview
+{
+  "sample_data": {"patient_id": "P123", "dos": "2024-01-15"},
+  "template": "csv"
+}
+
+# Find semantic matches for unknown fields
+POST /api/mappings/semantic
+{
+  "fields": ["PatientMRN", "MemberBirthDate", "RenderingProviderNPI"],
+  "top_k": 5,
+  "min_similarity": 0.5
+}
+
+# Preview with semantic matching enabled
+POST /api/mappings/preview/semantic
+{
+  "sample_data": {"PatientMRN": "P123", "MemberBirthDate": "1980-05-15"},
+  "semantic_threshold": 0.7
+}
+
+# LLM reranking for confidence scoring
+POST /api/mappings/rerank
+{
+  "source_field": "PatientMRN",
+  "candidates": [{"field": "person_id", "score": 0.85}],
+  "sample_values": ["MRN-123", "MRN-456"]
+}
+
+# Smart mapping: Embeddings + LLM reranking pipeline
+POST /api/mappings/smart
+{
+  "source_fields": ["PatientMRN", "MemberDOB"],
+  "top_k": 5,
+  "min_similarity": 0.5
+}
+
+# Get canonical schema
+GET /api/mappings/schema
+```
+
+### Python Usage
+
+```python
+from mapping import normalize_claim, normalize_claim_with_review, FieldMapper
+
+# Basic normalization (alias matching only)
+normalized = normalize_claim(raw_claim)
+
+# With semantic matching for unknown fields
+normalized = normalize_claim(raw_claim, use_semantic_matching=True, semantic_threshold=0.7)
+
+# Get semantic matches for review
+normalized, semantic_matches = normalize_claim_with_review(raw_claim)
+# semantic_matches: {"PatientMRN": ("person_id", 0.92), ...}
+
+# Advanced usage with FieldMapper
+mapper = FieldMapper(
+    custom_mapping={"MyCustomField": "person_id"},
+    use_semantic_matching=True,
+    semantic_threshold=0.8
+)
+result = mapper.transform(raw_claim)
+matches = mapper.get_semantic_matches()  # For human review
+```
+
+### Mapping Persistence & Versioning
+
+Field mappings can be saved for audit trails and continuous improvement:
+
+```bash
+# Save a new mapping
+POST /api/mappings/save
+{
+  "source_schema_id": "payer_format_a",
+  "field_mappings": [
+    {"source_field": "MemberID", "target_field": "person_id", "confidence": 0.95, "method": "alias"}
+  ],
+  "created_by": "user@example.com"
+}
+
+# List pending mappings
+GET /api/mappings/stored?status=pending&limit=50
+
+# Approve a mapping
+POST /api/mappings/stored/{mapping_id}/approve
+{"approved_by": "reviewer@example.com"}
+
+# Get audit trail
+GET /api/mappings/stored/{mapping_id}/audit
+```
+
+```python
+from mapping import get_mapping_store, MappingStatus
+
+store = get_mapping_store()
+
+# Save mapping
+mapping = store.save_mapping(
+    source_schema_id="payer_format_a",
+    field_mappings=[{"source_field": "MemberID", "target_field": "person_id", "confidence": 0.95}],
+    created_by="system"
+)
+
+# Approve and track
+store.approve_mapping(mapping.id, approved_by="reviewer@example.com")
+
+# Get audit history
+audit = store.get_audit_log(mapping.id)
+```
