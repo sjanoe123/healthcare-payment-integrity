@@ -122,6 +122,9 @@ class FieldMapper:
 
         # Strict mode validation
         if self.strict_mode:
+            from .omop_schema import REQUIRED_FIELDS
+
+            logger.debug(f"Validating required fields: {REQUIRED_FIELDS}")
             self._validate_required_fields(normalized)
 
         return normalized
@@ -235,7 +238,9 @@ class FieldMapper:
             if isinstance(value, dict):
                 # Recursively flatten nested dicts
                 items.extend(self._flatten_dict(value, new_key, sep).items())
-                # Also add the leaf values directly
+                # Also add leaf values without parent prefix for alias matching.
+                # This allows matching both 'member.age' and 'age' for nested data,
+                # enabling alias lookup on the leaf field name alone.
                 for nested_key, nested_value in value.items():
                     if not isinstance(nested_value, dict | list):
                         items.append((nested_key, nested_value))
@@ -245,7 +250,9 @@ class FieldMapper:
                 items.append((new_key, value))
             else:
                 items.append((new_key, value))
-                # Also add without parent prefix for alias matching
+                # Also add without parent prefix for alias matching.
+                # This allows matching both 'claim.service_date' and 'service_date',
+                # enabling alias lookup on the leaf field name alone.
                 if parent_key:
                     items.append((key, value))
 

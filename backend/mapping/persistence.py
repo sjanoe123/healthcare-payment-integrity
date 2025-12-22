@@ -139,6 +139,8 @@ class MappingStore:
     def _init_tables(self) -> None:
         """Initialize database tables if they don't exist."""
         with sqlite3.connect(self.db_path) as conn:
+            # Enable WAL mode for better concurrent read performance
+            conn.execute("PRAGMA journal_mode=WAL")
             cursor = conn.cursor()
 
             # Schema mappings table

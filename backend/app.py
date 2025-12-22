@@ -15,7 +15,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from rules import evaluate_baseline, ThresholdConfig
 from rag import get_store
@@ -99,6 +99,22 @@ async def lifespan(app: FastAPI):
     init_db()
     # Pre-load ChromaDB
     get_store()
+
+    # Pre-load embedding model if configured (reduces first-request latency)
+    if os.getenv("PRELOAD_EMBEDDINGS", "false").lower() == "true":
+        try:
+            from mapping.embeddings import get_embedding_matcher
+
+            logger.info("Pre-loading embedding model...")
+            get_embedding_matcher()
+            logger.info("Embedding model loaded successfully")
+        except ImportError:
+            logger.warning(
+                "Embedding model preload skipped: sentence-transformers not installed"
+            )
+        except Exception as e:
+            logger.warning(f"Embedding model preload failed: {e}")
+
     yield
 
 
@@ -534,6 +550,14 @@ class SemanticMatchRequest(BaseModel):
     source_fields: list[str]
     top_k: int = 5
     min_similarity: float = 0.3
+
+    @field_validator("source_fields")
+    @classmethod
+    def validate_source_fields_length(cls, v: list[str]) -> list[str]:
+        """Validate that source_fields doesn't exceed maximum length."""
+        if len(v) > 100:
+            raise ValueError("Too many fields. Maximum 100 per request.")
+        return v
 
 
 @app.post("/api/mappings/semantic")

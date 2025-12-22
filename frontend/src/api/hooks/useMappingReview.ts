@@ -70,13 +70,33 @@ export function useRerank() {
   });
 }
 
-export function useMappingQueue() {
-  return useQuery<MappingReviewItem[]>({
-    queryKey: ['mappings', 'queue'],
+export interface StoredMapping {
+  id: string;
+  source_schema_id: string;
+  source_schema_version: number;
+  target_schema: string;
+  field_mappings: Array<{
+    source_field: string;
+    target_field: string;
+    confidence: number;
+    method: string;
+    reasoning?: string;
+  }>;
+  status: 'pending' | 'approved' | 'rejected' | 'archived';
+  created_at: string;
+  created_by?: string;
+  approved_at?: string;
+  approved_by?: string;
+}
+
+export function useMappingQueue(status: 'pending' | 'approved' | 'rejected' | 'archived' = 'pending') {
+  return useQuery<StoredMapping[]>({
+    queryKey: ['mappings', 'stored', status],
     queryFn: async () => {
-      // This would fetch from a backend endpoint if available
-      // For now, return empty array as placeholder
-      return [];
+      const response = await api.get<{ mappings: StoredMapping[] }>('/api/mappings/stored', {
+        params: { status, limit: 50 },
+      });
+      return response.data.mappings;
     },
     staleTime: 30000,
   });
