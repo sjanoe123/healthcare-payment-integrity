@@ -10,7 +10,7 @@ Healthcare Payment Integrity Prototype - a fraud detection system for healthcare
 
 | Environment | URL | Platform |
 |-------------|-----|----------|
-| Frontend | https://healthcare-payment-integrity.vercel.app | Vercel |
+| Frontend | https://healthcare-payment-integrity-glhr.vercel.app | Vercel |
 | Backend API | https://healthcare-payment-integrity-api-production.up.railway.app | Railway |
 
 ## Common Commands
