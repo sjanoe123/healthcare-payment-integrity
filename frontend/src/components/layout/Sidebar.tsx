@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  GitMerge,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect } from 'react';
@@ -38,6 +39,12 @@ const navItems = [
     icon: BookOpen,
     label: 'Policy Search',
     description: 'RAG knowledge base',
+  },
+  {
+    to: '/mappings',
+    icon: GitMerge,
+    label: 'Field Mappings',
+    description: 'Schema mapping review',
   },
 ];
 

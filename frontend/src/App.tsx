@@ -9,6 +9,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const AnalyzeClaim = lazy(() => import('./pages/AnalyzeClaim'));
 const ClaimHistory = lazy(() => import('./pages/ClaimHistory'));
 const PolicySearch = lazy(() => import('./pages/PolicySearch'));
+const MappingReview = lazy(() => import('./pages/MappingReview'));
 
 /**
  * React Query client configuration
@@ -55,6 +56,7 @@ function App() {
               <Route path="/analyze" element={<AnalyzeClaim />} />
               <Route path="/claims" element={<ClaimHistory />} />
               <Route path="/search" element={<PolicySearch />} />
+              <Route path="/mappings" element={<MappingReview />} />
             </Route>
           </Routes>
         </Suspense>
