@@ -6,14 +6,57 @@ transformation, and loading of data from connectors.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
+import sqlite3
 import threading
 import traceback
-from typing import Any
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from typing import Any, Iterator
 
 from .jobs import JobType, SyncJobManager, get_job_manager
 
 logger = logging.getLogger(__name__)
+
+
+# Thread-local storage for database connections
+_thread_local = threading.local()
+
+
+@contextmanager
+def get_db_connection(db_path: str | None = None) -> Iterator[sqlite3.Connection]:
+    """Get a database connection with proper management.
+
+    Uses thread-local storage to reuse connections within the same thread.
+    Connections are properly closed when the context exits.
+
+    Args:
+        db_path: Path to SQLite database
+
+    Yields:
+        SQLite connection
+    """
+    path = db_path or os.getenv("DB_PATH", "./data/prototype.db")
+
+    # Get or create connection for this thread
+    if not hasattr(_thread_local, "connections"):
+        _thread_local.connections = {}
+
+    if path not in _thread_local.connections:
+        conn = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+        _thread_local.connections[path] = conn
+
+    try:
+        yield _thread_local.connections[path]
+    except Exception:
+        # On error, close and remove the connection
+        conn = _thread_local.connections.pop(path, None)
+        if conn:
+            conn.close()
+        raise
 
 
 class SyncWorker:
@@ -271,14 +314,7 @@ class SyncWorker:
         Returns:
             Connector config dict or None
         """
-        import json
-        import os
-        import sqlite3
-
-        db_path = os.getenv("DB_PATH", "./data/prototype.db")
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        try:
+        with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM connectors WHERE id = ?", (connector_id,))
             row = cursor.fetchone()
@@ -290,8 +326,6 @@ class SyncWorker:
             if config.get("connection_config"):
                 config["connection_config"] = json.loads(config["connection_config"])
             return config
-        finally:
-            conn.close()
 
     def _create_connector(
         self,
@@ -382,13 +416,7 @@ class SyncWorker:
             status: Sync status (success, failed)
             watermark: Final watermark value
         """
-        import os
-        import sqlite3
-        from datetime import datetime, timezone
-
-        db_path = os.getenv("DB_PATH", "./data/prototype.db")
-        conn = sqlite3.connect(db_path)
-        try:
+        with get_db_connection() as conn:
             cursor = conn.cursor()
             now = datetime.now(timezone.utc).isoformat()
             cursor.execute(
@@ -400,8 +428,6 @@ class SyncWorker:
                 (now, status, connector_id),
             )
             conn.commit()
-        finally:
-            conn.close()
 
 
 # Global worker instance

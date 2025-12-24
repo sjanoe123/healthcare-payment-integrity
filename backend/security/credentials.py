@@ -141,21 +141,40 @@ class CredentialManager:
         """
         encrypted = self.encrypt(value)
         now = datetime.utcnow().isoformat()
-        cred_id = str(uuid4())
 
         with sqlite3.connect(self.db_path) as conn:
-            # Upsert: update if exists, insert if not
-            conn.execute(
+            # Check if credential already exists to avoid race condition
+            cursor = conn.execute(
                 """
-                INSERT INTO connector_credentials
-                    (id, connector_id, credential_type, encrypted_value, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(connector_id, credential_type) DO UPDATE SET
-                    encrypted_value = excluded.encrypted_value,
-                    updated_at = excluded.updated_at
+                SELECT id FROM connector_credentials
+                WHERE connector_id = ? AND credential_type = ?
                 """,
-                (cred_id, connector_id, credential_type, encrypted, now, now),
+                (connector_id, credential_type),
             )
+            existing = cursor.fetchone()
+
+            if existing:
+                # Update existing credential
+                cred_id = existing[0]
+                conn.execute(
+                    """
+                    UPDATE connector_credentials
+                    SET encrypted_value = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (encrypted, now, cred_id),
+                )
+            else:
+                # Insert new credential
+                cred_id = str(uuid4())
+                conn.execute(
+                    """
+                    INSERT INTO connector_credentials
+                        (id, connector_id, credential_type, encrypted_value, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (cred_id, connector_id, credential_type, encrypted, now, now),
+                )
             conn.commit()
 
         logger.debug(

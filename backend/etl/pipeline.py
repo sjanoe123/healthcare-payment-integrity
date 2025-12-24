@@ -188,7 +188,7 @@ class ETLPipeline:
 
         try:
             # Connect if needed
-            if not self.connector._connected:
+            if not self.connector.is_connected:
                 self.connector.connect()
 
             logger.info(f"Starting ETL pipeline for connector {context.connector_id}")

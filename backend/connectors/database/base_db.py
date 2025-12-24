@@ -7,6 +7,7 @@ connection management, schema discovery, and batch data extraction.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from abc import abstractmethod
 from typing import Any, Iterator
@@ -15,6 +16,94 @@ from ..base import BaseConnector, ConnectorError
 from ..models import ConnectionTestResult, SchemaDiscoveryResult, SyncMode
 
 logger = logging.getLogger(__name__)
+
+# Regex pattern for valid SQL identifiers (table names, column names)
+# Allows alphanumeric, underscores, and dots for schema.table notation
+VALID_IDENTIFIER_PATTERN = re.compile(
+    r"^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$"
+)
+
+# Pattern to detect and sanitize connection strings in error messages
+# Matches patterns like: user:password@host or ://user:password@
+CONNECTION_STRING_PATTERN = re.compile(
+    r"(://[^:]+:)([^@]+)(@)",  # Match ://user:PASSWORD@
+    re.IGNORECASE,
+)
+
+
+def sanitize_error_message(message: str) -> str:
+    """Remove sensitive information from error messages.
+
+    Sanitizes connection strings that may contain passwords in
+    SQLAlchemy error messages.
+
+    Args:
+        message: The error message to sanitize
+
+    Returns:
+        Sanitized message with passwords redacted
+    """
+    return CONNECTION_STRING_PATTERN.sub(r"\1***@", str(message))
+
+
+def validate_identifier(name: str, identifier_type: str = "identifier") -> str:
+    """Validate a SQL identifier to prevent SQL injection.
+
+    Args:
+        name: The identifier to validate
+        identifier_type: Type of identifier for error messages
+
+    Returns:
+        The validated identifier
+
+    Raises:
+        ValueError: If the identifier is invalid
+    """
+    if not name:
+        raise ValueError(f"Empty {identifier_type} is not allowed")
+
+    if not VALID_IDENTIFIER_PATTERN.match(name):
+        raise ValueError(
+            f"Invalid {identifier_type}: '{name}'. "
+            f"Only alphanumeric characters and underscores are allowed."
+        )
+
+    # Additional check for SQL keywords that could be dangerous
+    dangerous_keywords = {
+        "DROP",
+        "DELETE",
+        "TRUNCATE",
+        "INSERT",
+        "UPDATE",
+        "ALTER",
+        "CREATE",
+        "EXEC",
+        "EXECUTE",
+        "--",
+        ";",
+    }
+    if name.upper() in dangerous_keywords:
+        raise ValueError(f"Reserved keyword not allowed as {identifier_type}: '{name}'")
+
+    return name
+
+
+def quote_identifier(name: str, quote_char: str = '"') -> str:
+    """Quote a SQL identifier safely.
+
+    Args:
+        name: The identifier to quote
+        quote_char: Quote character (default is standard SQL double quote)
+
+    Returns:
+        Quoted identifier
+    """
+    # Validate first
+    validate_identifier(name)
+    # Escape any quote characters in the name
+    escaped = name.replace(quote_char, quote_char + quote_char)
+    return f"{quote_char}{escaped}{quote_char}"
+
 
 # Try to import SQLAlchemy
 try:
@@ -123,7 +212,7 @@ class BaseDatabaseConnector(BaseConnector):
             self._log("info", "Connected successfully")
         except SQLAlchemyError as e:
             raise DatabaseConnectionError(
-                f"Failed to connect: {e}", self.connector_id
+                f"Failed to connect: {sanitize_error_message(e)}", self.connector_id
             ) from e
 
     def disconnect(self) -> None:
@@ -170,9 +259,11 @@ class BaseDatabaseConnector(BaseConnector):
 
         except SQLAlchemyError as e:
             latency_ms = (time.time() - start_time) * 1000
+            # Sanitize error message to avoid exposing passwords
+            safe_message = sanitize_error_message(str(e))[:200]
             return ConnectionTestResult(
                 success=False,
-                message=f"Connection failed: {str(e)[:200]}",
+                message=f"Connection failed: {safe_message}",
                 latency_ms=round(latency_ms, 2),
                 details={
                     "error_type": type(e).__name__,
@@ -180,9 +271,11 @@ class BaseDatabaseConnector(BaseConnector):
                 },
             )
         except Exception as e:
+            # Sanitize error message to avoid exposing passwords
+            safe_message = sanitize_error_message(str(e))[:200]
             return ConnectionTestResult(
                 success=False,
-                message=f"Unexpected error: {str(e)[:200]}",
+                message=f"Unexpected error: {safe_message}",
                 latency_ms=None,
                 details={"error_type": type(e).__name__},
             )
@@ -218,7 +311,17 @@ class BaseDatabaseConnector(BaseConnector):
                     ]
 
                     # Get sample data (first 3 rows)
-                    qualified_name = f"{schema_name}.{table}" if schema_name else table
+                    # Validate and quote identifiers to prevent SQL injection
+                    safe_table = quote_identifier(
+                        validate_identifier(table, "table name")
+                    )
+                    if schema_name:
+                        safe_schema = quote_identifier(
+                            validate_identifier(schema_name, "schema name")
+                        )
+                        qualified_name = f"{safe_schema}.{safe_table}"
+                    else:
+                        qualified_name = safe_table
                     with self._engine.connect() as conn:
                         result = conn.execute(
                             text(f"SELECT * FROM {qualified_name} LIMIT 3")
@@ -230,7 +333,9 @@ class BaseDatabaseConnector(BaseConnector):
                                 dict(zip(col_names, row)) for row in rows
                             ]
                 except SQLAlchemyError as e:
-                    logger.warning(f"Could not inspect table {table}: {e}")
+                    logger.warning(
+                        f"Could not inspect table {table}: {sanitize_error_message(e)}"
+                    )
                     continue
 
             return SchemaDiscoveryResult(
@@ -241,7 +346,8 @@ class BaseDatabaseConnector(BaseConnector):
 
         except SQLAlchemyError as e:
             raise DatabaseConnectionError(
-                f"Schema discovery failed: {e}", self.connector_id
+                f"Schema discovery failed: {sanitize_error_message(e)}",
+                self.connector_id,
             ) from e
 
     def extract(
@@ -263,14 +369,14 @@ class BaseDatabaseConnector(BaseConnector):
 
         assert self._engine is not None
 
-        # Build query
-        query = self._build_extraction_query(sync_mode, watermark_value)
+        # Build query with parameters
+        query, params = self._build_extraction_query(sync_mode, watermark_value)
 
         try:
             with self._engine.connect() as conn:
                 # Use server-side cursor for large datasets
                 result = conn.execution_options(stream_results=True).execute(
-                    text(query)
+                    text(query), params
                 )
 
                 batch: list[dict[str, Any]] = []
@@ -290,56 +396,82 @@ class BaseDatabaseConnector(BaseConnector):
 
         except SQLAlchemyError as e:
             raise DatabaseConnectionError(
-                f"Data extraction failed: {e}", self.connector_id
+                f"Data extraction failed: {sanitize_error_message(e)}",
+                self.connector_id,
             ) from e
 
     def _build_extraction_query(
         self,
         sync_mode: SyncMode,
         watermark_value: str | None = None,
-    ) -> str:
-        """Build the SQL query for data extraction.
+    ) -> tuple[str, dict[str, Any]]:
+        """Build the SQL query for data extraction with parameterized values.
 
         Args:
             sync_mode: FULL or INCREMENTAL
             watermark_value: Last watermark for incremental
 
         Returns:
-            SQL query string
+            Tuple of (SQL query string, parameters dict)
         """
-        # Use custom query if provided
+        params: dict[str, Any] = {}
+
+        # Use custom query if provided - validate it doesn't contain dangerous patterns
         custom_query = self.config.get("query")
         if custom_query:
+            # Reject queries with multiple statements or dangerous keywords
+            if ";" in custom_query or "--" in custom_query:
+                raise ValueError("Custom queries cannot contain ';' or '--' characters")
+
             if sync_mode == SyncMode.INCREMENTAL and watermark_value:
-                # Append WHERE clause if query doesn't have one
+                # Append WHERE clause with parameterized value
                 watermark_col = self.config.get("watermark_column", "updated_at")
+                safe_watermark_col = quote_identifier(
+                    validate_identifier(watermark_col, "watermark column")
+                )
+                params["watermark_value"] = watermark_value
                 if "WHERE" not in custom_query.upper():
-                    custom_query += f" WHERE {watermark_col} > '{watermark_value}'"
+                    custom_query += f" WHERE {safe_watermark_col} > :watermark_value"
                 else:
-                    custom_query += f" AND {watermark_col} > '{watermark_value}'"
-            return custom_query
+                    custom_query += f" AND {safe_watermark_col} > :watermark_value"
+            return custom_query, params
 
         # Build query from table name
         table = self.config.get("table")
         if not table:
             raise ValueError("Either 'query' or 'table' must be specified in config")
 
+        # Validate and quote identifiers
+        safe_table = quote_identifier(validate_identifier(table, "table name"))
         schema_name = self.config.get("schema_name")
-        qualified_name = f"{schema_name}.{table}" if schema_name else table
+        if schema_name:
+            safe_schema = quote_identifier(
+                validate_identifier(schema_name, "schema name")
+            )
+            qualified_name = f"{safe_schema}.{safe_table}"
+        else:
+            qualified_name = safe_table
 
         query = f"SELECT * FROM {qualified_name}"
 
-        # Add watermark filter for incremental sync
+        # Add watermark filter for incremental sync with parameterized value
         if sync_mode == SyncMode.INCREMENTAL and watermark_value:
             watermark_col = self.config.get("watermark_column", "updated_at")
-            query += f" WHERE {watermark_col} > '{watermark_value}'"
+            safe_watermark_col = quote_identifier(
+                validate_identifier(watermark_col, "watermark column")
+            )
+            params["watermark_value"] = watermark_value
+            query += f" WHERE {safe_watermark_col} > :watermark_value"
 
         # Add ordering by watermark column if available
         watermark_col = self.config.get("watermark_column")
         if watermark_col:
-            query += f" ORDER BY {watermark_col}"
+            safe_watermark_col = quote_identifier(
+                validate_identifier(watermark_col, "watermark column")
+            )
+            query += f" ORDER BY {safe_watermark_col}"
 
-        return query
+        return query, params
 
     def get_current_watermark(self) -> str | None:
         """Get the current maximum watermark value."""
@@ -356,20 +488,35 @@ class BaseDatabaseConnector(BaseConnector):
         if not table:
             return None
 
-        schema_name = self.config.get("schema_name")
-        qualified_name = f"{schema_name}.{table}" if schema_name else table
+        # Validate and quote identifiers to prevent SQL injection
+        try:
+            safe_table = quote_identifier(validate_identifier(table, "table name"))
+            safe_watermark_col = quote_identifier(
+                validate_identifier(watermark_col, "watermark column")
+            )
+            schema_name = self.config.get("schema_name")
+            if schema_name:
+                safe_schema = quote_identifier(
+                    validate_identifier(schema_name, "schema name")
+                )
+                qualified_name = f"{safe_schema}.{safe_table}"
+            else:
+                qualified_name = safe_table
+        except ValueError as e:
+            logger.warning(f"Invalid identifier: {e}")
+            return None
 
         try:
             with self._engine.connect() as conn:
                 result = conn.execute(
-                    text(f"SELECT MAX({watermark_col}) FROM {qualified_name}")
+                    text(f"SELECT MAX({safe_watermark_col}) FROM {qualified_name}")
                 )
                 row = result.fetchone()
                 if row and row[0]:
                     return str(row[0])
                 return None
         except SQLAlchemyError as e:
-            logger.warning(f"Failed to get watermark: {e}")
+            logger.warning(f"Failed to get watermark: {sanitize_error_message(e)}")
             return None
 
     def execute_query(self, query: str) -> list[dict[str, Any]]:
@@ -393,7 +540,8 @@ class BaseDatabaseConnector(BaseConnector):
                 return [dict(zip(column_names, row)) for row in result.fetchall()]
         except SQLAlchemyError as e:
             raise DatabaseConnectionError(
-                f"Query execution failed: {e}", self.connector_id
+                f"Query execution failed: {sanitize_error_message(e)}",
+                self.connector_id,
             ) from e
 
     def get_row_count(self, table: str | None = None) -> int:
@@ -414,10 +562,16 @@ class BaseDatabaseConnector(BaseConnector):
         if not target_table:
             raise ValueError("No table specified")
 
+        # Validate and quote identifiers to prevent SQL injection
+        safe_table = quote_identifier(validate_identifier(target_table, "table name"))
         schema_name = self.config.get("schema_name")
-        qualified_name = (
-            f"{schema_name}.{target_table}" if schema_name else target_table
-        )
+        if schema_name:
+            safe_schema = quote_identifier(
+                validate_identifier(schema_name, "schema name")
+            )
+            qualified_name = f"{safe_schema}.{safe_table}"
+        else:
+            qualified_name = safe_table
 
         try:
             with self._engine.connect() as conn:
@@ -426,5 +580,5 @@ class BaseDatabaseConnector(BaseConnector):
                 return row[0] if row else 0
         except SQLAlchemyError as e:
             raise DatabaseConnectionError(
-                f"Row count failed: {e}", self.connector_id
+                f"Row count failed: {sanitize_error_message(e)}", self.connector_id
             ) from e
