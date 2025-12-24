@@ -10,6 +10,8 @@ import {
   ChevronRight,
   X,
   GitMerge,
+  Database,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect } from 'react';
@@ -45,6 +47,18 @@ const navItems = [
     icon: GitMerge,
     label: 'Field Mappings',
     description: 'Schema mapping review',
+  },
+  {
+    to: '/data-sources',
+    icon: Database,
+    label: 'Data Sources',
+    description: 'External connectors',
+  },
+  {
+    to: '/sync-jobs',
+    icon: RefreshCw,
+    label: 'Sync Jobs',
+    description: 'Data sync monitoring',
   },
 ];
 

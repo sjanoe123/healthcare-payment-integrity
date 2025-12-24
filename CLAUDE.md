@@ -101,6 +101,23 @@ npm run lint
   - `mapper.py` - FieldMapper class for transforming claims to canonical format
   - `embeddings.py` - PubMedBERT-based semantic field matching for unknown fields
   - `templates/` - Pre-built mappings for EDI 837P, 837I, and CSV formats
+- **Data source connectors**: `backend/connectors/` - External data integration framework
+  - `base.py` - `BaseConnector` abstract class for all connectors
+  - `models.py` - Pydantic models (ConnectorType, SyncMode, ConnectionTestResult)
+  - `registry.py` - Connector type registry and factory
+  - `database/` - Database connectors (PostgreSQL, MySQL) using SQLAlchemy
+  - `file/` - File connectors (S3, SFTP) with EDI 837 and CSV parsers
+- **Scheduler**: `backend/scheduler/` - Background job scheduling with APScheduler
+  - `scheduler.py` - `SyncScheduler` wrapper with SQLite persistence
+  - `jobs.py` - `SyncJobManager` for job lifecycle and logging
+  - `worker.py` - `SyncWorker` for executing sync jobs in background threads
+- **ETL pipeline**: `backend/etl/` - Data extraction, transformation, and loading
+  - `pipeline.py` - `ETLPipeline` orchestrator
+  - `stages/extract.py` - Batch extraction with watermark support
+  - `stages/transform.py` - Field mapping and normalization
+  - `stages/load.py` - SQLite storage with audit trails
+- **Security**: `backend/security/` - Credential encryption
+  - `credentials.py` - Fernet-based encryption for connector secrets
 - **RAG**: `backend/rag/chroma_store.py` - ChromaDB wrapper for policy document retrieval
 - **Claude integration**: `backend/claude_client.py` - Kirk AI analysis with structured JSON responses
 - **Kirk config**: `backend/kirk_config.py` - Kirk AI personality, prompts, and category-specific guidance
@@ -113,11 +130,19 @@ npm run lint
   - `AnalyzeClaim.tsx` - Claim submission and analysis
   - `ClaimHistory.tsx` - List of analyzed claims with pagination
   - `PolicySearch.tsx` - RAG-powered policy document search
+  - `MappingReview.tsx` - Schema mapping review and approval
+  - `DataSources.tsx` - External data connector management
+  - `SyncJobs.tsx` - Sync job monitoring with real-time updates
 - **Components**: `frontend/src/components/`
   - `kirk/` - Kirk AI avatar, messages, thinking animation, follow-up chat
   - `analysis/` - FraudScoreGauge, ResultsDisplay
   - `layout/` - AppLayout, Sidebar (with mobile drawer), Header
   - `charts/` - SavingsChart, CategoryPieChart with accessibility support
+  - `connectors/` - Data source connector components
+    - `ConnectorCard.tsx` - Connector list item with status/actions
+    - `ConnectorForm.tsx` - Multi-step wizard for creating connectors
+    - `ConnectionTest.tsx` - Connection test modal with schema discovery
+    - `ScheduleEditor.tsx` - Cron expression builder with presets
 - **API**: `frontend/src/api/`
   - `client.ts` - Axios client with interceptors
   - `hooks/` - React Query hooks (useStats, useHealth, useJobs, etc.)
@@ -151,6 +176,23 @@ npm run lint
 | POST | `/api/mappings/stored/{mapping_id}/approve` | Approve a pending mapping |
 | POST | `/api/mappings/stored/{mapping_id}/reject` | Reject a pending mapping |
 | GET | `/api/mappings/stored/{mapping_id}/audit` | Get audit trail for mapping |
+| **Connectors** | | |
+| GET | `/api/connectors` | List all connectors |
+| POST | `/api/connectors` | Create connector |
+| GET | `/api/connectors/{id}` | Get connector details |
+| PUT | `/api/connectors/{id}` | Update connector |
+| DELETE | `/api/connectors/{id}` | Delete connector |
+| POST | `/api/connectors/{id}/test` | Test connection |
+| POST | `/api/connectors/{id}/activate` | Enable scheduled sync |
+| POST | `/api/connectors/{id}/deactivate` | Disable sync |
+| GET | `/api/connectors/{id}/schema` | Discover source schema |
+| POST | `/api/connectors/{id}/sync` | Trigger manual sync |
+| GET | `/api/connectors/types` | List available connector types |
+| **Sync Jobs** | | |
+| GET | `/api/sync-jobs` | List sync jobs |
+| GET | `/api/sync-jobs/{id}` | Get job details |
+| POST | `/api/sync-jobs/{id}/cancel` | Cancel running job |
+| GET | `/api/sync-jobs/{id}/logs` | Get job logs |
 
 ### Data Flow
 
@@ -272,6 +314,22 @@ Rules return `RuleHit` objects with weights that adjust the fraud score. Organiz
 | `frontend/src/components/charts/` | Dashboard charts (SavingsChart, CategoryPieChart) |
 | `frontend/src/utils/mockData.ts` | Demo mode data generation |
 | `frontend/vercel.json` | Vercel SPA routing config |
+| **Data Source Connectors** | |
+| `backend/connectors/base.py` | BaseConnector abstract class |
+| `backend/connectors/registry.py` | Connector type registry |
+| `backend/connectors/database/base_db.py` | SQLAlchemy database connector base |
+| `backend/connectors/database/postgresql.py` | PostgreSQL connector |
+| `backend/connectors/database/mysql.py` | MySQL connector |
+| `backend/connectors/file/base_file.py` | File connector base (S3, SFTP) |
+| `backend/security/credentials.py` | Fernet credential encryption |
+| **Scheduler & ETL** | |
+| `backend/scheduler/scheduler.py` | APScheduler wrapper |
+| `backend/scheduler/jobs.py` | Sync job lifecycle management |
+| `backend/scheduler/worker.py` | Background job execution |
+| `backend/etl/pipeline.py` | ETL orchestrator |
+| `frontend/src/pages/DataSources.tsx` | Connector management UI |
+| `frontend/src/pages/SyncJobs.tsx` | Job monitoring UI |
+| `frontend/src/components/connectors/ConnectorForm.tsx` | Connector wizard |
 
 ## Kirk AI Features
 
@@ -528,4 +586,130 @@ store.approve_mapping(mapping.id, approved_by="reviewer@example.com")
 
 # Get audit history
 audit = store.get_audit_log(mapping.id)
+```
+
+## Data Source Connectors
+
+The system supports external data source integration for claims, eligibility, provider, and reference data.
+
+### Supported Connector Types
+
+| Type | Subtype | Description |
+|------|---------|-------------|
+| Database | `postgresql` | PostgreSQL with SSL support |
+| Database | `mysql` | MySQL/MariaDB |
+| File | `s3` | AWS S3 bucket |
+| File | `sftp` | SFTP server |
+
+### Data Types
+
+| Type | Description | Example Sources |
+|------|-------------|-----------------|
+| `claims` | Healthcare claims (837P/I) | Claims database, EDI files |
+| `eligibility` | Member eligibility | Eligibility system |
+| `providers` | Provider data | NPI registry, credentialing |
+| `reference` | Reference data | NCCI edits, LCD policies |
+
+### Connector Configuration
+
+```bash
+# Create a PostgreSQL connector
+POST /api/connectors
+{
+  "name": "Claims Database",
+  "connector_type": "database",
+  "subtype": "postgresql",
+  "data_type": "claims",
+  "connection_config": {
+    "host": "db.example.com",
+    "port": 5432,
+    "database": "claims_db",
+    "username": "reader",
+    "password": "secret",  # Encrypted at rest
+    "ssl_mode": "require",
+    "table": "claims",
+    "watermark_column": "updated_at"
+  },
+  "sync_schedule": "0 */6 * * *",  # Every 6 hours
+  "sync_mode": "incremental"
+}
+
+# Test connection
+POST /api/connectors/{id}/test
+
+# Discover schema
+GET /api/connectors/{id}/schema
+
+# Trigger manual sync
+POST /api/connectors/{id}/sync?sync_mode=incremental
+```
+
+### Sync Job Monitoring
+
+```bash
+# List recent jobs
+GET /api/sync-jobs?limit=50
+
+# Get job status (auto-polls while running)
+GET /api/sync-jobs/{id}
+# Returns: {status: "running", processed_records: 5000, total_records: 10000}
+
+# Cancel running job
+POST /api/sync-jobs/{id}/cancel
+
+# View job logs
+GET /api/sync-jobs/{id}/logs
+```
+
+### Cron Schedule Format
+
+| Expression | Description |
+|------------|-------------|
+| `0 * * * *` | Every hour at minute 0 |
+| `0 */6 * * *` | Every 6 hours |
+| `0 0 * * *` | Daily at midnight |
+| `0 6 * * 1` | Weekly on Monday at 6am |
+| `0 0 1 * *` | Monthly on the 1st |
+
+### Environment Variables
+
+```bash
+# Credential encryption key (required for production)
+CREDENTIAL_ENCRYPTION_KEY=<fernet-key>
+
+# Generate key: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+### Python Usage
+
+```python
+from connectors import get_connector_registry
+from connectors.database import PostgreSQLConnector
+
+# Get available connector types
+registry = get_connector_registry()
+types = registry.list_types()
+
+# Create and test a connector
+connector = PostgreSQLConnector(
+    connector_id="test-1",
+    name="Test Connection",
+    config={
+        "host": "localhost",
+        "port": 5432,
+        "database": "test_db",
+        "username": "user",
+        "password": "pass"
+    }
+)
+result = connector.test_connection()
+if result.success:
+    schema = connector.discover_schema()
+    print(f"Found {len(schema.tables)} tables")
+
+# Extract data
+connector.connect()
+for batch in connector.extract(sync_mode=SyncMode.FULL):
+    process_records(batch)
+connector.disconnect()
 ```

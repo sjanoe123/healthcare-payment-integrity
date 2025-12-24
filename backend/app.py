@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -93,6 +93,78 @@ def init_db():
         )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
 
+        # ============================================================
+        # Data Source Connector Tables
+        # ============================================================
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS connectors (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                connector_type TEXT NOT NULL,
+                subtype TEXT NOT NULL,
+                data_type TEXT NOT NULL,
+                connection_config TEXT NOT NULL,
+                sync_schedule TEXT,
+                sync_mode TEXT DEFAULT 'incremental',
+                batch_size INTEGER DEFAULT 1000,
+                field_mapping_id TEXT,
+                status TEXT DEFAULT 'inactive',
+                last_sync_at TEXT,
+                last_sync_status TEXT,
+                created_at TEXT NOT NULL,
+                created_by TEXT
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sync_jobs (
+                id TEXT PRIMARY KEY,
+                connector_id TEXT NOT NULL,
+                job_type TEXT NOT NULL,
+                sync_mode TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                started_at TEXT,
+                completed_at TEXT,
+                total_records INTEGER DEFAULT 0,
+                processed_records INTEGER DEFAULT 0,
+                failed_records INTEGER DEFAULT 0,
+                watermark_value TEXT,
+                error_message TEXT,
+                triggered_by TEXT,
+                FOREIGN KEY (connector_id) REFERENCES connectors(id)
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sync_job_logs (
+                id TEXT PRIMARY KEY,
+                job_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                level TEXT NOT NULL,
+                message TEXT NOT NULL,
+                context TEXT,
+                FOREIGN KEY (job_id) REFERENCES sync_jobs(id)
+            )
+        """)
+
+        # Connector indices
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_connectors_type ON connectors(connector_type)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_connectors_status ON connectors(status)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sync_jobs_connector ON sync_jobs(connector_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sync_jobs_status ON sync_jobs(status)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sync_job_logs_job ON sync_job_logs(job_id)"
+        )
+
         conn.commit()
 
 
@@ -118,7 +190,27 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Embedding model preload failed: {e}")
 
+    # Initialize scheduler for background sync jobs
+    scheduler = None
+    try:
+        from scheduler import start_scheduler, shutdown_scheduler
+
+        scheduler = start_scheduler(DB_PATH)
+        logger.info("Scheduler started for background sync jobs")
+    except ImportError:
+        logger.warning("Scheduler not available: APScheduler not installed")
+    except Exception as e:
+        logger.warning(f"Scheduler initialization failed: {e}")
+
     yield
+
+    # Cleanup scheduler on shutdown
+    if scheduler:
+        try:
+            shutdown_scheduler(wait=True)
+            logger.info("Scheduler shutdown complete")
+        except Exception as e:
+            logger.warning(f"Scheduler shutdown error: {e}")
 
 
 app = FastAPI(
@@ -1135,6 +1227,1233 @@ async def get_stats():
         "auto_approved": auto_approved,
         "potential_savings": round(total_roi, 2),
     }
+
+
+# ============================================================================
+# Data Source Connector Endpoints
+# ============================================================================
+
+# Secret fields that need encryption for each connector type
+CONNECTOR_SECRET_FIELDS = {
+    "database": ["password"],
+    "api": ["api_key", "oauth_client_secret"],
+    "file": ["aws_access_key", "aws_secret_key", "password", "private_key"],
+}
+
+
+@app.get("/api/connectors/types")
+async def list_connector_types():
+    """List available connector types and their configuration schemas."""
+    return {
+        "types": [
+            {
+                "type": "database",
+                "subtypes": [
+                    {
+                        "subtype": "postgresql",
+                        "name": "PostgreSQL",
+                        "description": "Connect to PostgreSQL databases",
+                    },
+                    {
+                        "subtype": "mysql",
+                        "name": "MySQL",
+                        "description": "Connect to MySQL databases",
+                    },
+                    {
+                        "subtype": "sqlserver",
+                        "name": "SQL Server",
+                        "description": "Connect to Microsoft SQL Server",
+                    },
+                ],
+            },
+            {
+                "type": "api",
+                "subtypes": [
+                    {
+                        "subtype": "rest",
+                        "name": "REST API",
+                        "description": "Connect to REST APIs",
+                    },
+                    {
+                        "subtype": "fhir",
+                        "name": "HL7 FHIR",
+                        "description": "Connect to FHIR R4 servers",
+                    },
+                ],
+            },
+            {
+                "type": "file",
+                "subtypes": [
+                    {
+                        "subtype": "s3",
+                        "name": "Amazon S3",
+                        "description": "Read files from S3 buckets",
+                    },
+                    {
+                        "subtype": "sftp",
+                        "name": "SFTP",
+                        "description": "Read files via SFTP",
+                    },
+                    {
+                        "subtype": "azure_blob",
+                        "name": "Azure Blob",
+                        "description": "Read files from Azure Blob Storage",
+                    },
+                ],
+            },
+        ],
+        "data_types": ["claims", "eligibility", "providers", "reference"],
+    }
+
+
+@app.get("/api/connectors")
+async def list_connectors(
+    connector_type: str | None = None,
+    status: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """List all configured connectors."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        query = "SELECT * FROM connectors WHERE 1=1"
+        params: list[Any] = []
+
+        if connector_type:
+            query += " AND connector_type = ?"
+            params.append(connector_type)
+
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+
+        query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+    connectors = []
+    for row in rows:
+        config = safe_json_loads(row["connection_config"], {})
+        # Redact secrets in response
+        for field in CONNECTOR_SECRET_FIELDS.get(row["connector_type"], []):
+            if field in config:
+                config[field] = "***"
+
+        connectors.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "connector_type": row["connector_type"],
+                "subtype": row["subtype"],
+                "data_type": row["data_type"],
+                "connection_config": config,
+                "sync_schedule": row["sync_schedule"],
+                "sync_mode": row["sync_mode"],
+                "batch_size": row["batch_size"],
+                "field_mapping_id": row["field_mapping_id"],
+                "status": row["status"],
+                "last_sync_at": row["last_sync_at"],
+                "last_sync_status": row["last_sync_status"],
+                "created_at": row["created_at"],
+                "created_by": row["created_by"],
+            }
+        )
+
+    return {
+        "connectors": connectors,
+        "total": len(connectors),
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+class ConnectorCreateRequest(BaseModel):
+    """Request model for creating a connector."""
+
+    name: str
+    connector_type: str
+    subtype: str
+    data_type: str
+    connection_config: dict[str, Any]
+    sync_schedule: str | None = None
+    sync_mode: str = "incremental"
+    batch_size: int = 1000
+    field_mapping_id: str | None = None
+    created_by: str | None = None
+
+
+@app.post("/api/connectors")
+async def create_connector(request: ConnectorCreateRequest):
+    """Create a new data source connector."""
+    from security import get_credential_manager
+
+    connector_id = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat()
+
+    # Extract and encrypt secrets
+    config = request.connection_config.copy()
+    secret_fields = CONNECTOR_SECRET_FIELDS.get(request.connector_type, [])
+
+    try:
+        cred_manager = get_credential_manager(DB_PATH)
+        if cred_manager.encryption_enabled:
+            config = cred_manager.extract_and_store_secrets(
+                connector_id, config, secret_fields
+            )
+    except Exception as e:
+        logger.warning(f"Credential encryption failed: {e}")
+        # Store without encryption (not recommended for production)
+        for field in secret_fields:
+            if field in config:
+                config[field] = "***UNENCRYPTED***"
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                INSERT INTO connectors
+                    (id, name, connector_type, subtype, data_type, connection_config,
+                     sync_schedule, sync_mode, batch_size, field_mapping_id, status,
+                     created_at, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    connector_id,
+                    request.name,
+                    request.connector_type,
+                    request.subtype,
+                    request.data_type,
+                    json.dumps(config),
+                    request.sync_schedule,
+                    request.sync_mode,
+                    request.batch_size,
+                    request.field_mapping_id,
+                    "inactive",
+                    now,
+                    request.created_by,
+                ),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Connector with name '{request.name}' already exists",
+            )
+
+    return {
+        "id": connector_id,
+        "name": request.name,
+        "connector_type": request.connector_type,
+        "subtype": request.subtype,
+        "status": "inactive",
+        "created_at": now,
+    }
+
+
+@app.get("/api/connectors/{connector_id}")
+async def get_connector(connector_id: str):
+    """Get connector details by ID."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM connectors WHERE id = ?", (connector_id,))
+        row = cursor.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Connector not found")
+
+    config = safe_json_loads(row["connection_config"], {})
+    # Redact secrets
+    for field in CONNECTOR_SECRET_FIELDS.get(row["connector_type"], []):
+        if field in config:
+            config[field] = "***"
+
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "connector_type": row["connector_type"],
+        "subtype": row["subtype"],
+        "data_type": row["data_type"],
+        "connection_config": config,
+        "sync_schedule": row["sync_schedule"],
+        "sync_mode": row["sync_mode"],
+        "batch_size": row["batch_size"],
+        "field_mapping_id": row["field_mapping_id"],
+        "status": row["status"],
+        "last_sync_at": row["last_sync_at"],
+        "last_sync_status": row["last_sync_status"],
+        "created_at": row["created_at"],
+        "created_by": row["created_by"],
+    }
+
+
+class ConnectorUpdateRequest(BaseModel):
+    """Request model for updating a connector."""
+
+    name: str | None = None
+    connection_config: dict[str, Any] | None = None
+    sync_schedule: str | None = None
+    sync_mode: str | None = None
+    batch_size: int | None = None
+    field_mapping_id: str | None = None
+
+
+@app.put("/api/connectors/{connector_id}")
+async def update_connector(connector_id: str, request: ConnectorUpdateRequest):
+    """Update a connector configuration."""
+    from security import get_credential_manager
+
+    # First fetch existing connector
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM connectors WHERE id = ?", (connector_id,))
+        existing = cursor.fetchone()
+
+    if not existing:
+        raise HTTPException(status_code=404, detail="Connector not found")
+
+    # Build update query
+    updates = []
+    params: list[Any] = []
+
+    if request.name is not None:
+        updates.append("name = ?")
+        params.append(request.name)
+
+    if request.connection_config is not None:
+        config = request.connection_config.copy()
+        secret_fields = CONNECTOR_SECRET_FIELDS.get(existing["connector_type"], [])
+
+        try:
+            cred_manager = get_credential_manager(DB_PATH)
+            if cred_manager.encryption_enabled:
+                config = cred_manager.extract_and_store_secrets(
+                    connector_id, config, secret_fields
+                )
+        except Exception as e:
+            logger.warning(f"Credential encryption failed: {e}")
+
+        updates.append("connection_config = ?")
+        params.append(json.dumps(config))
+
+    if request.sync_schedule is not None:
+        updates.append("sync_schedule = ?")
+        params.append(request.sync_schedule)
+
+    if request.sync_mode is not None:
+        updates.append("sync_mode = ?")
+        params.append(request.sync_mode)
+
+    if request.batch_size is not None:
+        updates.append("batch_size = ?")
+        params.append(request.batch_size)
+
+    if request.field_mapping_id is not None:
+        updates.append("field_mapping_id = ?")
+        params.append(request.field_mapping_id)
+
+    if not updates:
+        return {"message": "No changes provided"}
+
+    params.append(connector_id)
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"UPDATE connectors SET {', '.join(updates)} WHERE id = ?",
+            params,
+        )
+        conn.commit()
+
+    return {"message": "Connector updated", "connector_id": connector_id}
+
+
+@app.delete("/api/connectors/{connector_id}")
+async def delete_connector(connector_id: str):
+    """Delete a connector and its credentials."""
+    from security import get_credential_manager
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+
+        # Check if connector exists
+        cursor.execute("SELECT id FROM connectors WHERE id = ?", (connector_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Connector not found")
+
+        # Delete credentials first
+        try:
+            cred_manager = get_credential_manager(DB_PATH)
+            cred_manager.delete_credentials(connector_id)
+        except Exception as e:
+            logger.warning(f"Failed to delete credentials: {e}")
+
+        # Delete sync jobs and logs
+        cursor.execute(
+            "DELETE FROM sync_job_logs WHERE job_id IN (SELECT id FROM sync_jobs WHERE connector_id = ?)",
+            (connector_id,),
+        )
+        cursor.execute("DELETE FROM sync_jobs WHERE connector_id = ?", (connector_id,))
+
+        # Delete connector
+        cursor.execute("DELETE FROM connectors WHERE id = ?", (connector_id,))
+        conn.commit()
+
+    return {"message": "Connector deleted", "connector_id": connector_id}
+
+
+@app.post("/api/connectors/{connector_id}/test")
+async def test_connector(connector_id: str):
+    """Test a connector's connection."""
+    from security import get_credential_manager
+
+    # Get connector details
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM connectors WHERE id = ?", (connector_id,))
+        row = cursor.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Connector not found")
+
+    connector_type = row["connector_type"]
+    subtype = row["subtype"]
+
+    # Get connection config and inject secrets
+    config = safe_json_loads(row["connection_config"], {})
+    secret_fields = CONNECTOR_SECRET_FIELDS.get(connector_type, [])
+
+    try:
+        cred_manager = get_credential_manager(DB_PATH)
+        config = cred_manager.inject_secrets(connector_id, config, secret_fields)
+    except Exception as e:
+        logger.warning(f"Failed to inject secrets: {e}")
+
+    # Update status to testing
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE connectors SET status = ? WHERE id = ?",
+            ("testing", connector_id),
+        )
+        conn.commit()
+
+    # Test connection based on connector type
+    if connector_type == "database":
+        result = _test_database_connection(connector_id, subtype, config)
+    elif connector_type == "api":
+        result = _test_api_connection(connector_id, subtype, config)
+    elif connector_type == "file":
+        result = _test_file_connection(connector_id, subtype, config)
+    else:
+        result = {
+            "success": False,
+            "message": f"Unknown connector type: {connector_type}",
+            "latency_ms": None,
+            "details": {},
+        }
+
+    # Update connector status based on result
+    new_status = "inactive" if result["success"] else "error"
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE connectors SET status = ? WHERE id = ?",
+            (new_status, connector_id),
+        )
+        conn.commit()
+
+    return result
+
+
+def _test_database_connection(
+    connector_id: str, subtype: str, config: dict[str, Any]
+) -> dict[str, Any]:
+    """Test a database connection."""
+    try:
+        if subtype == "postgresql":
+            from connectors.database import PostgreSQLConnector
+
+            connector = PostgreSQLConnector(
+                connector_id=connector_id,
+                name="test",
+                config=config,
+            )
+            result = connector.test_connection()
+            return {
+                "success": result.success,
+                "message": result.message,
+                "latency_ms": result.latency_ms,
+                "details": result.details,
+            }
+
+        elif subtype == "mysql":
+            from connectors.database import MySQLConnector
+
+            connector = MySQLConnector(
+                connector_id=connector_id,
+                name="test",
+                config=config,
+            )
+            result = connector.test_connection()
+            return {
+                "success": result.success,
+                "message": result.message,
+                "latency_ms": result.latency_ms,
+                "details": result.details,
+            }
+
+        else:
+            return {
+                "success": False,
+                "message": f"Database subtype '{subtype}' not yet implemented",
+                "latency_ms": None,
+                "details": {"subtype": subtype},
+            }
+
+    except ImportError as e:
+        return {
+            "success": False,
+            "message": f"Missing dependency: {e}. Install with pip install sqlalchemy",
+            "latency_ms": None,
+            "details": {"error": str(e)},
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Connection test failed: {str(e)[:200]}",
+            "latency_ms": None,
+            "details": {"error_type": type(e).__name__},
+        }
+
+
+def _test_api_connection(
+    connector_id: str, subtype: str, config: dict[str, Any]
+) -> dict[str, Any]:
+    """Test an API connection."""
+    # API connectors will be implemented in Phase 5
+    return {
+        "success": True,
+        "message": f"API connector '{subtype}' test pending implementation (Phase 5)",
+        "latency_ms": None,
+        "details": {"subtype": subtype, "base_url": config.get("base_url")},
+    }
+
+
+def _test_file_connection(
+    connector_id: str, subtype: str, config: dict[str, Any]
+) -> dict[str, Any]:
+    """Test a file system connection."""
+    # File connectors will be implemented in Phase 4
+    return {
+        "success": True,
+        "message": f"File connector '{subtype}' test pending implementation (Phase 4)",
+        "latency_ms": None,
+        "details": {"subtype": subtype},
+    }
+
+
+@app.get("/api/connectors/{connector_id}/schema")
+async def discover_connector_schema(connector_id: str):
+    """Discover schema from a database connector."""
+    from security import get_credential_manager
+
+    # Get connector details
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM connectors WHERE id = ?", (connector_id,))
+        row = cursor.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Connector not found")
+
+    if row["connector_type"] != "database":
+        raise HTTPException(
+            status_code=400,
+            detail="Schema discovery is only available for database connectors",
+        )
+
+    # Get connection config and inject secrets
+    config = safe_json_loads(row["connection_config"], {})
+    secret_fields = CONNECTOR_SECRET_FIELDS.get(row["connector_type"], [])
+
+    try:
+        cred_manager = get_credential_manager(DB_PATH)
+        config = cred_manager.inject_secrets(connector_id, config, secret_fields)
+    except Exception as e:
+        logger.warning(f"Failed to inject secrets: {e}")
+
+    subtype = row["subtype"]
+
+    try:
+        if subtype == "postgresql":
+            from connectors.database import PostgreSQLConnector
+
+            connector = PostgreSQLConnector(
+                connector_id=connector_id,
+                name=row["name"],
+                config=config,
+            )
+        elif subtype == "mysql":
+            from connectors.database import MySQLConnector
+
+            connector = MySQLConnector(
+                connector_id=connector_id,
+                name=row["name"],
+                config=config,
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Schema discovery not supported for {subtype}",
+            )
+
+        # Discover schema
+        with connector:
+            result = connector.discover_schema()
+
+        return {
+            "connector_id": connector_id,
+            "connector_name": row["name"],
+            "tables": result.tables,
+            "columns": result.columns,
+            "sample_data": result.sample_data,
+        }
+
+    except ImportError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Missing dependency: {e}",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Schema discovery failed: {str(e)[:200]}",
+        )
+
+
+@app.post("/api/connectors/{connector_id}/activate")
+async def activate_connector(connector_id: str):
+    """Activate a connector for scheduled syncs."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT sync_schedule FROM connectors WHERE id = ?", (connector_id,)
+        )
+        row = cursor.fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Connector not found")
+
+        cursor.execute(
+            "UPDATE connectors SET status = ? WHERE id = ?",
+            ("active", connector_id),
+        )
+        conn.commit()
+
+    return {
+        "message": "Connector activated",
+        "connector_id": connector_id,
+        "status": "active",
+        "sync_schedule": row[0],
+    }
+
+
+@app.post("/api/connectors/{connector_id}/deactivate")
+async def deactivate_connector(connector_id: str):
+    """Deactivate a connector."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id FROM connectors WHERE id = ?", (connector_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Connector not found")
+
+        cursor.execute(
+            "UPDATE connectors SET status = ? WHERE id = ?",
+            ("inactive", connector_id),
+        )
+        conn.commit()
+
+    return {
+        "message": "Connector deactivated",
+        "connector_id": connector_id,
+        "status": "inactive",
+    }
+
+
+# ============================================================================
+# Sync Job Endpoints
+# ============================================================================
+
+
+@app.post("/api/connectors/{connector_id}/sync")
+async def trigger_sync(
+    connector_id: str,
+    sync_mode: str | None = None,
+    triggered_by: str | None = None,
+):
+    """Trigger a manual sync for a connector.
+
+    This starts a background sync job that extracts data from the
+    configured source and loads it into the system.
+    """
+    # Get connector
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM connectors WHERE id = ?", (connector_id,))
+        connector = cursor.fetchone()
+
+    if not connector:
+        raise HTTPException(status_code=404, detail="Connector not found")
+
+    mode = sync_mode or connector["sync_mode"]
+
+    # Check if there's already a running job for this connector
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id FROM sync_jobs WHERE connector_id = ? AND status = 'running'",
+            (connector_id,),
+        )
+        if cursor.fetchone():
+            raise HTTPException(
+                status_code=409,
+                detail="A sync job is already running for this connector",
+            )
+
+    # Try to use the worker for actual execution
+    try:
+        from scheduler.worker import execute_sync_job
+        from scheduler.jobs import JobType
+
+        job_id = execute_sync_job(
+            connector_id=connector_id,
+            job_type=JobType.MANUAL,
+            sync_mode=mode,
+            triggered_by=triggered_by,
+        )
+
+        return {
+            "job_id": job_id,
+            "connector_id": connector_id,
+            "connector_name": connector["name"],
+            "sync_mode": mode,
+            "status": "running",
+            "message": "Sync job started in background",
+        }
+
+    except ImportError:
+        # Fallback: create job record without execution
+        job_id = str(uuid.uuid4())
+        now = datetime.utcnow().isoformat()
+
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO sync_jobs
+                    (id, connector_id, job_type, sync_mode, status, started_at, triggered_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (job_id, connector_id, "manual", mode, "pending", now, triggered_by),
+            )
+            conn.commit()
+
+        return {
+            "job_id": job_id,
+            "connector_id": connector_id,
+            "connector_name": connector["name"],
+            "sync_mode": mode,
+            "status": "pending",
+            "message": "Sync job created. Install APScheduler for background execution.",
+        }
+
+
+@app.get("/api/sync-jobs")
+async def list_sync_jobs(
+    connector_id: str | None = None,
+    status: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """List sync jobs with optional filters."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        query = """
+            SELECT j.*, c.name as connector_name
+            FROM sync_jobs j
+            LEFT JOIN connectors c ON j.connector_id = c.id
+            WHERE 1=1
+        """
+        params: list[Any] = []
+
+        if connector_id:
+            query += " AND j.connector_id = ?"
+            params.append(connector_id)
+
+        if status:
+            query += " AND j.status = ?"
+            params.append(status)
+
+        query += " ORDER BY j.started_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+    jobs = []
+    for row in rows:
+        jobs.append(
+            {
+                "id": row["id"],
+                "connector_id": row["connector_id"],
+                "connector_name": row["connector_name"],
+                "job_type": row["job_type"],
+                "sync_mode": row["sync_mode"],
+                "status": row["status"],
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
+                "total_records": row["total_records"],
+                "processed_records": row["processed_records"],
+                "failed_records": row["failed_records"],
+                "watermark_value": row["watermark_value"],
+                "error_message": row["error_message"],
+                "triggered_by": row["triggered_by"],
+            }
+        )
+
+    return {"jobs": jobs, "total": len(jobs), "limit": limit, "offset": offset}
+
+
+@app.get("/api/sync-jobs/{job_id}")
+async def get_sync_job(job_id: str):
+    """Get sync job details."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT j.*, c.name as connector_name
+            FROM sync_jobs j
+            LEFT JOIN connectors c ON j.connector_id = c.id
+            WHERE j.id = ?
+            """,
+            (job_id,),
+        )
+        row = cursor.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Sync job not found")
+
+    return {
+        "id": row["id"],
+        "connector_id": row["connector_id"],
+        "connector_name": row["connector_name"],
+        "job_type": row["job_type"],
+        "sync_mode": row["sync_mode"],
+        "status": row["status"],
+        "started_at": row["started_at"],
+        "completed_at": row["completed_at"],
+        "total_records": row["total_records"],
+        "processed_records": row["processed_records"],
+        "failed_records": row["failed_records"],
+        "watermark_value": row["watermark_value"],
+        "error_message": row["error_message"],
+        "triggered_by": row["triggered_by"],
+    }
+
+
+@app.post("/api/sync-jobs/{job_id}/cancel")
+async def cancel_sync_job(job_id: str):
+    """Cancel a running or pending sync job."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT status FROM sync_jobs WHERE id = ?", (job_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Sync job not found")
+
+        if row[0] not in ("pending", "running"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel job with status: {row[0]}",
+            )
+
+    # Try to use worker's cancel method for running jobs
+    cancelled = False
+    if row[0] == "running":
+        try:
+            from scheduler.worker import get_worker
+
+            worker = get_worker()
+            cancelled = worker.cancel_sync(job_id)
+        except ImportError:
+            pass
+
+    # Fallback to direct database update
+    if not cancelled:
+        now = datetime.utcnow().isoformat()
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE sync_jobs SET status = ?, completed_at = ?, error_message = ? WHERE id = ?",
+                ("cancelled", now, "Cancelled by user", job_id),
+            )
+            conn.commit()
+
+    return {"message": "Sync job cancelled", "job_id": job_id, "status": "cancelled"}
+
+
+@app.get("/api/sync-jobs/{job_id}/logs")
+async def get_sync_job_logs(
+    job_id: str,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
+    """Get logs for a sync job."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Verify job exists
+        cursor.execute("SELECT id FROM sync_jobs WHERE id = ?", (job_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Sync job not found")
+
+        cursor.execute(
+            """
+            SELECT * FROM sync_job_logs
+            WHERE job_id = ?
+            ORDER BY timestamp DESC
+            LIMIT ? OFFSET ?
+            """,
+            (job_id, limit, offset),
+        )
+        rows = cursor.fetchall()
+
+    logs = []
+    for row in rows:
+        logs.append(
+            {
+                "id": row["id"],
+                "timestamp": row["timestamp"],
+                "level": row["level"],
+                "message": row["message"],
+                "context": safe_json_loads(row["context"], {}),
+            }
+        )
+
+    return {"job_id": job_id, "logs": logs, "total": len(logs)}
+
+
+# === Config Export/Import Endpoints ===
+
+
+@app.post("/api/connectors/config/export")
+async def export_connector_config(
+    connector_ids: list[str] | None = None,
+    format: str = Query(default="yaml", regex="^(yaml|json)$"),
+):
+    """Export connector configurations to YAML or JSON.
+
+    If connector_ids is provided, only those connectors are exported.
+    Otherwise, all connectors are exported.
+
+    Returns the config file content as a downloadable response.
+    """
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        if connector_ids:
+            placeholders = ",".join(["?"] * len(connector_ids))
+            cursor.execute(
+                f"SELECT * FROM connectors WHERE id IN ({placeholders})",
+                connector_ids,
+            )
+        else:
+            cursor.execute("SELECT * FROM connectors")
+
+        rows = cursor.fetchall()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="No connectors found to export")
+
+    # Build export data
+    connectors = []
+    for row in rows:
+        config = safe_json_loads(row["connection_config"], {})
+
+        # Remove sensitive fields from export
+        sensitive_fields = [
+            "password",
+            "secret_access_key",
+            "account_key",
+            "api_key",
+            "bearer_token",
+            "client_secret",
+            "private_key",
+            "sas_token",
+        ]
+        for field in sensitive_fields:
+            if field in config:
+                config[field] = "${" + field.upper() + "}"  # Placeholder for env var
+
+        connectors.append(
+            {
+                "name": row["name"],
+                "type": row["connector_type"],
+                "subtype": row["subtype"],
+                "data_type": row["data_type"],
+                "sync_mode": row["sync_mode"],
+                "schedule": row["sync_schedule"],
+                "batch_size": row["batch_size"],
+                "connection": config,
+            }
+        )
+
+    export_data = {
+        "version": "1.0",
+        "exported_at": datetime.utcnow().isoformat(),
+        "connectors": connectors,
+    }
+
+    if format == "yaml":
+        import yaml
+
+        content = yaml.dump(export_data, default_flow_style=False, sort_keys=False)
+        media_type = "application/x-yaml"
+        filename = "connectors.yaml"
+    else:
+        content = json.dumps(export_data, indent=2)
+        media_type = "application/json"
+        filename = "connectors.json"
+
+    from fastapi.responses import Response
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.post("/api/connectors/config/import")
+async def import_connector_config(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(
+        default=True, description="Validate only, don't create connectors"
+    ),
+    overwrite: bool = Query(
+        default=False, description="Overwrite existing connectors with same name"
+    ),
+):
+    """Import connector configurations from YAML or JSON file.
+
+    Use dry_run=true to validate the config without creating connectors.
+    Use overwrite=true to update existing connectors with the same name.
+    """
+    from connectors.config_loader import ConfigLoader, ConfigValidationError
+
+    # Read file content
+    content = await file.read()
+
+    # Detect format from filename or try both
+    filename = file.filename or ""
+    if filename.endswith(".yaml") or filename.endswith(".yml"):
+        import yaml
+
+        try:
+            data = yaml.safe_load(content)
+        except yaml.YAMLError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid YAML: {str(e)[:200]}")
+    elif filename.endswith(".json"):
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)[:200]}")
+    else:
+        # Try YAML first, then JSON
+        import yaml
+
+        try:
+            data = yaml.safe_load(content)
+        except Exception:
+            try:
+                data = json.loads(content)
+            except Exception:
+                raise HTTPException(
+                    status_code=400, detail="Could not parse file as YAML or JSON"
+                )
+
+    # Validate configuration
+    loader = ConfigLoader()
+    try:
+        connector_configs = loader._parse_config(data, filename)
+    except ConfigValidationError as e:
+        raise HTTPException(
+            status_code=400, detail={"message": str(e), "errors": e.errors}
+        )
+
+    if dry_run:
+        return {
+            "status": "validated",
+            "message": f"Successfully validated {len(connector_configs)} connector(s)",
+            "connectors": [
+                {
+                    "name": c.name,
+                    "type": c.connector_type.value,
+                    "subtype": c.subtype.value,
+                    "data_type": c.data_type.value,
+                }
+                for c in connector_configs
+            ],
+        }
+
+    # Import connectors
+    results = {"created": [], "updated": [], "skipped": [], "errors": []}
+
+    for config in connector_configs:
+        try:
+            # Check if connector with same name exists
+            with sqlite3.connect(DB_PATH) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id FROM connectors WHERE name = ?", (config.name,)
+                )
+                existing = cursor.fetchone()
+
+            if existing:
+                if overwrite:
+                    # Update existing connector
+                    connector_id = existing[0]
+                    now = datetime.utcnow().isoformat()
+
+                    with sqlite3.connect(DB_PATH) as conn:
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            """
+                            UPDATE connectors SET
+                                connector_type = ?,
+                                subtype = ?,
+                                data_type = ?,
+                                connection_config = ?,
+                                sync_schedule = ?,
+                                sync_mode = ?,
+                                batch_size = ?
+                            WHERE id = ?
+                            """,
+                            (
+                                config.connector_type.value,
+                                config.subtype.value,
+                                config.data_type.value,
+                                json.dumps(config.connection_config),
+                                config.sync_schedule,
+                                config.sync_mode.value,
+                                config.batch_size,
+                                connector_id,
+                            ),
+                        )
+                        conn.commit()
+
+                    results["updated"].append({"name": config.name, "id": connector_id})
+                else:
+                    results["skipped"].append(
+                        {
+                            "name": config.name,
+                            "reason": "Connector with this name already exists",
+                        }
+                    )
+            else:
+                # Create new connector
+                connector_id = str(uuid.uuid4())
+                now = datetime.utcnow().isoformat()
+
+                with sqlite3.connect(DB_PATH) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        """
+                        INSERT INTO connectors
+                            (id, name, connector_type, subtype, data_type,
+                             connection_config, sync_schedule, sync_mode,
+                             batch_size, status, created_at, created_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            connector_id,
+                            config.name,
+                            config.connector_type.value,
+                            config.subtype.value,
+                            config.data_type.value,
+                            json.dumps(config.connection_config),
+                            config.sync_schedule,
+                            config.sync_mode.value,
+                            config.batch_size,
+                            "inactive",
+                            now,
+                            config.created_by or "config_import",
+                        ),
+                    )
+                    conn.commit()
+
+                results["created"].append({"name": config.name, "id": connector_id})
+
+        except Exception as e:
+            results["errors"].append({"name": config.name, "error": str(e)})
+
+    return {
+        "status": "completed",
+        "message": f"Imported {len(results['created'])} new, updated {len(results['updated'])}, skipped {len(results['skipped'])}",
+        "results": results,
+    }
+
+
+@app.post("/api/connectors/config/validate")
+async def validate_connector_config(config: dict):
+    """Validate a connector configuration without creating it.
+
+    Useful for validating config before saving or submitting.
+    """
+    from connectors.config_loader import ConfigLoader, ConfigValidationError
+
+    loader = ConfigLoader()
+    try:
+        # Wrap single config in list format
+        configs = loader._parse_config(config, "inline")
+
+        return {
+            "valid": True,
+            "message": "Configuration is valid",
+            "connector": {
+                "name": configs[0].name,
+                "type": configs[0].connector_type.value,
+                "subtype": configs[0].subtype.value,
+                "data_type": configs[0].data_type.value,
+            },
+        }
+
+    except ConfigValidationError as e:
+        return {
+            "valid": False,
+            "message": str(e),
+            "errors": e.errors,
+        }
 
 
 if __name__ == "__main__":
