@@ -1,5 +1,4 @@
 name: Claude Code Review
-
 on:
   pull_request:
     types: [opened, synchronize]
@@ -17,14 +16,12 @@ jobs:
     #   github.event.pull_request.user.login == 'external-contributor' ||
     #   github.event.pull_request.user.login == 'new-developer' ||
     #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
       issues: read
       id-token: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,6 +33,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          model: claude-opus-4-5-20251101
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
@@ -47,11 +45,16 @@ jobs:
             - Security concerns
             - Test coverage
 
-            Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
-
+            Use the repository's CLAUDE.md for guidance on style and conventions.
+            Be constructive and helpful in your feedback.
             Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
-
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
-
+          allowed_tools: |
+            Bash(gh issue view:*)
+            Bash(gh search:*)
+            Bash(gh issue list:*)
+            Bash(gh pr comment:*)
+            Bash(gh pr diff:*)
+            Bash(gh pr view:*)
+            Bash(gh pr list:*)
