@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Clock, Calendar, HelpCircle } from 'lucide-react';
@@ -80,24 +80,42 @@ function describeCron(cron: string): string {
   return `${minuteDesc}, ${hourDesc}, ${dayDesc}${monthDesc ? `, ${monthDesc}` : ''}${weekdayDesc ? `, on ${weekdayDesc}` : ''}`;
 }
 
-export function ScheduleEditor({ value, onChange, className }: ScheduleEditorProps) {
-  const [mode, setMode] = useState<'preset' | 'custom'>('preset');
-  const [parts, setParts] = useState(parseCron(value || '0 0 * * *'));
-  const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
+// Helper to determine initial state from value
+function getInitialState(value: string) {
+  const preset = PRESETS.find((p) => p.value === value);
+  if (preset) {
+    return { mode: 'preset' as const, selectedPreset: preset.value, parts: parseCron(value || '0 0 * * *') };
+  }
+  return { mode: 'custom' as const, selectedPreset: null, parts: parseCron(value || '0 0 * * *') };
+}
 
-  // Initialize from value
+export function ScheduleEditor({ value, onChange, className }: ScheduleEditorProps) {
+  // Compute initial state once
+  const initialState = getInitialState(value);
+  const [mode, setMode] = useState<'preset' | 'custom'>(initialState.mode);
+  const [parts, setParts] = useState(initialState.parts);
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(initialState.selectedPreset);
+
+  // Track the previous value to detect external changes
+  const prevValueRef = useRef(value);
+
+  // Only update state when value changes externally (not from our own onChange calls)
+  // This is a controlled component pattern - setState in effect is intentional
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (value) {
+    if (value !== prevValueRef.current) {
+      prevValueRef.current = value;
       const preset = PRESETS.find((p) => p.value === value);
       if (preset) {
         setSelectedPreset(preset.value);
         setMode('preset');
-      } else {
+      } else if (value) {
         setParts(parseCron(value));
         setMode('custom');
       }
     }
   }, [value]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handlePresetSelect = (presetValue: string) => {
     setSelectedPreset(presetValue);

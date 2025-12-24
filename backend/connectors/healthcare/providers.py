@@ -318,68 +318,86 @@ def validate_provider(provider: ProviderRecord) -> ProviderValidationResult:
     if not provider.npi:
         errors.append({"field": "npi", "message": "NPI is required"})
     elif not validate_npi(provider.npi):
-        errors.append({
-            "field": "npi",
-            "message": f"Invalid NPI: {provider.npi} (failed Luhn check)",
-        })
+        errors.append(
+            {
+                "field": "npi",
+                "message": f"Invalid NPI: {provider.npi} (failed Luhn check)",
+            }
+        )
 
     # Type-specific validation
     if provider.provider_type == ProviderType.INDIVIDUAL:
         if not provider.last_name:
-            errors.append({
-                "field": "last_name",
-                "message": "Last name is required for individual providers",
-            })
+            errors.append(
+                {
+                    "field": "last_name",
+                    "message": "Last name is required for individual providers",
+                }
+            )
         if not provider.first_name:
-            warnings.append({
-                "field": "first_name",
-                "message": "First name is recommended for individual providers",
-            })
+            warnings.append(
+                {
+                    "field": "first_name",
+                    "message": "First name is recommended for individual providers",
+                }
+            )
     else:  # Organization
         if not provider.organization_name:
-            errors.append({
-                "field": "organization_name",
-                "message": "Organization name is required for organization providers",
-            })
+            errors.append(
+                {
+                    "field": "organization_name",
+                    "message": "Organization name is required for organization providers",
+                }
+            )
 
     # Taxonomy validation
     taxonomy_pattern = re.compile(r"^\d{10}X$")
     for i, taxonomy in enumerate(provider.taxonomies):
         if not taxonomy_pattern.match(taxonomy.taxonomy_code):
-            warnings.append({
-                "field": f"taxonomies[{i}].taxonomy_code",
-                "message": f"Invalid taxonomy code format: {taxonomy.taxonomy_code}",
-            })
+            warnings.append(
+                {
+                    "field": f"taxonomies[{i}].taxonomy_code",
+                    "message": f"Invalid taxonomy code format: {taxonomy.taxonomy_code}",
+                }
+            )
 
     # Check for primary taxonomy
     has_primary = any(t.is_primary for t in provider.taxonomies)
     if provider.taxonomies and not has_primary:
-        warnings.append({
-            "field": "taxonomies",
-            "message": "No primary taxonomy designated",
-        })
+        warnings.append(
+            {
+                "field": "taxonomies",
+                "message": "No primary taxonomy designated",
+            }
+        )
 
     # License validation
     for i, lic in enumerate(provider.licenses):
         if lic.expiration_date and lic.expiration_date < date.today():
-            warnings.append({
-                "field": f"licenses[{i}]",
-                "message": f"License expired: {lic.license_number}",
-            })
+            warnings.append(
+                {
+                    "field": f"licenses[{i}]",
+                    "message": f"License expired: {lic.license_number}",
+                }
+            )
 
     # Address validation
     if not provider.addresses:
-        warnings.append({
-            "field": "addresses",
-            "message": "No address information provided",
-        })
+        warnings.append(
+            {
+                "field": "addresses",
+                "message": "No address information provided",
+            }
+        )
 
     # Exclusion check
     if provider.is_excluded:
-        errors.append({
-            "field": "is_excluded",
-            "message": f"Provider is excluded ({provider.exclusion_type})",
-        })
+        errors.append(
+            {
+                "field": "is_excluded",
+                "message": f"Provider is excluded ({provider.exclusion_type})",
+            }
+        )
 
     return ProviderValidationResult(
         valid=len(errors) == 0,
@@ -440,7 +458,10 @@ def normalize_provider(data: dict[str, Any]) -> ProviderRecord:
                         taxonomy_description=data.get(
                             f"provider_taxonomy_description_{i}"
                         ),
-                        is_primary=data.get(f"healthcare_provider_primary_taxonomy_switch_{i}") == "Y",
+                        is_primary=data.get(
+                            f"healthcare_provider_primary_taxonomy_switch_{i}"
+                        )
+                        == "Y",
                         license_number=data.get(f"provider_license_number_{i}"),
                         state=data.get(f"provider_license_number_state_code_{i}"),
                     )
@@ -451,7 +472,9 @@ def normalize_provider(data: dict[str, Any]) -> ProviderRecord:
                 taxonomies.append(
                     ProviderTaxonomy(
                         taxonomy_code=tax.get("taxonomy_code", tax.get("code", "")),
-                        taxonomy_description=tax.get("taxonomy_description", tax.get("desc")),
+                        taxonomy_description=tax.get(
+                            "taxonomy_description", tax.get("desc")
+                        ),
                         is_primary=tax.get("is_primary", tax.get("primary", False)),
                         license_number=tax.get("license_number"),
                         state=tax.get("state"),
@@ -478,7 +501,9 @@ def normalize_provider(data: dict[str, Any]) -> ProviderRecord:
                     ProviderAddress(
                         address_type=addr_type,
                         address_line1=addr1,
-                        address_line2=data.get(f"{prefix.replace('first', 'second')}location_address"),
+                        address_line2=data.get(
+                            f"{prefix.replace('first', 'second')}location_address"
+                        ),
                         city=data.get(f"{prefix}location_city_name"),
                         state=data.get(f"{prefix}location_state_name"),
                         zip_code=data.get(f"{prefix}location_postal_code"),
@@ -526,8 +551,12 @@ def normalize_provider(data: dict[str, Any]) -> ProviderRecord:
             if isinstance(ident, dict):
                 other_identifiers.append(
                     ProviderIdentifier(
-                        identifier_type=ident.get("identifier_type", ident.get("type", "OTHER")),
-                        identifier_value=ident.get("identifier_value", ident.get("value", "")),
+                        identifier_type=ident.get(
+                            "identifier_type", ident.get("type", "OTHER")
+                        ),
+                        identifier_value=ident.get(
+                            "identifier_value", ident.get("value", "")
+                        ),
                         state=ident.get("state"),
                         issuer=ident.get("issuer"),
                     )

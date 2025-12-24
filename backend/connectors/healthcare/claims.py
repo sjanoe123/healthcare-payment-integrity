@@ -68,7 +68,9 @@ class ClaimLine:
             "modifier_3": self.modifier_3,
             "modifier_4": self.modifier_4,
             "diagnosis_pointer": self.diagnosis_pointer,
-            "service_date": self.service_date.isoformat() if self.service_date else None,
+            "service_date": self.service_date.isoformat()
+            if self.service_date
+            else None,
             "service_date_end": (
                 self.service_date_end.isoformat() if self.service_date_end else None
             ),
@@ -76,7 +78,9 @@ class ClaimLine:
             "units": float(self.units),
             "unit_type": self.unit_type,
             "charge_amount": float(self.charge_amount),
-            "allowed_amount": float(self.allowed_amount) if self.allowed_amount else None,
+            "allowed_amount": float(self.allowed_amount)
+            if self.allowed_amount
+            else None,
             "paid_amount": float(self.paid_amount) if self.paid_amount else None,
             "revenue_code": self.revenue_code,
             "ndc_code": self.ndc_code,
@@ -171,7 +175,9 @@ class ClaimRecord:
             "subscriber_id": self.subscriber_id,
             "group_number": self.group_number,
             "statement_from_date": (
-                self.statement_from_date.isoformat() if self.statement_from_date else None
+                self.statement_from_date.isoformat()
+                if self.statement_from_date
+                else None
             ),
             "statement_to_date": (
                 self.statement_to_date.isoformat() if self.statement_to_date else None
@@ -239,27 +245,33 @@ def validate_claim(claim: ClaimRecord) -> ClaimValidationResult:
         errors.append({"field": "member_id", "message": "Member ID is required"})
 
     if not claim.billing_provider_npi:
-        errors.append({
-            "field": "billing_provider_npi",
-            "message": "Billing provider NPI is required",
-        })
+        errors.append(
+            {
+                "field": "billing_provider_npi",
+                "message": "Billing provider NPI is required",
+            }
+        )
 
     # NPI validation (10-digit number)
     npi_pattern = re.compile(r"^\d{10}$")
 
     if claim.billing_provider_npi and not npi_pattern.match(claim.billing_provider_npi):
-        errors.append({
-            "field": "billing_provider_npi",
-            "message": f"Invalid NPI format: {claim.billing_provider_npi}",
-        })
+        errors.append(
+            {
+                "field": "billing_provider_npi",
+                "message": f"Invalid NPI format: {claim.billing_provider_npi}",
+            }
+        )
 
     if claim.rendering_provider_npi and not npi_pattern.match(
         claim.rendering_provider_npi
     ):
-        errors.append({
-            "field": "rendering_provider_npi",
-            "message": f"Invalid NPI format: {claim.rendering_provider_npi}",
-        })
+        errors.append(
+            {
+                "field": "rendering_provider_npi",
+                "message": f"Invalid NPI format: {claim.rendering_provider_npi}",
+            }
+        )
 
     # Diagnosis code validation
     icd10_pattern = re.compile(r"^[A-Z]\d{2}(\.\d{1,4})?$")
@@ -268,27 +280,38 @@ def validate_claim(claim: ClaimRecord) -> ClaimValidationResult:
     for i, dx in enumerate(claim.diagnosis_codes):
         if claim.diagnosis_code_type == "ICD10":
             if not icd10_pattern.match(dx):
-                errors.append({
-                    "field": f"diagnosis_codes[{i}]",
-                    "message": f"Invalid ICD-10 code format: {dx}",
-                })
+                errors.append(
+                    {
+                        "field": f"diagnosis_codes[{i}]",
+                        "message": f"Invalid ICD-10 code format: {dx}",
+                    }
+                )
         elif claim.diagnosis_code_type == "ICD9":
             if not icd9_pattern.match(dx):
-                errors.append({
-                    "field": f"diagnosis_codes[{i}]",
-                    "message": f"Invalid ICD-9 code format: {dx}",
-                })
+                errors.append(
+                    {
+                        "field": f"diagnosis_codes[{i}]",
+                        "message": f"Invalid ICD-9 code format: {dx}",
+                    }
+                )
 
     # Principal diagnosis should be in diagnosis list
-    if claim.principal_diagnosis and claim.principal_diagnosis not in claim.diagnosis_codes:
-        warnings.append({
-            "field": "principal_diagnosis",
-            "message": "Principal diagnosis not in diagnosis codes list",
-        })
+    if (
+        claim.principal_diagnosis
+        and claim.principal_diagnosis not in claim.diagnosis_codes
+    ):
+        warnings.append(
+            {
+                "field": "principal_diagnosis",
+                "message": "Principal diagnosis not in diagnosis codes list",
+            }
+        )
 
     # Service line validation
     if not claim.lines:
-        errors.append({"field": "lines", "message": "At least one service line is required"})
+        errors.append(
+            {"field": "lines", "message": "At least one service line is required"}
+        )
 
     for i, line in enumerate(claim.lines):
         # Procedure code format
@@ -300,70 +323,88 @@ def validate_claim(claim: ClaimRecord) -> ClaimValidationResult:
                 cpt_pattern.match(line.procedure_code)
                 or hcpcs_pattern.match(line.procedure_code)
             ):
-                errors.append({
-                    "field": f"lines[{i}].procedure_code",
-                    "message": f"Invalid procedure code format: {line.procedure_code}",
-                })
+                errors.append(
+                    {
+                        "field": f"lines[{i}].procedure_code",
+                        "message": f"Invalid procedure code format: {line.procedure_code}",
+                    }
+                )
 
         # Charge amount
         if line.charge_amount <= 0:
-            warnings.append({
-                "field": f"lines[{i}].charge_amount",
-                "message": "Charge amount should be positive",
-            })
+            warnings.append(
+                {
+                    "field": f"lines[{i}].charge_amount",
+                    "message": "Charge amount should be positive",
+                }
+            )
 
         # Units
         if line.units <= 0:
-            errors.append({
-                "field": f"lines[{i}].units",
-                "message": "Units must be positive",
-            })
+            errors.append(
+                {
+                    "field": f"lines[{i}].units",
+                    "message": "Units must be positive",
+                }
+            )
 
         # Diagnosis pointer validation
         for ptr in line.diagnosis_pointer:
             if ptr < 1 or ptr > len(claim.diagnosis_codes):
-                errors.append({
-                    "field": f"lines[{i}].diagnosis_pointer",
-                    "message": f"Invalid diagnosis pointer: {ptr}",
-                })
+                errors.append(
+                    {
+                        "field": f"lines[{i}].diagnosis_pointer",
+                        "message": f"Invalid diagnosis pointer: {ptr}",
+                    }
+                )
 
     # Date validation
     if claim.statement_from_date and claim.statement_to_date:
         if claim.statement_from_date > claim.statement_to_date:
-            errors.append({
-                "field": "statement_dates",
-                "message": "Statement from date cannot be after to date",
-            })
+            errors.append(
+                {
+                    "field": "statement_dates",
+                    "message": "Statement from date cannot be after to date",
+                }
+            )
 
     if claim.admission_date and claim.discharge_date:
         if claim.admission_date > claim.discharge_date:
-            errors.append({
-                "field": "admission_dates",
-                "message": "Admission date cannot be after discharge date",
-            })
+            errors.append(
+                {
+                    "field": "admission_dates",
+                    "message": "Admission date cannot be after discharge date",
+                }
+            )
 
     # Institutional claim requirements
     if claim.claim_type == ClaimType.INSTITUTIONAL:
         if not claim.bill_type:
-            warnings.append({
-                "field": "bill_type",
-                "message": "Bill type is recommended for institutional claims",
-            })
+            warnings.append(
+                {
+                    "field": "bill_type",
+                    "message": "Bill type is recommended for institutional claims",
+                }
+            )
 
         for i, line in enumerate(claim.lines):
             if not line.revenue_code:
-                warnings.append({
-                    "field": f"lines[{i}].revenue_code",
-                    "message": "Revenue code is recommended for institutional claims",
-                })
+                warnings.append(
+                    {
+                        "field": f"lines[{i}].revenue_code",
+                        "message": "Revenue code is recommended for institutional claims",
+                    }
+                )
 
     # Financial consistency
     calculated_total = sum(line.charge_amount for line in claim.lines)
     if abs(float(claim.total_charge) - float(calculated_total)) > 0.01:
-        warnings.append({
-            "field": "total_charge",
-            "message": f"Total charge ({claim.total_charge}) doesn't match sum of lines ({calculated_total})",
-        })
+        warnings.append(
+            {
+                "field": "total_charge",
+                "message": f"Total charge ({claim.total_charge}) doesn't match sum of lines ({calculated_total})",
+            }
+        )
 
     return ClaimValidationResult(
         valid=len(errors) == 0,
@@ -383,6 +424,7 @@ def normalize_claim(data: dict[str, Any]) -> ClaimRecord:
     Returns:
         Normalized ClaimRecord
     """
+
     # Parse dates
     def parse_date(val: Any) -> date | None:
         if val is None:
@@ -442,7 +484,9 @@ def normalize_claim(data: dict[str, Any]) -> ClaimRecord:
                     place_of_service=line_data.get(
                         "place_of_service", line_data.get("pos")
                     ),
-                    units=parse_decimal(line_data.get("units", line_data.get("qty", 1))),
+                    units=parse_decimal(
+                        line_data.get("units", line_data.get("qty", 1))
+                    ),
                     unit_type=line_data.get("unit_type", "UN"),
                     charge_amount=parse_decimal(
                         line_data.get("charge_amount", line_data.get("charge", 0))

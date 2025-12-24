@@ -225,85 +225,153 @@ def validate_eligibility(record: EligibilityRecord) -> EligibilityValidationResu
 
     # Name validation
     if not record.first_name and not record.last_name:
-        warnings.append({
-            "field": "name",
-            "message": "Member name is recommended",
-        })
+        warnings.append(
+            {
+                "field": "name",
+                "message": "Member name is recommended",
+            }
+        )
 
     # Date of birth
     if record.date_of_birth:
         if record.date_of_birth > date.today():
-            errors.append({
-                "field": "date_of_birth",
-                "message": "Date of birth cannot be in the future",
-            })
+            errors.append(
+                {
+                    "field": "date_of_birth",
+                    "message": "Date of birth cannot be in the future",
+                }
+            )
 
     # State code validation
     valid_states = {
-        "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
-        "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
-        "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
-        "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
-        "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
-        "DC", "PR", "VI", "GU", "AS", "MP",
+        "AL",
+        "AK",
+        "AZ",
+        "AR",
+        "CA",
+        "CO",
+        "CT",
+        "DE",
+        "FL",
+        "GA",
+        "HI",
+        "ID",
+        "IL",
+        "IN",
+        "IA",
+        "KS",
+        "KY",
+        "LA",
+        "ME",
+        "MD",
+        "MA",
+        "MI",
+        "MN",
+        "MS",
+        "MO",
+        "MT",
+        "NE",
+        "NV",
+        "NH",
+        "NJ",
+        "NM",
+        "NY",
+        "NC",
+        "ND",
+        "OH",
+        "OK",
+        "OR",
+        "PA",
+        "RI",
+        "SC",
+        "SD",
+        "TN",
+        "TX",
+        "UT",
+        "VT",
+        "VA",
+        "WA",
+        "WV",
+        "WI",
+        "WY",
+        "DC",
+        "PR",
+        "VI",
+        "GU",
+        "AS",
+        "MP",
     }
 
     if record.state and record.state.upper() not in valid_states:
-        warnings.append({
-            "field": "state",
-            "message": f"Invalid state code: {record.state}",
-        })
+        warnings.append(
+            {
+                "field": "state",
+                "message": f"Invalid state code: {record.state}",
+            }
+        )
 
     # Zip code validation
     if record.zip_code:
         zip_pattern = re.compile(r"^\d{5}(-\d{4})?$")
         if not zip_pattern.match(record.zip_code):
-            warnings.append({
-                "field": "zip_code",
-                "message": f"Invalid zip code format: {record.zip_code}",
-            })
+            warnings.append(
+                {
+                    "field": "zip_code",
+                    "message": f"Invalid zip code format: {record.zip_code}",
+                }
+            )
 
     # Phone validation
     if record.phone:
         phone_digits = re.sub(r"\D", "", record.phone)
         if len(phone_digits) != 10:
-            warnings.append({
-                "field": "phone",
-                "message": f"Invalid phone number: {record.phone}",
-            })
+            warnings.append(
+                {
+                    "field": "phone",
+                    "message": f"Invalid phone number: {record.phone}",
+                }
+            )
 
     # Email validation
     if record.email:
         email_pattern = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
         if not email_pattern.match(record.email):
-            warnings.append({
-                "field": "email",
-                "message": f"Invalid email format: {record.email}",
-            })
+            warnings.append(
+                {
+                    "field": "email",
+                    "message": f"Invalid email format: {record.email}",
+                }
+            )
 
     # Coverage validation
     if not record.coverages:
-        warnings.append({
-            "field": "coverages",
-            "message": "No coverage information provided",
-        })
+        warnings.append(
+            {
+                "field": "coverages",
+                "message": "No coverage information provided",
+            }
+        )
 
     for i, coverage in enumerate(record.coverages):
         if coverage.effective_date and coverage.termination_date:
             if coverage.effective_date > coverage.termination_date:
-                errors.append({
-                    "field": f"coverages[{i}]",
-                    "message": "Effective date cannot be after termination date",
-                })
+                errors.append(
+                    {
+                        "field": f"coverages[{i}]",
+                        "message": "Effective date cannot be after termination date",
+                    }
+                )
 
     # PCP NPI validation
     if record.pcp_npi:
         npi_pattern = re.compile(r"^\d{10}$")
         if not npi_pattern.match(record.pcp_npi):
-            errors.append({
-                "field": "pcp_npi",
-                "message": f"Invalid NPI format: {record.pcp_npi}",
-            })
+            errors.append(
+                {
+                    "field": "pcp_npi",
+                    "message": f"Invalid NPI format: {record.pcp_npi}",
+                }
+            )
 
     return EligibilityValidationResult(
         valid=len(errors) == 0,
