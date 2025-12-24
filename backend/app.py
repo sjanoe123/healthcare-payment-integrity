@@ -1236,8 +1236,16 @@ async def get_stats():
 # Secret fields that need encryption for each connector type
 CONNECTOR_SECRET_FIELDS = {
     "database": ["password"],
-    "api": ["api_key", "oauth_client_secret"],
-    "file": ["aws_access_key", "aws_secret_key", "password", "private_key"],
+    "api": ["api_key", "oauth_client_secret", "bearer_token"],
+    "file": [
+        "aws_access_key",
+        "aws_secret_key",
+        "password",
+        "private_key",
+        "account_key",  # Azure Blob Storage
+        "sas_token",  # Azure SAS token
+        "azure_connection_string",  # Azure full connection string
+    ],
 }
 
 

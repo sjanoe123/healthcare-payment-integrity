@@ -141,9 +141,25 @@ class CredentialManager:
         """
         encrypted = self.encrypt(value)
         now = datetime.utcnow().isoformat()
+        new_id = str(uuid4())
 
         with sqlite3.connect(self.db_path) as conn:
-            # Check if credential already exists to avoid race condition
+            # Use atomic ON CONFLICT to avoid TOCTOU race condition
+            # The new_id is only used if this is an insert, not an update
+            conn.execute(
+                """
+                INSERT INTO connector_credentials
+                    (id, connector_id, credential_type, encrypted_value, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(connector_id, credential_type) DO UPDATE SET
+                    encrypted_value = excluded.encrypted_value,
+                    updated_at = excluded.updated_at
+                """,
+                (new_id, connector_id, credential_type, encrypted, now, now),
+            )
+            conn.commit()
+
+            # Get the actual ID (either the new one or the existing one)
             cursor = conn.execute(
                 """
                 SELECT id FROM connector_credentials
@@ -151,31 +167,8 @@ class CredentialManager:
                 """,
                 (connector_id, credential_type),
             )
-            existing = cursor.fetchone()
-
-            if existing:
-                # Update existing credential
-                cred_id = existing[0]
-                conn.execute(
-                    """
-                    UPDATE connector_credentials
-                    SET encrypted_value = ?, updated_at = ?
-                    WHERE id = ?
-                    """,
-                    (encrypted, now, cred_id),
-                )
-            else:
-                # Insert new credential
-                cred_id = str(uuid4())
-                conn.execute(
-                    """
-                    INSERT INTO connector_credentials
-                        (id, connector_id, credential_type, encrypted_value, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (cred_id, connector_id, credential_type, encrypted, now, now),
-                )
-            conn.commit()
+            row = cursor.fetchone()
+            cred_id = row[0] if row else new_id
 
         logger.debug(
             f"Stored credential {credential_type} for connector {connector_id}"

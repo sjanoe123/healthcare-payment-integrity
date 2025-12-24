@@ -144,8 +144,9 @@ class APIConnectionConfig(BaseModel):
     """Configuration for API connectors."""
 
     base_url: str
-    auth_type: str = "none"  # none, api_key, oauth2, basic
+    auth_type: str = "none"  # none, api_key, oauth2, basic, bearer
     api_key: str | None = Field(default=None, exclude=True)
+    bearer_token: str | None = Field(default=None, exclude=True)
     oauth_client_id: str | None = None
     oauth_client_secret: str | None = Field(default=None, exclude=True)
     oauth_token_url: str | None = None
@@ -164,6 +165,13 @@ class FileConnectionConfig(BaseModel):
     aws_region: str | None = None
     aws_access_key: str | None = Field(default=None, exclude=True)
     aws_secret_key: str | None = Field(default=None, exclude=True)
+
+    # Azure Blob Storage
+    azure_container: str | None = None
+    azure_account_name: str | None = None
+    account_key: str | None = Field(default=None, exclude=True)
+    sas_token: str | None = Field(default=None, exclude=True)
+    azure_connection_string: str | None = Field(default=None, exclude=True)
 
     # SFTP
     host: str | None = None
