@@ -10,6 +10,9 @@ const AnalyzeClaim = lazy(() => import('./pages/AnalyzeClaim'));
 const ClaimHistory = lazy(() => import('./pages/ClaimHistory'));
 const PolicySearch = lazy(() => import('./pages/PolicySearch'));
 const MappingReview = lazy(() => import('./pages/MappingReview'));
+const DataSources = lazy(() => import('./pages/DataSources'));
+const SyncJobs = lazy(() => import('./pages/SyncJobs'));
+const ConnectorConfig = lazy(() => import('./pages/ConnectorConfig'));
 
 /**
  * React Query client configuration
@@ -57,6 +60,10 @@ function App() {
               <Route path="/claims" element={<ClaimHistory />} />
               <Route path="/search" element={<PolicySearch />} />
               <Route path="/mappings" element={<MappingReview />} />
+              <Route path="/data-sources" element={<DataSources />} />
+              <Route path="/connectors/new" element={<ConnectorConfig />} />
+              <Route path="/connectors/:id/edit" element={<ConnectorConfig />} />
+              <Route path="/sync-jobs" element={<SyncJobs />} />
             </Route>
           </Routes>
         </Suspense>
