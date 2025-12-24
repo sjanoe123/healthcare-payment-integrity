@@ -1398,18 +1398,25 @@ async def create_connector(request: ConnectorCreateRequest):
     config = request.connection_config.copy()
     secret_fields = CONNECTOR_SECRET_FIELDS.get(request.connector_type, [])
 
+    # Encrypt and store secrets - fail loudly if encryption not configured
+    cred_manager = get_credential_manager(DB_PATH)
+    if not cred_manager.encryption_enabled:
+        raise HTTPException(
+            status_code=500,
+            detail="Credential encryption not configured. "
+            "Set CREDENTIAL_ENCRYPTION_KEY environment variable.",
+        )
+
     try:
-        cred_manager = get_credential_manager(DB_PATH)
-        if cred_manager.encryption_enabled:
-            config = cred_manager.extract_and_store_secrets(
-                connector_id, config, secret_fields
-            )
+        config = cred_manager.extract_and_store_secrets(
+            connector_id, config, secret_fields
+        )
     except Exception as e:
-        logger.warning(f"Credential encryption failed: {e}")
-        # Store without encryption (not recommended for production)
-        for field in secret_fields:
-            if field in config:
-                config[field] = "***UNENCRYPTED***"
+        logger.error(f"Credential encryption failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to encrypt credentials: {str(e)[:100]}",
+        )
 
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
@@ -1530,14 +1537,25 @@ async def update_connector(connector_id: str, request: ConnectorUpdateRequest):
         config = request.connection_config.copy()
         secret_fields = CONNECTOR_SECRET_FIELDS.get(existing["connector_type"], [])
 
+        # Encrypt and store secrets - fail loudly if encryption not configured
+        cred_manager = get_credential_manager(DB_PATH)
+        if not cred_manager.encryption_enabled:
+            raise HTTPException(
+                status_code=500,
+                detail="Credential encryption not configured. "
+                "Set CREDENTIAL_ENCRYPTION_KEY environment variable.",
+            )
+
         try:
-            cred_manager = get_credential_manager(DB_PATH)
-            if cred_manager.encryption_enabled:
-                config = cred_manager.extract_and_store_secrets(
-                    connector_id, config, secret_fields
-                )
+            config = cred_manager.extract_and_store_secrets(
+                connector_id, config, secret_fields
+            )
         except Exception as e:
-            logger.warning(f"Credential encryption failed: {e}")
+            logger.error(f"Credential encryption failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to encrypt credentials: {str(e)[:100]}",
+            )
 
         updates.append("connection_config = ?")
         params.append(json.dumps(config))
