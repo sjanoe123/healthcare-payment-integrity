@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import uuid
 from contextlib import asynccontextmanager
@@ -54,6 +55,45 @@ def safe_json_loads(
     except json.JSONDecodeError:
         logger.warning(f"Failed to parse JSON: {data[:100]}...")
         return default
+
+
+def sanitize_filename(filename: str | None, max_length: int = 255) -> str:
+    """Sanitize a user-provided filename for safe logging and storage.
+
+    Prevents:
+    - Path traversal attacks (../, etc.)
+    - Log injection (newlines, control characters)
+    - Excessively long filenames
+
+    Args:
+        filename: The raw filename from user input
+        max_length: Maximum allowed filename length
+
+    Returns:
+        A safe filename string
+    """
+    if not filename:
+        return "unknown"
+
+    # Remove path separators and parent directory references
+    safe_name = filename.replace("\\", "/")  # Normalize separators
+    safe_name = safe_name.split("/")[-1]  # Take only the filename part
+    safe_name = safe_name.replace("..", "")  # Remove parent directory references
+
+    # Remove control characters and newlines (prevent log injection)
+    safe_name = re.sub(r"[\x00-\x1f\x7f-\x9f\n\r]", "", safe_name)
+
+    # Limit length
+    if len(safe_name) > max_length:
+        # Preserve extension if present
+        if "." in safe_name:
+            name, ext = safe_name.rsplit(".", 1)
+            ext = ext[:10]  # Limit extension length
+            safe_name = name[: max_length - len(ext) - 1] + "." + ext
+        else:
+            safe_name = safe_name[:max_length]
+
+    return safe_name or "unknown"
 
 
 def init_db():
@@ -767,8 +807,11 @@ async def upload_policy_file(
     """
     store = get_store()
 
+    # Sanitize filename to prevent path traversal and log injection
+    raw_filename = file.filename or "unknown"
+    filename = sanitize_filename(raw_filename)
+
     # Check file extension
-    filename = file.filename or "unknown"
     allowed_extensions = {".txt", ".md"}
     file_ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
@@ -2793,7 +2836,8 @@ async def import_connector_config(
     content = await file.read()
 
     # Detect format from filename or try both
-    filename = file.filename or ""
+    # Sanitize filename for safe extension detection
+    filename = sanitize_filename(file.filename)
     if filename.endswith(".yaml") or filename.endswith(".yml"):
         import yaml
 

@@ -3,10 +3,46 @@
 from __future__ import annotations
 
 import os
+import time
+from datetime import datetime
 from typing import Any
 
 import chromadb
 from chromadb.config import Settings
+
+
+def _parse_date(date_str: str | None) -> datetime | None:
+    """Parse a date string into a datetime object.
+
+    Handles multiple formats:
+    - ISO 8601: "2024-01-15"
+    - US format: "01/15/2024"
+    - Compact: "20240115"
+
+    Returns None if parsing fails.
+    """
+    if not date_str:
+        return None
+
+    formats = [
+        "%Y-%m-%d",  # ISO 8601
+        "%m/%d/%Y",  # US format
+        "%d/%m/%Y",  # EU format
+        "%Y%m%d",  # Compact
+    ]
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue
+
+    return None
+
+
+# Simple cache for metadata aggregations
+_metadata_cache: dict[str, tuple[float, Any]] = {}
+_CACHE_TTL_SECONDS = 60  # Cache for 1 minute
 
 
 class ChromaStore:
@@ -56,6 +92,7 @@ class ChromaStore:
             metadatas=metadatas,
             ids=ids,
         )
+        self.invalidate_cache()  # Clear cached counts
 
     def search(
         self,
@@ -203,16 +240,26 @@ class ChromaStore:
         # so we filter post-query
         results = self.search(query, n_results * 3)  # Fetch more to filter
 
+        # Parse reference date once
+        ref_dt = _parse_date(reference_date)
+        if not ref_dt:
+            # If reference date is invalid, return unfiltered results
+            return results[:n_results]
+
         filtered = []
         for r in results:
             meta = r.get("metadata", {})
-            effective = meta.get("effective_date")
-            expires = meta.get("expires_date")
+            effective_str = meta.get("effective_date")
+            expires_str = meta.get("expires_date")
+
+            # Parse dates for proper comparison (handles multiple formats)
+            effective_dt = _parse_date(effective_str)
+            expires_dt = _parse_date(expires_str)
 
             # Include if no date constraints or dates are valid
-            if effective and effective > reference_date:
+            if effective_dt and effective_dt > ref_dt:
                 continue  # Not yet effective
-            if expires and expires <= reference_date:
+            if expires_dt and expires_dt <= ref_dt:
                 continue  # Already expired
 
             filtered.append(r)
@@ -242,13 +289,26 @@ class ChromaStore:
             pass
         return None
 
-    def list_sources(self) -> dict[str, int]:
-        """List all unique sources and their document counts.
+    def _get_cached_or_compute(
+        self, cache_key: str, compute_fn: callable
+    ) -> dict[str, int]:
+        """Get cached value or compute and cache it.
 
-        Returns:
-            Dictionary mapping source names to document counts.
+        Uses module-level cache with TTL to avoid loading all docs repeatedly.
         """
-        # ChromaDB doesn't have aggregation, so we need to get all metadata
+        now = time.time()
+        if cache_key in _metadata_cache:
+            cached_time, cached_value = _metadata_cache[cache_key]
+            if now - cached_time < _CACHE_TTL_SECONDS:
+                return cached_value
+
+        # Compute and cache
+        value = compute_fn()
+        _metadata_cache[cache_key] = (now, value)
+        return value
+
+    def _compute_source_counts(self) -> dict[str, int]:
+        """Compute source counts from all documents."""
         all_docs = self.collection.get()
         source_counts: dict[str, int] = {}
 
@@ -259,12 +319,8 @@ class ChromaStore:
 
         return source_counts
 
-    def list_document_types(self) -> dict[str, int]:
-        """List all unique document types and their counts.
-
-        Returns:
-            Dictionary mapping document types to counts.
-        """
+    def _compute_type_counts(self) -> dict[str, int]:
+        """Compute document type counts from all documents."""
         all_docs = self.collection.get()
         type_counts: dict[str, int] = {}
 
@@ -274,6 +330,41 @@ class ChromaStore:
                 type_counts[doc_type] = type_counts.get(doc_type, 0) + 1
 
         return type_counts
+
+    def list_sources(self) -> dict[str, int]:
+        """List all unique sources and their document counts.
+
+        Results are cached for 60 seconds to avoid loading all documents
+        on every call.
+
+        Returns:
+            Dictionary mapping source names to document counts.
+        """
+        cache_key = f"{self.collection_name}:sources"
+        return self._get_cached_or_compute(cache_key, self._compute_source_counts)
+
+    def list_document_types(self) -> dict[str, int]:
+        """List all unique document types and their counts.
+
+        Results are cached for 60 seconds to avoid loading all documents
+        on every call.
+
+        Returns:
+            Dictionary mapping document types to counts.
+        """
+        cache_key = f"{self.collection_name}:types"
+        return self._get_cached_or_compute(cache_key, self._compute_type_counts)
+
+    def invalidate_cache(self) -> None:
+        """Invalidate the metadata cache.
+
+        Call this after adding or deleting documents to ensure fresh counts.
+        """
+        keys_to_remove = [
+            k for k in _metadata_cache if k.startswith(self.collection_name)
+        ]
+        for k in keys_to_remove:
+            _metadata_cache.pop(k, None)
 
     def delete_document(self, document_id: str) -> bool:
         """Delete a document by ID.
@@ -290,6 +381,7 @@ class ChromaStore:
             if not existing["ids"]:
                 return False
             self.collection.delete(ids=[document_id])
+            self.invalidate_cache()  # Clear cached counts
             return True
         except Exception:
             return False
@@ -311,6 +403,7 @@ class ChromaStore:
 
         count = len(all_docs["ids"])
         self.collection.delete(ids=all_docs["ids"])
+        self.invalidate_cache()  # Clear cached counts
         return count
 
     def update_metadata(
