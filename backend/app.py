@@ -27,6 +27,7 @@ from claude_client import get_kirk_analysis
 from kirk_config import KIRK_CONFIG
 from mapping import normalize_claim, denormalize_for_rules
 from mapping.templates import get_template
+from connectors.constants import CONNECTOR_SECRET_FIELDS
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -894,6 +895,14 @@ async def delete_policies_by_source(source_name: str):
 
     Useful for bulk cleanup when re-importing updated policies.
     """
+    # Validate source_name to prevent unexpected behavior
+    if not source_name or not source_name.strip():
+        raise HTTPException(status_code=400, detail="Source name cannot be empty")
+    if len(source_name) > 256:
+        raise HTTPException(
+            status_code=400, detail="Source name too long (max 256 characters)"
+        )
+
     store = get_store()
     count = store.bulk_delete_by_source(source_name)
 
@@ -1570,20 +1579,7 @@ async def get_stats():
 # Data Source Connector Endpoints
 # ============================================================================
 
-# Secret fields that need encryption for each connector type
-CONNECTOR_SECRET_FIELDS = {
-    "database": ["password"],
-    "api": ["api_key", "oauth_client_secret", "bearer_token"],
-    "file": [
-        "aws_access_key",
-        "aws_secret_key",
-        "password",
-        "private_key",
-        "account_key",  # Azure Blob Storage
-        "sas_token",  # Azure SAS token
-        "azure_connection_string",  # Azure full connection string
-    ],
-}
+# CONNECTOR_SECRET_FIELDS imported from connectors.constants
 
 
 @app.get("/api/connectors/types")

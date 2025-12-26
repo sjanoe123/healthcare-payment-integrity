@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterator
 
 from .jobs import JobType, SyncJobManager, get_job_manager
+from ..connectors.constants import CONNECTOR_SECRET_FIELDS
 
 logger = logging.getLogger(__name__)
 
@@ -348,21 +349,7 @@ class SyncWorker:
         Returns:
             Config with actual secrets injected
         """
-        # Secret fields by connector type - must match CONNECTOR_SECRET_FIELDS in app.py
-        CONNECTOR_SECRET_FIELDS = {
-            "database": ["password"],
-            "api": ["api_key", "oauth_client_secret", "bearer_token"],
-            "file": [
-                "aws_access_key",
-                "aws_secret_key",
-                "password",
-                "private_key",
-                "account_key",
-                "sas_token",
-                "azure_connection_string",
-            ],
-        }
-
+        # CONNECTOR_SECRET_FIELDS imported from connectors.constants
         secret_fields = CONNECTOR_SECRET_FIELDS.get(connector_type, [])
         if not secret_fields:
             return config

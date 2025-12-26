@@ -96,7 +96,10 @@ class ChromaStore:
             for i, doc in enumerate(results["documents"][0]):
                 distance = results["distances"][0][i] if results["distances"] else None
                 # Convert distance to similarity score (0-1, higher is better)
-                # ChromaDB uses L2 distance by default, cosine distance max is 2
+                # ChromaDB uses cosine distance by default which ranges from 0-2:
+                #   0 = identical vectors, 2 = opposite vectors
+                # Formula: score = 1 - (distance / 2)
+                # Very dissimilar embeddings (distance > 2) get clamped to 0 via max()
                 score = (
                     max(0.0, min(1.0, 1 - (distance / 2)))
                     if distance is not None
