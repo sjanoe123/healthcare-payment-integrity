@@ -62,3 +62,6 @@ class RuleContext:
     claim: dict[str, Any]
     datasets: dict[str, Any]
     config: dict[str, Any]
+    policy_docs: list[dict[str, Any]] = field(
+        default_factory=list
+    )  # RAG policy context

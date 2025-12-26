@@ -15,7 +15,7 @@ from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -24,7 +24,7 @@ from rules import evaluate_baseline, ThresholdConfig
 from rag import get_store
 from claude_client import get_kirk_analysis
 from kirk_config import KIRK_CONFIG
-from mapping import normalize_claim
+from mapping import normalize_claim, denormalize_for_rules
 from mapping.templates import get_template
 
 # Configure logging
@@ -281,6 +281,14 @@ class AnalysisResult(BaseModel):
 class SearchQuery(BaseModel):
     query: str
     n_results: int = 5
+    top_k: int | None = None  # Accept frontend's top_k parameter
+
+    @model_validator(mode="after")
+    def normalize_result_count(self) -> "SearchQuery":
+        """Use top_k if n_results not explicitly set."""
+        if self.top_k and self.n_results == 5:  # default was used
+            object.__setattr__(self, "n_results", self.top_k)
+        return self
 
 
 # Sample reference datasets (load from files in production)
@@ -442,28 +450,58 @@ async def analyze_claim(
 
     claim_dict = normalize_claim(raw_claim, custom_mapping=custom_mapping)
 
-    # Run rules engine
-    outcome = evaluate_baseline(
-        claim=claim_dict,
-        datasets=datasets,
-        config={"base_score": 0.5},
-        threshold_config=ThresholdConfig(),
-    )
-
-    # Get RAG context if available
+    # Get RAG policy context BEFORE rules evaluation
+    policy_docs: list[dict] = []
     rag_context = None
     store = get_store()
     if store.count() > 0:
-        # Search for relevant policy context
-        search_query = (
-            f"Procedure codes: {', '.join(i.procedure_code for i in claim.items)}"
+        # Multi-faceted search for relevant policy context
+        procedure_codes = [i.procedure_code for i in claim.items]
+        diagnosis_codes = (
+            claim.diagnosis_codes if hasattr(claim, "diagnosis_codes") else []
         )
-        rag_results = store.search(search_query, n_results=3)
-        if rag_results:
+
+        # Search for procedure code coverage
+        if procedure_codes:
+            proc_query = f"CPT procedure codes {', '.join(set(procedure_codes))} coverage billing guidelines"
+            proc_results = store.search(proc_query, n_results=3)
+            policy_docs.extend(proc_results)
+
+        # Search for diagnosis-related policies
+        if diagnosis_codes:
+            diag_query = f"ICD-10 diagnosis {', '.join(diagnosis_codes[:5])} medical necessity coverage"
+            diag_results = store.search(diag_query, n_results=2)
+            policy_docs.extend(diag_results)
+
+        # Deduplicate by document ID
+        seen_ids = set()
+        unique_docs = []
+        for doc in policy_docs:
+            doc_id = doc.get("id")
+            if doc_id and doc_id not in seen_ids:
+                seen_ids.add(doc_id)
+                unique_docs.append(doc)
+        policy_docs = unique_docs
+
+        # Build RAG context string for Kirk
+        if policy_docs:
             rag_context = "\n\n".join(
                 f"[{r['metadata'].get('source', 'Policy')}]: {r['content'][:500]}..."
-                for r in rag_results
+                for r in policy_docs[:5]  # Limit context for Kirk
             )
+
+    # Denormalize OMOP fields to rules engine field names
+    # (e.g., procedure_source_value -> procedure_code)
+    rules_claim = denormalize_for_rules(claim_dict)
+
+    # Run rules engine with policy context
+    outcome = evaluate_baseline(
+        claim=rules_claim,
+        datasets=datasets,
+        config={"base_score": 0.5},
+        threshold_config=ThresholdConfig(),
+        policy_docs=policy_docs,  # Pass RAG context to rules
+    )
 
     # Get Kirk's expert analysis
     claude_result = get_kirk_analysis(
@@ -567,6 +605,138 @@ async def search_policies(query: SearchQuery):
         "results": results,
         "total_documents": store.count(),
     }
+
+
+class PolicyUploadRequest(BaseModel):
+    """Request model for uploading policy documents."""
+
+    content: str
+    source: str = "user_upload"
+    document_type: str = "policy"
+    effective_date: str | None = None
+
+
+@app.post("/api/policies/upload")
+async def upload_policy_document(request: PolicyUploadRequest):
+    """Upload a policy document to the RAG system.
+
+    Accepts text content and adds it to the ChromaDB vector store
+    for use in policy search and rules context.
+    """
+    store = get_store()
+
+    if not request.content or len(request.content.strip()) < 10:
+        raise HTTPException(
+            status_code=400, detail="Document content must be at least 10 characters"
+        )
+
+    # Generate document ID
+    import hashlib
+    from datetime import datetime
+
+    doc_hash = hashlib.sha256(request.content.encode()).hexdigest()[:12]
+    doc_id = f"upload_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{doc_hash}"
+
+    # Build metadata
+    metadata = {
+        "source": request.source,
+        "document_type": request.document_type,
+        "upload_date": datetime.utcnow().isoformat(),
+    }
+    if request.effective_date:
+        metadata["effective_date"] = request.effective_date
+
+    try:
+        store.add_documents(
+            documents=[request.content],
+            metadatas=[metadata],
+            ids=[doc_id],
+        )
+
+        return {
+            "success": True,
+            "document_id": doc_id,
+            "message": "Document uploaded successfully",
+            "total_documents": store.count(),
+        }
+    except Exception as e:
+        logger.error(f"Failed to upload policy document: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to upload document: {str(e)[:200]}"
+        )
+
+
+@app.post("/api/policies/upload-file")
+async def upload_policy_file(
+    file: UploadFile = File(...),
+    source: str = Query(default="file_upload"),
+    document_type: str = Query(default="policy"),
+):
+    """Upload a policy document file to the RAG system.
+
+    Supports: .txt, .md files
+    PDF support requires additional dependencies.
+    """
+    store = get_store()
+
+    # Check file extension
+    filename = file.filename or "unknown"
+    allowed_extensions = {".txt", ".md"}
+    file_ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}",
+        )
+
+    try:
+        # Read file content
+        content = await file.read()
+        text_content = content.decode("utf-8")
+
+        if len(text_content.strip()) < 10:
+            raise HTTPException(
+                status_code=400,
+                detail="Document content must be at least 10 characters",
+            )
+
+        # Generate document ID
+        import hashlib
+        from datetime import datetime
+
+        doc_hash = hashlib.sha256(content).hexdigest()[:12]
+        doc_id = f"file_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{doc_hash}"
+
+        # Build metadata
+        metadata = {
+            "source": source,
+            "document_type": document_type,
+            "filename": filename,
+            "upload_date": datetime.utcnow().isoformat(),
+        }
+
+        store.add_documents(
+            documents=[text_content],
+            metadatas=[metadata],
+            ids=[doc_id],
+        )
+
+        return {
+            "success": True,
+            "document_id": doc_id,
+            "filename": filename,
+            "message": "File uploaded successfully",
+            "total_documents": store.count(),
+        }
+
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File must be valid UTF-8 text")
+    except Exception as e:
+        logger.error(f"Failed to upload policy file: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to upload file: {str(e)[:200]}"
+        )
 
 
 @app.get("/api/mappings/templates")
@@ -1777,13 +1947,77 @@ def _test_file_connection(
     connector_id: str, subtype: str, config: dict[str, Any]
 ) -> dict[str, Any]:
     """Test a file system connection."""
-    # File connectors will be implemented in Phase 4
-    return {
-        "success": True,
-        "message": f"File connector '{subtype}' test pending implementation (Phase 4)",
-        "latency_ms": None,
-        "details": {"subtype": subtype},
-    }
+    try:
+        if subtype == "s3":
+            from connectors.file import S3Connector
+
+            connector = S3Connector(
+                connector_id=connector_id,
+                name="test",
+                config=config,
+            )
+            result = connector.test_connection()
+            return {
+                "success": result.success,
+                "message": result.message,
+                "latency_ms": result.latency_ms,
+                "details": result.details,
+            }
+
+        elif subtype == "sftp":
+            from connectors.file import SFTPConnector
+
+            connector = SFTPConnector(
+                connector_id=connector_id,
+                name="test",
+                config=config,
+            )
+            result = connector.test_connection()
+            return {
+                "success": result.success,
+                "message": result.message,
+                "latency_ms": result.latency_ms,
+                "details": result.details,
+            }
+
+        elif subtype == "azure_blob":
+            from connectors.file import AzureBlobConnector
+
+            connector = AzureBlobConnector(
+                connector_id=connector_id,
+                name="test",
+                config=config,
+            )
+            result = connector.test_connection()
+            return {
+                "success": result.success,
+                "message": result.message,
+                "latency_ms": result.latency_ms,
+                "details": result.details,
+            }
+
+        else:
+            return {
+                "success": False,
+                "message": f"File subtype '{subtype}' not yet implemented",
+                "latency_ms": None,
+                "details": {"subtype": subtype},
+            }
+
+    except ImportError as e:
+        return {
+            "success": False,
+            "message": f"Missing dependency: {e}",
+            "latency_ms": None,
+            "details": {"error": str(e), "subtype": subtype},
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Connection test failed: {str(e)[:200]}",
+            "latency_ms": None,
+            "details": {"error_type": type(e).__name__},
+        }
 
 
 @app.get("/api/connectors/{connector_id}/schema")

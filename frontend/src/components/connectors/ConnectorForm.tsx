@@ -27,9 +27,9 @@ interface FormData {
   watermark_column: string;
   // S3 fields
   bucket: string;
-  region: string;
-  access_key_id: string;
-  secret_access_key: string;
+  aws_region: string;
+  aws_access_key: string;
+  aws_secret_key: string;
   endpoint_url: string;
   prefix: string;
   // SFTP fields
@@ -50,10 +50,10 @@ interface FormData {
   api_key: string;
   api_key_header: string;
   bearer_token: string;
-  oauth2_token_url: string;
-  oauth2_client_id: string;
-  oauth2_client_secret: string;
-  oauth2_scope: string;
+  oauth_token_url: string;
+  oauth_client_id: string;
+  oauth_client_secret: string;
+  oauth_scopes: string;
   pagination_type: string;
   data_path: string;
   rate_limit: number;
@@ -179,9 +179,9 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
     watermark_column: '',
     // S3
     bucket: '',
-    region: 'us-east-1',
-    access_key_id: '',
-    secret_access_key: '',
+    aws_region: 'us-east-1',
+    aws_access_key: '',
+    aws_secret_key: '',
     endpoint_url: '',
     prefix: '',
     // SFTP
@@ -202,10 +202,10 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
     api_key: '',
     api_key_header: 'X-API-Key',
     bearer_token: '',
-    oauth2_token_url: '',
-    oauth2_client_id: '',
-    oauth2_client_secret: '',
-    oauth2_scope: '',
+    oauth_token_url: '',
+    oauth_client_id: '',
+    oauth_client_secret: '',
+    oauth_scopes: '',
     pagination_type: 'none',
     data_path: '',
     rate_limit: 10,
@@ -253,9 +253,9 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
       if (formData.subtype === 's3') {
         return {
           bucket: formData.bucket,
-          region: formData.region,
-          access_key_id: formData.access_key_id || undefined,
-          secret_access_key: formData.secret_access_key || undefined,
+          aws_region: formData.aws_region,
+          aws_access_key: formData.aws_access_key || undefined,
+          aws_secret_key: formData.aws_secret_key || undefined,
           endpoint_url: formData.endpoint_url || undefined,
           prefix: formData.prefix || '',
           path_pattern: formData.path_pattern || '*',
@@ -304,13 +304,10 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
       } else if (formData.auth_type === 'bearer') {
         config.bearer_token = formData.bearer_token;
       } else if (formData.auth_type === 'oauth2') {
-        config.oauth2_config = {
-          token_url: formData.oauth2_token_url,
-          client_id: formData.oauth2_client_id,
-          client_secret: formData.oauth2_client_secret,
-          scope: formData.oauth2_scope || undefined,
-          grant_type: 'client_credentials',
-        };
+        config.oauth_token_url = formData.oauth_token_url;
+        config.oauth_client_id = formData.oauth_client_id;
+        config.oauth_client_secret = formData.oauth_client_secret;
+        config.oauth_scopes = formData.oauth_scopes ? formData.oauth_scopes.split(',').map(s => s.trim()) : [];
       }
 
       if (formData.subtype === 'rest') {
@@ -400,7 +397,7 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
       if (formData.auth_type === 'api_key' && !formData.api_key) return false;
       if (formData.auth_type === 'basic' && (!formData.username || !formData.password)) return false;
       if (formData.auth_type === 'bearer' && !formData.bearer_token) return false;
-      if (formData.auth_type === 'oauth2' && (!formData.oauth2_token_url || !formData.oauth2_client_id || !formData.oauth2_client_secret)) return false;
+      if (formData.auth_type === 'oauth2' && (!formData.oauth_token_url || !formData.oauth_client_id || !formData.oauth_client_secret)) return false;
       return true;
     }
     return true;
@@ -520,8 +517,8 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">AWS Region</label>
         <select
-          value={formData.region}
-          onChange={(e) => updateField('region', e.target.value)}
+          value={formData.aws_region}
+          onChange={(e) => updateField('aws_region', e.target.value)}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
         >
           {AWS_REGIONS.map((r) => (
@@ -538,8 +535,8 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
           <label className="block text-sm font-medium text-gray-700 mb-1">Access Key ID</label>
           <input
             type="text"
-            value={formData.access_key_id}
-            onChange={(e) => updateField('access_key_id', e.target.value)}
+            value={formData.aws_access_key}
+            onChange={(e) => updateField('aws_access_key', e.target.value)}
             placeholder="AKIA..."
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
           />
@@ -548,8 +545,8 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
           <label className="block text-sm font-medium text-gray-700 mb-1">Secret Access Key</label>
           <input
             type="password"
-            value={formData.secret_access_key}
-            onChange={(e) => updateField('secret_access_key', e.target.value)}
+            value={formData.aws_secret_key}
+            onChange={(e) => updateField('aws_secret_key', e.target.value)}
             placeholder="••••••••"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
           />
@@ -860,8 +857,8 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
             <label className="block text-sm font-medium text-gray-700 mb-1">Token URL *</label>
             <input
               type="text"
-              value={formData.oauth2_token_url}
-              onChange={(e) => updateField('oauth2_token_url', e.target.value)}
+              value={formData.oauth_token_url}
+              onChange={(e) => updateField('oauth_token_url', e.target.value)}
               placeholder="https://auth.example.com/oauth/token"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
             />
@@ -871,8 +868,8 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
               <label className="block text-sm font-medium text-gray-700 mb-1">Client ID *</label>
               <input
                 type="text"
-                value={formData.oauth2_client_id}
-                onChange={(e) => updateField('oauth2_client_id', e.target.value)}
+                value={formData.oauth_client_id}
+                onChange={(e) => updateField('oauth_client_id', e.target.value)}
                 placeholder="client_id"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               />
@@ -881,20 +878,20 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
               <label className="block text-sm font-medium text-gray-700 mb-1">Client Secret *</label>
               <input
                 type="password"
-                value={formData.oauth2_client_secret}
-                onChange={(e) => updateField('oauth2_client_secret', e.target.value)}
+                value={formData.oauth_client_secret}
+                onChange={(e) => updateField('oauth_client_secret', e.target.value)}
                 placeholder="••••••••"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Scope</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Scopes (comma-separated)</label>
             <input
               type="text"
-              value={formData.oauth2_scope}
-              onChange={(e) => updateField('oauth2_scope', e.target.value)}
-              placeholder="system/*.read"
+              value={formData.oauth_scopes}
+              onChange={(e) => updateField('oauth_scopes', e.target.value)}
+              placeholder="system/*.read, patient/*.read"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
             />
           </div>

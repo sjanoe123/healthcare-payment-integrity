@@ -170,6 +170,11 @@ class SyncWorker:
             subtype = connector_config.get("subtype")
             config = connector_config.get("connection_config", {})
 
+            # Inject secrets from credential manager
+            config = self._inject_connector_secrets(
+                connector_id, connector_type, config
+            )
+
             self.job_manager.add_log(
                 job_id,
                 "info",
@@ -326,6 +331,54 @@ class SyncWorker:
             if config.get("connection_config"):
                 config["connection_config"] = json.loads(config["connection_config"])
             return config
+
+    def _inject_connector_secrets(
+        self,
+        connector_id: str,
+        connector_type: str,
+        config: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Inject secrets from credential manager into connector config.
+
+        Args:
+            connector_id: Connector ID
+            connector_type: Type (database, api, file)
+            config: Connection configuration with encrypted placeholders
+
+        Returns:
+            Config with actual secrets injected
+        """
+        # Secret fields by connector type - must match CONNECTOR_SECRET_FIELDS in app.py
+        CONNECTOR_SECRET_FIELDS = {
+            "database": ["password"],
+            "api": ["api_key", "oauth_client_secret", "bearer_token"],
+            "file": [
+                "aws_access_key",
+                "aws_secret_key",
+                "password",
+                "private_key",
+                "account_key",
+                "sas_token",
+                "azure_connection_string",
+            ],
+        }
+
+        secret_fields = CONNECTOR_SECRET_FIELDS.get(connector_type, [])
+        if not secret_fields:
+            return config
+
+        try:
+            from ..security.credentials import get_credential_manager
+
+            cred_manager = get_credential_manager()
+            config = cred_manager.inject_secrets(connector_id, config, secret_fields)
+            logger.debug(f"Injected secrets for connector {connector_id}")
+        except Exception as e:
+            logger.warning(
+                f"Failed to inject secrets for connector {connector_id}: {e}"
+            )
+
+        return config
 
     def _create_connector(
         self,

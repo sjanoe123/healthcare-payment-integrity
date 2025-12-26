@@ -35,6 +35,8 @@ from .mapper import (
     MappingResult,
     normalize_claim,
     normalize_claim_with_review,
+    denormalize_for_rules,
+    RULES_FIELD_MAPPING,
 )
 from .omop_schema import (
     ALIAS_LOOKUP,
@@ -68,6 +70,8 @@ __all__ = [
     "MappingResult",
     "normalize_claim",
     "normalize_claim_with_review",
+    "denormalize_for_rules",
+    "RULES_FIELD_MAPPING",
     # Schema
     "OMOP_CLAIMS_SCHEMA",
     "ALIAS_LOOKUP",

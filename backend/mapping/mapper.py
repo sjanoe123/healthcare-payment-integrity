@@ -447,6 +447,68 @@ def normalize_claim(
     return mapper.transform(raw_claim)
 
 
+# Mapping from OMOP CDM fields back to rules engine field names
+RULES_FIELD_MAPPING = {
+    # OMOP field → Rules engine field
+    "procedure_source_value": "procedure_code",
+    "modifier_source_value": "modifier",
+    "line_charge": "line_amount",
+    "condition_source_value": "diagnosis_code",
+    "visit_source_value": "place_of_service",
+    "person_source_value": "member_id",
+    "provider_source_value": "provider_npi",
+}
+
+
+def denormalize_for_rules(normalized_claim: dict[str, Any]) -> dict[str, Any]:
+    """Convert OMOP-normalized claim back to field names the rules engine expects.
+
+    The rules engine was written to use common healthcare terminology
+    (procedure_code, modifier, line_amount) rather than OMOP CDM field names
+    (procedure_source_value, modifier_source_value, line_charge).
+
+    This function creates a copy of the normalized claim with both field name
+    variants present, allowing rules to use their expected field names while
+    preserving the canonical OMOP structure.
+
+    Args:
+        normalized_claim: Claim normalized to OMOP CDM schema
+
+    Returns:
+        Claim with rules-engine-compatible field names added
+    """
+    denormalized = normalized_claim.copy()
+
+    # Add rules-engine field names at claim level
+    for omop_field, rules_field in RULES_FIELD_MAPPING.items():
+        if omop_field in denormalized and rules_field not in denormalized:
+            denormalized[rules_field] = denormalized[omop_field]
+
+    # Handle nested items array (line items)
+    if "items" in denormalized and isinstance(denormalized["items"], list):
+        denormalized_items = []
+        for item in denormalized["items"]:
+            if isinstance(item, dict):
+                item_copy = item.copy()
+                for omop_field, rules_field in RULES_FIELD_MAPPING.items():
+                    if omop_field in item_copy and rules_field not in item_copy:
+                        item_copy[rules_field] = item_copy[omop_field]
+                denormalized_items.append(item_copy)
+            else:
+                denormalized_items.append(item)
+        denormalized["items"] = denormalized_items
+
+    # Handle diagnosis codes - ensure diagnosis_codes list is available
+    if "condition_source_value" in denormalized:
+        if "diagnosis_codes" not in denormalized:
+            # Single diagnosis code case
+            denormalized["diagnosis_codes"] = [denormalized["condition_source_value"]]
+        elif isinstance(denormalized["condition_source_value"], list):
+            denormalized["diagnosis_codes"] = denormalized["condition_source_value"]
+
+    return denormalized
+
+
 def normalize_claim_with_review(
     raw_claim: dict[str, Any],
     custom_mapping: dict[str, str] | None = None,

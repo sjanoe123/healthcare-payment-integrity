@@ -71,15 +71,23 @@ class ChromaStore:
         formatted = []
         if results["documents"] and results["documents"][0]:
             for i, doc in enumerate(results["documents"][0]):
+                distance = results["distances"][0][i] if results["distances"] else None
+                # Convert distance to similarity score (0-1, higher is better)
+                # ChromaDB uses L2 distance by default, cosine distance max is 2
+                score = (
+                    max(0.0, min(1.0, 1 - (distance / 2)))
+                    if distance is not None
+                    else 0.0
+                )
+
                 formatted.append(
                     {
                         "content": doc,
                         "metadata": results["metadatas"][0][i]
                         if results["metadatas"]
                         else {},
-                        "distance": results["distances"][0][i]
-                        if results["distances"]
-                        else None,
+                        "distance": distance,
+                        "score": round(score, 4),  # Similarity score for frontend
                         "id": results["ids"][0][i] if results["ids"] else None,
                     }
                 )
