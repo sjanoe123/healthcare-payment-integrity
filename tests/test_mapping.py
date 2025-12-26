@@ -855,3 +855,122 @@ class TestMappingPersistence:
         approved = store.list_mappings(status=MappingStatus.APPROVED)
         assert len(approved) == 1
         assert approved[0].source_schema_id == "schema2"
+
+
+class TestDenormalizeForRules:
+    """Tests for the denormalize_for_rules function."""
+
+    def test_denormalize_adds_rules_field_names(self):
+        """Test that OMOP field names are mapped to rules-engine field names."""
+        from mapping import denormalize_for_rules
+
+        normalized = {
+            "procedure_source_value": "99213",
+            "modifier_source_value": "25",
+            "line_charge": 150.00,
+            "quantity": 1,
+        }
+
+        result = denormalize_for_rules(normalized)
+
+        # Should have both OMOP and rules-engine field names
+        assert result["procedure_source_value"] == "99213"
+        assert result["procedure_code"] == "99213"
+        assert result["modifier_source_value"] == "25"
+        assert result["modifier"] == "25"
+        assert result["line_charge"] == 150.00
+        assert result["line_amount"] == 150.00
+
+    def test_denormalize_handles_items_array(self):
+        """Test that items array is properly denormalized."""
+        from mapping import denormalize_for_rules
+
+        normalized = {
+            "visit_occurrence_id": "CLM001",
+            "items": [
+                {
+                    "procedure_source_value": "99213",
+                    "modifier_source_value": "25",
+                    "line_charge": 100.00,
+                },
+                {
+                    "procedure_source_value": "99214",
+                    "line_charge": 150.00,
+                },
+            ],
+        }
+
+        result = denormalize_for_rules(normalized)
+
+        assert len(result["items"]) == 2
+        assert result["items"][0]["procedure_code"] == "99213"
+        assert result["items"][0]["modifier"] == "25"
+        assert result["items"][0]["line_amount"] == 100.00
+        assert result["items"][1]["procedure_code"] == "99214"
+        assert result["items"][1]["line_amount"] == 150.00
+
+    def test_denormalize_creates_deep_copy(self):
+        """Test that denormalize creates a deep copy (doesn't modify original)."""
+        from mapping import denormalize_for_rules
+
+        normalized = {
+            "procedure_source_value": "99213",
+            "provider": {"npi": "1234567890", "specialty": "cardiology"},
+            "items": [{"procedure_source_value": "99214"}],
+        }
+
+        result = denormalize_for_rules(normalized)
+
+        # Modify the result
+        result["procedure_code"] = "MODIFIED"
+        result["provider"]["specialty"] = "MODIFIED"
+        result["items"][0]["procedure_code"] = "MODIFIED"
+
+        # Original should be unchanged
+        assert "procedure_code" not in normalized
+        assert normalized["provider"]["specialty"] == "cardiology"
+        assert "procedure_code" not in normalized["items"][0]
+
+    def test_denormalize_handles_diagnosis_codes(self):
+        """Test that diagnosis codes are converted to list format."""
+        from mapping import denormalize_for_rules
+
+        # Single diagnosis code - should be wrapped in list
+        normalized = {"condition_source_value": "J06.9"}
+        result = denormalize_for_rules(normalized)
+        assert result["diagnosis_codes"] == ["J06.9"]
+
+        # List of diagnosis codes - should be used directly
+        normalized2 = {"condition_source_value": ["J06.9", "M54.5"]}
+        result2 = denormalize_for_rules(normalized2)
+        assert result2["diagnosis_codes"] == ["J06.9", "M54.5"]
+
+    def test_denormalize_preserves_existing_rules_fields(self):
+        """Test that existing rules-engine fields are not overwritten."""
+        from mapping import denormalize_for_rules
+
+        normalized = {
+            "procedure_source_value": "99213",
+            "procedure_code": "ALREADY_SET",  # Already has rules field
+        }
+
+        result = denormalize_for_rules(normalized)
+
+        # Should preserve the existing procedure_code
+        assert result["procedure_code"] == "ALREADY_SET"
+        assert result["procedure_source_value"] == "99213"
+
+    def test_denormalize_handles_empty_claim(self):
+        """Test that empty claim is handled gracefully."""
+        from mapping import denormalize_for_rules
+
+        result = denormalize_for_rules({})
+        assert result == {}
+
+    def test_denormalize_handles_empty_items(self):
+        """Test that empty items array is handled gracefully."""
+        from mapping import denormalize_for_rules
+
+        normalized = {"items": []}
+        result = denormalize_for_rules(normalized)
+        assert result["items"] == []

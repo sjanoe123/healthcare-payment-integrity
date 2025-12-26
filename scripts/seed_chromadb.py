@@ -240,6 +240,386 @@ Documentation must be made at the time of service or prior to service for pre-au
             "topic": "LCD Documentation Requirements",
         },
     },
+    # Additional LCD Coverage Policies - Procedure Specific
+    {
+        "content": """LCD Coverage: Physical and Occupational Therapy Services
+Local Coverage Determination for outpatient therapy services (PT, OT, SLP).
+
+Coverage Requirements:
+- Services must be provided by a qualified therapist (licensed PT, OT, or SLP)
+- Treatment must be reasonable and necessary for the patient's condition
+- Patient must demonstrate rehabilitation potential
+- Services must require the skills of a qualified therapist
+
+Covered Diagnoses (examples):
+- M54.5 Low back pain
+- M25.511/M25.512 Shoulder pain
+- G81.11/G81.12 Hemiplegia following stroke
+- S72.001A Hip fracture
+
+Documentation Requirements:
+1. Physician order/referral
+2. Initial evaluation with baseline measurements
+3. Specific, measurable, achievable goals
+4. Skilled interventions requiring therapist expertise
+5. Progress notes showing functional improvement
+6. Discharge summary with outcomes
+
+Frequency Limits:
+- Initial evaluation: 1 per episode of care
+- Re-evaluation: As clinically indicated (typically every 30 days)
+- Treatment visits: Based on medical necessity, not arbitrary limits
+
+Medical Necessity Indicators:
+- Documented functional limitations
+- Expectation of meaningful improvement in reasonable time
+- Services cannot be performed safely by patient/caregiver""",
+        "metadata": {
+            "source": "CMS LCD",
+            "chapter": "Therapy Services",
+            "topic": "LCD PT OT Coverage",
+            "document_type": "policy",
+        },
+    },
+    {
+        "content": """LCD Coverage: Durable Medical Equipment (DME) - Wheelchairs
+Local Coverage Determination for manual and power mobility devices.
+
+Coverage Criteria for Manual Wheelchairs:
+- Patient has mobility limitation in the home
+- Limitation significantly impairs activities of daily living
+- Patient can safely operate and transfer to/from wheelchair
+- Home environment accommodates wheelchair use
+
+Coverage Criteria for Power Wheelchairs/Scooters:
+- Must meet all criteria for manual wheelchair, PLUS:
+- Patient cannot adequately operate manual wheelchair
+- Patient has sufficient strength and coordination for power device
+- Specialty evaluation (face-to-face examination) required
+
+Required Documentation:
+1. Face-to-face examination by treating physician
+2. Mobility limitation assessment
+3. Home assessment for complex rehab technology
+4. Prescription with specific device features
+5. Delivery and fitting confirmation
+
+Common Denial Reasons:
+- Mobility limitation not demonstrated
+- Patient can ambulate with assistive device
+- Home cannot accommodate equipment
+- Missing required documentation elements
+- Face-to-face exam not within required timeframe
+
+ICD-10 codes commonly covered:
+- G20 Parkinson's disease
+- G35 Multiple sclerosis
+- G82.50 Quadriplegia
+- M62.81 Muscle weakness""",
+        "metadata": {
+            "source": "CMS LCD",
+            "chapter": "DME",
+            "topic": "LCD Wheelchair Coverage",
+            "document_type": "policy",
+        },
+    },
+    {
+        "content": """LCD Coverage: Advanced Imaging - MRI and CT Scans
+Local Coverage Determination for diagnostic imaging services.
+
+MRI Coverage Requirements:
+- Ordering physician must document medical necessity
+- Conservative treatment trial for certain conditions
+- Appropriate anatomical site for clinical indication
+
+MRI Commonly Covered Indications:
+- Suspected malignancy or tumor staging
+- Neurological symptoms (headache with red flags, seizures)
+- Joint pathology not responding to conservative care
+- Spinal conditions with neurological findings
+- Cardiac imaging for specific indications
+
+CT Scan Coverage Requirements:
+- Clinical indication documented in medical record
+- Appropriate for anatomical site
+- Not duplicative of recent imaging
+
+Documentation Must Include:
+1. Clinical symptoms/signs prompting the study
+2. Physical examination findings
+3. Previous treatment attempts (if applicable)
+4. How results will change management
+
+Frequency Considerations:
+- Repeat imaging requires documented clinical change
+- Follow-up imaging for known conditions per protocol
+- Surveillance imaging per evidence-based guidelines
+
+Non-Covered Indications:
+- Routine screening without symptoms
+- Pre-employment or insurance physicals
+- Duplicate studies without clinical change""",
+        "metadata": {
+            "source": "CMS LCD",
+            "chapter": "Imaging",
+            "topic": "LCD MRI CT Coverage",
+            "document_type": "policy",
+        },
+    },
+    {
+        "content": """LCD Coverage: Laboratory Testing - Panels and Individual Tests
+Local Coverage Determination for clinical laboratory services.
+
+Comprehensive Metabolic Panel (CMP - 80053):
+Covered when medically necessary for:
+- Diabetes management (E11.*, E10.*)
+- Kidney disease monitoring (N18.*)
+- Liver disease evaluation (K70-K77)
+- Electrolyte disorders
+- Medication monitoring (ACE inhibitors, diuretics, etc.)
+
+Lipid Panel (80061):
+Covered for:
+- Cardiovascular risk assessment
+- Diabetes mellitus
+- Hyperlipidemia management
+- Atherosclerotic disease monitoring
+
+Frequency Guidelines:
+- CMP: Generally every 3-6 months for chronic conditions
+- Lipid Panel: Annually for stable patients, more often if adjusting therapy
+- HbA1c: Every 3 months for uncontrolled diabetes, every 6 months if stable
+
+Documentation Requirements:
+1. Diagnosis code supporting medical necessity
+2. Clinical indication in progress notes
+3. Medication list if monitoring drug therapy
+4. Results review and clinical action documentation
+
+Common Denial Reasons:
+- Diagnosis does not support test ordered
+- Excessive frequency without clinical justification
+- Screening test without qualifying diagnosis
+- Duplicate orders on same date of service""",
+        "metadata": {
+            "source": "CMS LCD",
+            "chapter": "Laboratory",
+            "topic": "LCD Lab Panel Coverage",
+            "document_type": "policy",
+        },
+    },
+    {
+        "content": """LCD Coverage: Injection and Infusion Services
+Local Coverage Determination for therapeutic injections and infusions.
+
+Joint Injections (CPT 20610, 20611):
+Covered Indications:
+- Osteoarthritis (M15-M19)
+- Inflammatory arthritis (M05-M14)
+- Bursitis, tendinitis
+- Joint effusion requiring aspiration
+
+Frequency Limits:
+- Generally no more than 4 injections per joint per year
+- Document clinical response before repeat injection
+- Consider alternative treatments if no improvement
+
+Trigger Point Injections (CPT 20552, 20553):
+Coverage Requirements:
+- Documented palpable trigger points
+- Failed conservative treatment
+- Functional impairment documented
+- Maximum units per session varies by MAC
+
+IV Infusion Services:
+Documentation Requirements:
+1. Physician order with drug, dose, route, frequency
+2. Medical necessity for IV vs oral route
+3. Start and stop times
+4. Monitoring during infusion
+5. Drug wastage documentation if applicable
+
+Hydration Therapy:
+- Must be medically necessary, not for convenience
+- Document clinical indication (dehydration, pre-procedure prep)
+- Separate from drug administration when applicable
+- Minimum infusion time requirements apply""",
+        "metadata": {
+            "source": "CMS LCD",
+            "chapter": "Injections",
+            "topic": "LCD Injection Infusion Coverage",
+            "document_type": "policy",
+        },
+    },
+    {
+        "content": """LCD Coverage: Genetic and Molecular Testing
+Local Coverage Determination for genetic/genomic testing.
+
+Oncology Molecular Testing:
+Covered when:
+- Confirmed malignancy diagnosis
+- Results will affect treatment decisions
+- Testing laboratory meets CLIA requirements
+- Appropriate specimen handling documented
+
+Common Covered Tests:
+- BRCA1/BRCA2 for breast/ovarian cancer
+- KRAS/NRAS for colorectal cancer
+- EGFR mutation for lung cancer
+- BCR-ABL for leukemia
+- HER2 for breast cancer
+- PD-L1 expression for immunotherapy eligibility
+
+Pharmacogenomic Testing:
+Limited Coverage:
+- Specific drug-gene pairs with clinical utility
+- Testing before initiating therapy preferred
+- Documentation of clinical decision impact required
+
+Non-Covered:
+- Whole genome sequencing for screening
+- Direct-to-consumer testing
+- Panels without specific clinical indication
+- Testing after treatment decisions made
+
+Documentation Must Include:
+1. Confirmed diagnosis with ICD-10 code
+2. Treatment intent (curative vs palliative)
+3. How test results will change management
+4. Laboratory accreditation documentation""",
+        "metadata": {
+            "source": "CMS LCD",
+            "chapter": "Genetic Testing",
+            "topic": "LCD Molecular Diagnostics Coverage",
+            "document_type": "policy",
+        },
+    },
+    {
+        "content": """LCD Coverage: Respiratory Therapy and Oxygen Equipment
+Local Coverage Determination for home oxygen and respiratory DME.
+
+Home Oxygen Coverage Criteria:
+- Documented hypoxemia (PaO2 ≤55 mmHg or SpO2 ≤88%)
+- Or PaO2 56-59 mmHg with documented complications
+- Testing performed in stable state, at rest
+- Qualifying blood gas study within 30 days of order
+
+Required Documentation:
+1. Qualifying blood gas or oximetry study
+2. Physician certification of medical necessity
+3. Prescription specifying flow rate and duration
+4. Recertification testing at required intervals
+
+Covered Equipment:
+- Oxygen concentrators (stationary and portable)
+- Compressed gas systems
+- Liquid oxygen systems
+- Oxygen tubing and cannulas
+
+CPAP/BiPAP Coverage:
+- Sleep study documenting obstructive sleep apnea
+- AHI ≥15 or AHI 5-14 with symptoms
+- Face-to-face evaluation within 6 months
+- Compliance monitoring (4 hours/night minimum)
+
+Nebulizer Coverage:
+- Documented respiratory condition requiring inhaled medication
+- Patient unable to use metered-dose inhaler effectively
+- Appropriate diagnosis (COPD, asthma, cystic fibrosis)""",
+        "metadata": {
+            "source": "CMS LCD",
+            "chapter": "Respiratory",
+            "topic": "LCD Oxygen DME Coverage",
+            "document_type": "policy",
+        },
+    },
+    {
+        "content": """LCD Coverage: Wound Care and Skin Substitutes
+Local Coverage Determination for advanced wound care products.
+
+Skin Substitute Coverage Requirements:
+- Chronic wound not healing with standard care
+- Minimum 30-day trial of conventional treatment
+- Adequate blood flow to wound area
+- Patient compliant with offloading and wound care
+
+Covered Wound Types:
+- Diabetic foot ulcers (DFU)
+- Venous leg ulcers (VLU)
+- Pressure ulcers (stages 3-4)
+- Surgical wounds with dehiscence
+
+Documentation Requirements:
+1. Wound measurements (length x width x depth) at each visit
+2. Wound bed characteristics (granulation, slough, necrosis)
+3. Evidence of healing or lack thereof
+4. Previous treatment modalities tried
+5. Infection status and treatment
+6. Patient compliance with offloading
+
+Application Limits:
+- Generally limited to 1 application per week initially
+- Maximum applications vary by product (typically 4-8 total)
+- Must demonstrate wound size reduction between applications
+- Continuation requires documented healing progress
+
+Non-Covered:
+- First-line treatment without conservative care trial
+- Wounds with inadequate vascular supply
+- Active infection (until resolved)
+- Patient non-compliance with treatment plan""",
+        "metadata": {
+            "source": "CMS LCD",
+            "chapter": "Wound Care",
+            "topic": "LCD Skin Substitute Coverage",
+            "document_type": "policy",
+        },
+    },
+    {
+        "content": """LCD Coverage: Chiropractic Services and Spinal Manipulation
+Local Coverage Determination for chiropractic manipulative treatment.
+
+Medicare Coverage for Chiropractic:
+ONLY covers manual manipulation of the spine (CPT 98940-98942)
+to correct subluxation demonstrated by X-ray or physical examination.
+
+Covered Diagnosis:
+- Must be related to spine subluxation
+- Common: M99.01-M99.05 (segmental dysfunction)
+- Neuromusculoskeletal conditions of the spine
+
+Documentation Requirements:
+1. X-ray evidence of subluxation, OR
+2. Two of four physical exam findings:
+   - Asymmetry/misalignment
+   - Range of motion abnormality
+   - Tissue/tone changes
+   - Pain/tenderness
+
+Treatment Plan Must Include:
+- Specific diagnosis
+- Therapeutic goals with timeframes
+- Frequency and duration of treatment
+- Objective measures of progress
+
+Frequency Considerations:
+- Acute phase: 2-3 times per week
+- Subacute: Weekly visits
+- Maintenance care is NOT covered
+- Must document continued improvement
+
+NOT Covered by Medicare:
+- Examination/evaluation (separate from CMT)
+- X-rays for CMT purposes
+- Other adjunctive therapies
+- Maintenance/preventive care""",
+        "metadata": {
+            "source": "CMS LCD",
+            "chapter": "Chiropractic",
+            "topic": "LCD Spinal Manipulation Coverage",
+            "document_type": "policy",
+        },
+    },
     # OIG and Compliance Documents
     {
         "content": """OIG Exclusion List (LEIE) Requirements:

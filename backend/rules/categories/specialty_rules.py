@@ -25,6 +25,7 @@ def specialty_dental_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="SPECIALTY_DENTAL_ON_MEDICAL",
+                    rule_type="coverage",
                     description=f"Dental procedure {code} submitted on medical claim",
                     weight=0.14,
                     severity="high",
@@ -71,6 +72,7 @@ def specialty_dme_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="SPECIALTY_DME_NO_CMN",
+                    rule_type="coverage",
                     description=f"DME code {code} requires Certificate of Medical Necessity",
                     weight=0.15,
                     severity="high",
@@ -95,6 +97,7 @@ def specialty_dme_rule(context: RuleContext) -> list[RuleHit]:
                 hits.append(
                     RuleHit(
                         rule_id="SPECIALTY_DME_RENTAL_EXCEED",
+                        rule_type="coverage",
                         description=f"DME {code} rental cost ${total_rental:.2f} exceeds purchase price ${purchase_price:.2f}",
                         weight=0.12,
                         severity="medium",
@@ -154,6 +157,7 @@ def specialty_telehealth_rule(context: RuleContext) -> list[RuleHit]:
                     hits.append(
                         RuleHit(
                             rule_id="SPECIALTY_TELEHEALTH_PROVIDER",
+                            rule_type="coverage",
                             description=f"Provider type {provider_type} not authorized for telehealth services",
                             weight=0.14,
                             severity="high",
@@ -172,6 +176,7 @@ def specialty_telehealth_rule(context: RuleContext) -> list[RuleHit]:
                 hits.append(
                     RuleHit(
                         rule_id="SPECIALTY_TELEHEALTH_CODE",
+                        rule_type="coverage",
                         description=f"Procedure {code} not eligible for telehealth delivery",
                         weight=0.13,
                         severity="medium",
@@ -209,6 +214,7 @@ def specialty_unbundling_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="SPECIALTY_UNBUNDLING",
+                    rule_type="coverage",
                     description=f"Component codes {', '.join(billed_components)} billed separately from comprehensive {code}",
                     weight=0.16,
                     severity="high",
@@ -248,6 +254,7 @@ def specialty_incidental_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="SPECIALTY_INCIDENTAL",
+                    rule_type="coverage",
                     description=f"Procedure {code} is incidental to {', '.join(primary_present)} and should not be billed separately",
                     weight=0.12,
                     severity="medium",

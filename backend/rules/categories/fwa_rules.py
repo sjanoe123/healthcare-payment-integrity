@@ -14,6 +14,7 @@ def oig_exclusion_rule(context: RuleContext) -> list[RuleHit]:
         return [
             RuleHit(
                 rule_id="OIG_EXCLUSION",
+                rule_type="provider",
                 description=f"Provider NPI {npi} is on OIG exclusion list",
                 weight=0.25,
                 severity="critical",
@@ -34,6 +35,7 @@ def fwa_watchlist_rule(context: RuleContext) -> list[RuleHit]:
         return [
             RuleHit(
                 rule_id="FWA_WATCH",
+                rule_type="provider",
                 description=f"Provider NPI {npi} appears on fraud watchlist",
                 weight=0.12,
                 severity="high",
@@ -65,6 +67,7 @@ def fwa_volume_spike_rule(context: RuleContext) -> list[RuleHit]:
         return [
             RuleHit(
                 rule_id="FWA_VOLUME_SPIKE",
+                rule_type="provider",
                 description=f"Provider billing volume spike: {current_month_claims} claims vs {avg_monthly_claims:.0f} average",
                 weight=0.14,
                 severity="high",
@@ -107,6 +110,7 @@ def fwa_pattern_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="FWA_PATTERN_SUSPICIOUS",
+                rule_type="provider",
                 description=f"Same primary diagnosis {primary_dx} used across {len(categories_used)} unrelated service categories",
                 weight=0.10,
                 severity="medium",

@@ -23,6 +23,7 @@ def lcd_coverage_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="LCD_MISMATCH",
+                    rule_type="coverage",
                     description=f"{code} lacks covered diagnosis per LCD/NCD",
                     weight=-0.2,
                     severity="high",
@@ -62,6 +63,7 @@ def lcd_age_gender_rule(context: RuleContext) -> list[RuleHit]:
                     hits.append(
                         RuleHit(
                             rule_id="LCD_AGE_CONFLICT",
+                            rule_type="coverage",
                             description=f"{code} age {age} outside LCD guidance",
                             weight=-0.15,
                             severity="high",
@@ -80,6 +82,7 @@ def lcd_age_gender_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="LCD_GENDER_CONFLICT",
+                    rule_type="coverage",
                     description=f"{code} gender {gender} outside LCD guidance",
                     weight=-0.1,
                     severity="medium",
@@ -106,6 +109,7 @@ def lcd_experimental_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="LCD_EXPERIMENTAL",
+                    rule_type="coverage",
                     description=f"{code} marked experimental/investigational",
                     weight=0.14,
                     severity="high",
@@ -143,6 +147,7 @@ def global_surgery_modifier_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="GLOBAL_SURGERY_NO_MODIFIER",
+                    rule_type="coverage",
                     description=f"{code} with global period lacks required modifier alongside E/M services",
                     weight=0.12,
                     severity="medium",

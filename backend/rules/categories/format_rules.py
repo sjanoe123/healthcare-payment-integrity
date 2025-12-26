@@ -38,6 +38,7 @@ def format_missing_field_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="FORMAT_MISSING_FIELD",
+                    rule_type="format",
                     description=f"Required field '{field_name}' is missing or empty",
                     weight=0.15,
                     severity="high",
@@ -52,6 +53,7 @@ def format_missing_field_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="FORMAT_MISSING_FIELD",
+                rule_type="format",
                 description="Claim has no service line items",
                 weight=0.20,
                 severity="critical",
@@ -84,6 +86,7 @@ def format_invalid_date_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="FORMAT_INVALID_DATE",
+                rule_type="format",
                 description=f"Invalid service date format: {service_date_str}",
                 weight=0.15,
                 severity="high",
@@ -101,6 +104,7 @@ def format_invalid_date_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="FORMAT_INVALID_DATE",
+                rule_type="format",
                 description=f"Service date {service_date_str} is in the future",
                 weight=0.18,
                 severity="critical",
@@ -118,6 +122,7 @@ def format_invalid_date_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="FORMAT_INVALID_DATE",
+                rule_type="format",
                 description=f"Service date {service_date_str} is after received date {received_date_str}",
                 weight=0.15,
                 severity="high",
@@ -131,6 +136,7 @@ def format_invalid_date_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="FORMAT_INVALID_DATE",
+                rule_type="format",
                 description=f"Service date {service_date_str} is before patient birth date",
                 weight=0.20,
                 severity="critical",
@@ -161,6 +167,7 @@ def format_invalid_code_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="FORMAT_INVALID_CODE",
+                    rule_type="format",
                     description=f"Line {idx + 1} missing procedure code",
                     weight=0.15,
                     severity="high",
@@ -185,6 +192,7 @@ def format_invalid_code_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="FORMAT_INVALID_CODE",
+                    rule_type="format",
                     description=f"Invalid procedure code format: {code}",
                     weight=0.12,
                     severity="medium",
@@ -198,6 +206,7 @@ def format_invalid_code_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="FORMAT_INVALID_CODE",
+                    rule_type="format",
                     description=f"CPT code {code} not found in valid code set",
                     weight=0.14,
                     severity="high",
@@ -215,6 +224,7 @@ def format_invalid_code_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="FORMAT_INVALID_CODE",
+                    rule_type="format",
                     description=f"Invalid ICD-10 code format: {dx_code}",
                     weight=0.12,
                     severity="medium",
@@ -232,6 +242,7 @@ def format_invalid_code_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="FORMAT_INVALID_CODE",
+                    rule_type="format",
                     description=f"ICD-10 code {dx_code} not found in valid code set",
                     weight=0.14,
                     severity="high",

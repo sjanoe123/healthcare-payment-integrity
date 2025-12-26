@@ -14,7 +14,7 @@ import base64
 import logging
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -140,7 +140,7 @@ class CredentialManager:
             ID of the stored credential
         """
         encrypted = self.encrypt(value)
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         new_id = str(uuid4())
 
         with sqlite3.connect(self.db_path) as conn:

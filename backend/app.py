@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -9,7 +10,7 @@ import sqlite3
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -193,10 +194,49 @@ async def lifespan(app: FastAPI):
     # Initialize scheduler for background sync jobs
     scheduler = None
     try:
-        from scheduler import start_scheduler, shutdown_scheduler
+        from scheduler import start_scheduler, shutdown_scheduler, execute_sync_job
+        from scheduler.worker import JobType
 
         scheduler = start_scheduler(DB_PATH)
         logger.info("Scheduler started for background sync jobs")
+
+        # Restore scheduled jobs for active connectors
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id, sync_schedule FROM connectors WHERE status = 'active' AND sync_schedule IS NOT NULL"
+                )
+                active_connectors = cursor.fetchall()
+
+            restored_count = 0
+            for connector_id, sync_schedule in active_connectors:
+                if sync_schedule:
+                    try:
+                        job_id = f"sync_{connector_id}"
+                        scheduler.add_job(
+                            job_id=job_id,
+                            func=execute_sync_job,
+                            cron_expression=sync_schedule,
+                            kwargs={
+                                "connector_id": connector_id,
+                                "job_type": JobType.SCHEDULED,
+                                "sync_mode": "incremental",
+                                "triggered_by": "scheduler",
+                            },
+                            replace_existing=True,
+                        )
+                        restored_count += 1
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to restore job for connector {connector_id}: {e}"
+                        )
+
+            if restored_count > 0:
+                logger.info(f"Restored {restored_count} scheduled sync jobs")
+        except Exception as e:
+            logger.warning(f"Failed to restore scheduled jobs: {e}")
+
     except ImportError:
         logger.warning("Scheduler not available: APScheduler not installed")
     except Exception as e:
@@ -282,6 +322,9 @@ class SearchQuery(BaseModel):
     query: str
     n_results: int = 5
     top_k: int | None = None  # Accept frontend's top_k parameter
+    sources: list[str] | None = None  # Filter by source(s)
+    document_types: list[str] | None = None  # Filter by document type(s)
+    effective_date: str | None = None  # Filter for policies effective at this date
 
     @model_validator(mode="after")
     def normalize_result_count(self) -> "SearchQuery":
@@ -381,7 +424,7 @@ async def health_check():
     """Health check endpoint."""
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "rag_documents": get_store().count(),
     }
 
@@ -395,7 +438,7 @@ async def upload_claim(claim: ClaimSubmission):
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO jobs (job_id, claim_id, status, created_at) VALUES (?, ?, ?, ?)",
-            (job_id, claim.claim_id, "pending", datetime.utcnow().isoformat()),
+            (job_id, claim.claim_id, "pending", datetime.now(timezone.utc).isoformat()),
         )
         conn.commit()
 
@@ -534,13 +577,13 @@ async def analyze_claim(
                 json.dumps(outcome.provider_flags),
                 outcome.roi_estimate,
                 json.dumps(claude_result),
-                datetime.utcnow().isoformat(),
+                datetime.now(timezone.utc).isoformat(),
             ),
         )
 
         cursor.execute(
             "UPDATE jobs SET status = ?, completed_at = ? WHERE job_id = ?",
-            ("completed", datetime.utcnow().isoformat(), job_id),
+            ("completed", datetime.now(timezone.utc).isoformat(), job_id),
         )
 
         conn.commit()
@@ -589,7 +632,13 @@ async def get_results(job_id: str):
 
 @app.post("/api/search")
 async def search_policies(query: SearchQuery):
-    """Search policy documents using RAG."""
+    """Search policy documents using RAG with optional filters.
+
+    Supports filtering by:
+    - sources: List of source names (e.g., ["NCCI", "LCD"])
+    - document_types: List of document types (e.g., ["policy", "guideline"])
+    - effective_date: ISO date string to filter for currently effective policies
+    """
     store = get_store()
 
     if store.count() == 0:
@@ -598,12 +647,46 @@ async def search_policies(query: SearchQuery):
             "message": "No documents indexed. Run seed_chromadb.py to add policy documents.",
         }
 
-    results = store.search(query.query, n_results=query.n_results)
+    # Build filters based on query parameters
+    filters: dict[str, Any] | None = None
+
+    if query.sources or query.document_types:
+        filter_conditions = []
+        if query.sources:
+            if len(query.sources) == 1:
+                filter_conditions.append({"source": query.sources[0]})
+            else:
+                filter_conditions.append({"source": {"$in": query.sources}})
+        if query.document_types:
+            if len(query.document_types) == 1:
+                filter_conditions.append({"document_type": query.document_types[0]})
+            else:
+                filter_conditions.append(
+                    {"document_type": {"$in": query.document_types}}
+                )
+
+        if len(filter_conditions) == 1:
+            filters = filter_conditions[0]
+        else:
+            filters = {"$and": filter_conditions}
+
+    # Use date-aware search if effective_date specified
+    if query.effective_date:
+        results = store.search_current_policies(
+            query.query, query.effective_date, n_results=query.n_results
+        )
+    else:
+        results = store.search(query.query, n_results=query.n_results, filters=filters)
 
     return {
         "query": query.query,
         "results": results,
         "total_documents": store.count(),
+        "filters_applied": {
+            "sources": query.sources,
+            "document_types": query.document_types,
+            "effective_date": query.effective_date,
+        },
     }
 
 
@@ -631,17 +714,14 @@ async def upload_policy_document(request: PolicyUploadRequest):
         )
 
     # Generate document ID
-    import hashlib
-    from datetime import datetime
-
     doc_hash = hashlib.sha256(request.content.encode()).hexdigest()[:12]
-    doc_id = f"upload_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{doc_hash}"
+    doc_id = f"upload_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{doc_hash}"
 
     # Build metadata
     metadata = {
         "source": request.source,
         "document_type": request.document_type,
-        "upload_date": datetime.utcnow().isoformat(),
+        "upload_date": datetime.now(timezone.utc).isoformat(),
     }
     if request.effective_date:
         metadata["effective_date"] = request.effective_date
@@ -702,18 +782,17 @@ async def upload_policy_file(
             )
 
         # Generate document ID
-        import hashlib
-        from datetime import datetime
-
         doc_hash = hashlib.sha256(content).hexdigest()[:12]
-        doc_id = f"file_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{doc_hash}"
+        doc_id = (
+            f"file_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{doc_hash}"
+        )
 
         # Build metadata
         metadata = {
             "source": source,
             "document_type": document_type,
             "filename": filename,
-            "upload_date": datetime.utcnow().isoformat(),
+            "upload_date": datetime.now(timezone.utc).isoformat(),
         }
 
         store.add_documents(
@@ -737,6 +816,87 @@ async def upload_policy_file(
         raise HTTPException(
             status_code=500, detail=f"Failed to upload file: {str(e)[:200]}"
         )
+
+
+@app.get("/api/policies/sources")
+async def list_policy_sources():
+    """List all unique policy sources and their document counts.
+
+    Returns dictionary mapping source names to document counts.
+    Useful for building filter UIs.
+    """
+    store = get_store()
+    return {
+        "sources": store.list_sources(),
+        "total_documents": store.count(),
+    }
+
+
+@app.get("/api/policies/types")
+async def list_policy_types():
+    """List all unique document types and their counts.
+
+    Returns dictionary mapping document types to counts.
+    Useful for building filter UIs.
+    """
+    store = get_store()
+    return {
+        "document_types": store.list_document_types(),
+        "total_documents": store.count(),
+    }
+
+
+@app.get("/api/policies/{document_id}")
+async def get_policy_document(document_id: str):
+    """Get a specific policy document by ID.
+
+    Returns the document content and metadata.
+    """
+    store = get_store()
+    document = store.get_document(document_id)
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return document
+
+
+@app.delete("/api/policies/{document_id}")
+async def delete_policy_document(document_id: str):
+    """Delete a policy document by ID.
+
+    Returns success status.
+    """
+    store = get_store()
+    deleted = store.delete_document(document_id)
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return {
+        "success": True,
+        "document_id": document_id,
+        "message": "Document deleted successfully",
+        "total_documents": store.count(),
+    }
+
+
+@app.delete("/api/policies/source/{source_name}")
+async def delete_policies_by_source(source_name: str):
+    """Delete all policy documents from a specific source.
+
+    Useful for bulk cleanup when re-importing updated policies.
+    """
+    store = get_store()
+    count = store.bulk_delete_by_source(source_name)
+
+    return {
+        "success": True,
+        "source": source_name,
+        "deleted_count": count,
+        "message": f"Deleted {count} documents from source '{source_name}'",
+        "total_documents": store.count(),
+    }
 
 
 @app.get("/api/mappings/templates")
@@ -1570,7 +1730,7 @@ async def create_connector(request: ConnectorCreateRequest):
     from security import get_credential_manager
 
     connector_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
 
     # Extract and encrypt secrets
     config = request.connection_config.copy()
@@ -1946,68 +2106,56 @@ def _test_api_connection(
 def _test_file_connection(
     connector_id: str, subtype: str, config: dict[str, Any]
 ) -> dict[str, Any]:
-    """Test a file system connection."""
+    """Test a file system connection.
+
+    Uses a connector class lookup to reduce code duplication.
+    """
+    # Connector class mapping for file subtypes
+    FILE_CONNECTOR_CLASSES = {
+        "s3": "S3Connector",
+        "sftp": "SFTPConnector",
+        "azure_blob": "AzureBlobConnector",
+    }
+
+    if subtype not in FILE_CONNECTOR_CLASSES:
+        return {
+            "success": False,
+            "message": f"File subtype '{subtype}' not yet implemented",
+            "latency_ms": None,
+            "details": {"subtype": subtype},
+        }
+
     try:
-        if subtype == "s3":
-            from connectors.file import S3Connector
+        # Dynamic import of the connector class
+        from connectors import file as file_connectors
 
-            connector = S3Connector(
-                connector_id=connector_id,
-                name="test",
-                config=config,
-            )
-            result = connector.test_connection()
-            return {
-                "success": result.success,
-                "message": result.message,
-                "latency_ms": result.latency_ms,
-                "details": result.details,
-            }
+        connector_class_name = FILE_CONNECTOR_CLASSES[subtype]
+        connector_class = getattr(file_connectors, connector_class_name)
 
-        elif subtype == "sftp":
-            from connectors.file import SFTPConnector
-
-            connector = SFTPConnector(
-                connector_id=connector_id,
-                name="test",
-                config=config,
-            )
-            result = connector.test_connection()
-            return {
-                "success": result.success,
-                "message": result.message,
-                "latency_ms": result.latency_ms,
-                "details": result.details,
-            }
-
-        elif subtype == "azure_blob":
-            from connectors.file import AzureBlobConnector
-
-            connector = AzureBlobConnector(
-                connector_id=connector_id,
-                name="test",
-                config=config,
-            )
-            result = connector.test_connection()
-            return {
-                "success": result.success,
-                "message": result.message,
-                "latency_ms": result.latency_ms,
-                "details": result.details,
-            }
-
-        else:
-            return {
-                "success": False,
-                "message": f"File subtype '{subtype}' not yet implemented",
-                "latency_ms": None,
-                "details": {"subtype": subtype},
-            }
+        connector = connector_class(
+            connector_id=connector_id,
+            name="test",
+            config=config,
+        )
+        result = connector.test_connection()
+        return {
+            "success": result.success,
+            "message": result.message,
+            "latency_ms": result.latency_ms,
+            "details": result.details,
+        }
 
     except ImportError as e:
         return {
             "success": False,
             "message": f"Missing dependency: {e}",
+            "latency_ms": None,
+            "details": {"error": str(e), "subtype": subtype},
+        }
+    except AttributeError as e:
+        return {
+            "success": False,
+            "message": f"Connector class not found: {e}",
             "latency_ms": None,
             "details": {"error": str(e), "subtype": subtype},
         }
@@ -2102,7 +2250,11 @@ async def discover_connector_schema(connector_id: str):
 
 @app.post("/api/connectors/{connector_id}/activate")
 async def activate_connector(connector_id: str):
-    """Activate a connector for scheduled syncs."""
+    """Activate a connector for scheduled syncs.
+
+    This updates the connector status and adds a scheduled job to APScheduler
+    if a sync_schedule (cron expression) is configured.
+    """
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
 
@@ -2114,23 +2266,68 @@ async def activate_connector(connector_id: str):
         if not row:
             raise HTTPException(status_code=404, detail="Connector not found")
 
+        sync_schedule = row[0]
+
         cursor.execute(
             "UPDATE connectors SET status = ? WHERE id = ?",
             ("active", connector_id),
         )
         conn.commit()
 
+    # Add scheduled job to APScheduler if schedule is configured
+    scheduler_status = "no_schedule"
+    if sync_schedule:
+        try:
+            from scheduler import get_scheduler, execute_sync_job
+            from scheduler.worker import JobType
+
+            scheduler = get_scheduler()
+            if scheduler.is_running:
+                job_id = f"sync_{connector_id}"
+                scheduler.add_job(
+                    job_id=job_id,
+                    func=execute_sync_job,
+                    cron_expression=sync_schedule,
+                    kwargs={
+                        "connector_id": connector_id,
+                        "job_type": JobType.SCHEDULED,
+                        "sync_mode": "incremental",
+                        "triggered_by": "scheduler",
+                    },
+                    replace_existing=True,
+                )
+                scheduler_status = "scheduled"
+                logger.info(
+                    f"Added scheduled job for connector {connector_id}: {sync_schedule}"
+                )
+            else:
+                scheduler_status = "scheduler_not_running"
+                logger.warning(
+                    f"Scheduler not running, cannot add job for {connector_id}"
+                )
+        except ImportError:
+            scheduler_status = "scheduler_not_available"
+            logger.warning("APScheduler not installed, scheduled sync not available")
+        except Exception as e:
+            scheduler_status = f"error: {str(e)[:100]}"
+            logger.error(f"Failed to add scheduled job for {connector_id}: {e}")
+
     return {
         "message": "Connector activated",
         "connector_id": connector_id,
         "status": "active",
-        "sync_schedule": row[0],
+        "sync_schedule": sync_schedule,
+        "scheduler_status": scheduler_status,
     }
 
 
 @app.post("/api/connectors/{connector_id}/deactivate")
 async def deactivate_connector(connector_id: str):
-    """Deactivate a connector."""
+    """Deactivate a connector.
+
+    This updates the connector status and removes any scheduled job
+    from APScheduler.
+    """
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
 
@@ -2144,11 +2341,69 @@ async def deactivate_connector(connector_id: str):
         )
         conn.commit()
 
+    # Remove scheduled job from APScheduler
+    scheduler_status = "not_scheduled"
+    try:
+        from scheduler import get_scheduler
+
+        scheduler = get_scheduler()
+        if scheduler.is_running:
+            job_id = f"sync_{connector_id}"
+            if scheduler.remove_job(job_id):
+                scheduler_status = "removed"
+                logger.info(f"Removed scheduled job for connector {connector_id}")
+            else:
+                scheduler_status = "no_job_found"
+        else:
+            scheduler_status = "scheduler_not_running"
+    except ImportError:
+        scheduler_status = "scheduler_not_available"
+    except Exception as e:
+        scheduler_status = f"error: {str(e)[:100]}"
+        logger.error(f"Failed to remove scheduled job for {connector_id}: {e}")
+
     return {
         "message": "Connector deactivated",
         "connector_id": connector_id,
         "status": "inactive",
+        "scheduler_status": scheduler_status,
     }
+
+
+@app.get("/api/scheduler/jobs")
+async def list_scheduled_jobs():
+    """List all scheduled sync jobs from APScheduler.
+
+    Returns job details including next run time for each active connector.
+    """
+    try:
+        from scheduler import get_scheduler
+
+        scheduler = get_scheduler()
+        if not scheduler.is_running:
+            return {
+                "scheduler_running": False,
+                "jobs": [],
+                "message": "Scheduler not running",
+            }
+
+        jobs = scheduler.get_jobs()
+        return {
+            "scheduler_running": True,
+            "jobs": jobs,
+            "total_jobs": len(jobs),
+        }
+    except ImportError:
+        return {
+            "scheduler_running": False,
+            "jobs": [],
+            "message": "APScheduler not installed",
+        }
+    except Exception as e:
+        logger.error(f"Failed to list scheduled jobs: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to list jobs: {str(e)[:200]}"
+        )
 
 
 # ============================================================================
@@ -2216,7 +2471,7 @@ async def trigger_sync(
     except ImportError:
         # Fallback: create job record without execution
         job_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
 
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
@@ -2367,7 +2622,7 @@ async def cancel_sync_job(job_id: str):
 
     # Fallback to direct database update
     if not cancelled:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -2490,7 +2745,7 @@ async def export_connector_config(
 
     export_data = {
         "version": "1.0",
-        "exported_at": datetime.utcnow().isoformat(),
+        "exported_at": datetime.now(timezone.utc).isoformat(),
         "connectors": connectors,
     }
 
@@ -2603,7 +2858,7 @@ async def import_connector_config(
                 if overwrite:
                     # Update existing connector
                     connector_id = existing[0]
-                    now = datetime.utcnow().isoformat()
+                    now = datetime.now(timezone.utc).isoformat()
 
                     with sqlite3.connect(DB_PATH) as conn:
                         cursor = conn.cursor()
@@ -2643,7 +2898,7 @@ async def import_connector_config(
             else:
                 # Create new connector
                 connector_id = str(uuid.uuid4())
-                now = datetime.utcnow().isoformat()
+                now = datetime.now(timezone.utc).isoformat()
 
                 with sqlite3.connect(DB_PATH) as conn:
                     cursor = conn.cursor()

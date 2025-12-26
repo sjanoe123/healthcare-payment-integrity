@@ -22,10 +22,10 @@ class TestPolicyDocuments:
     """Test policy document structure and content."""
 
     def test_policy_count(self):
-        """Verify all 75 policies are loaded."""
+        """Verify all 84 policies are loaded (75 original + 9 LCD procedure-specific)."""
         from seed_chromadb import SAMPLE_POLICIES
 
-        assert len(SAMPLE_POLICIES) == 75
+        assert len(SAMPLE_POLICIES) == 84
 
     def test_policy_structure(self):
         """Validate all policies have required structure."""

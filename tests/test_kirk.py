@@ -116,6 +116,7 @@ class TestBuildKirkPrompt:
         rule_hits = [
             RuleHit(
                 rule_id="NCCI_PTP",
+                rule_type="ncci",
                 description="PTP edit between codes",
                 weight=0.2,
                 severity="high",
@@ -175,6 +176,7 @@ class TestFormatRuleHits:
         hits = [
             RuleHit(
                 rule_id="OIG_EXCLUSION",
+                rule_type="provider",
                 description="Provider on OIG exclusion list",
                 weight=0.5,
                 severity="critical",
@@ -194,6 +196,7 @@ class TestFormatRuleHits:
         hits = [
             RuleHit(
                 rule_id="NCCI_PTP",
+                rule_type="ncci",
                 description="PTP edit detected",
                 weight=0.2,
                 severity="high",
@@ -201,6 +204,7 @@ class TestFormatRuleHits:
             ),
             RuleHit(
                 rule_id="NCCI_MUE",
+                rule_type="ncci",
                 description="MUE violation",
                 weight=0.15,
                 severity="medium",
@@ -244,6 +248,7 @@ class TestGetKirkAnalysisFallback:
             rule_hits = [
                 RuleHit(
                     rule_id="TEST",
+                    rule_type="coverage",
                     description="Test violation",
                     weight=0.1,
                     severity="low",

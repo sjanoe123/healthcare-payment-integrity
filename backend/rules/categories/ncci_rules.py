@@ -22,6 +22,7 @@ def ncci_ptp_rule(context: RuleContext) -> list[RuleHit]:
                 hits.append(
                     RuleHit(
                         rule_id="NCCI_PTP",
+                        rule_type="ncci",
                         description=f"PTP edit between {code_a} and {code_b}",
                         weight=0.18,
                         severity="critical",
@@ -50,6 +51,7 @@ def ncci_mue_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="NCCI_MUE",
+                    rule_type="ncci",
                     description=f"Quantity {quantity} exceeds MUE limit {limit} for {code}",
                     weight=0.16,
                     severity="high",
@@ -87,6 +89,7 @@ def ncci_addon_no_primary_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="NCCI_ADDON_NO_PRIMARY",
+                    rule_type="ncci",
                     description=f"Add-on code {code} billed without required primary procedure",
                     weight=0.15,
                     severity="high",
@@ -123,6 +126,7 @@ def ncci_mutually_exclusive_rule(context: RuleContext) -> list[RuleHit]:
                 hits.append(
                     RuleHit(
                         rule_id="NCCI_MUTUALLY_EXCLUSIVE",
+                        rule_type="ncci",
                         description=f"Mutually exclusive procedures {code_a} and {code_b} billed together",
                         weight=0.17,
                         severity="critical",

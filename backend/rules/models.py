@@ -12,11 +12,13 @@ class RuleHit:
     """Represents a single rule evaluation impact."""
 
     rule_id: str
+    rule_type: str  # One of: ncci, coverage, provider, financial, modifier, format, eligibility
     description: str
     weight: float
     severity: str
     flag: str
     citation: str | None = None
+    affected_codes: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

@@ -53,6 +53,7 @@ def surgical_global_period_rule(context: RuleContext) -> list[RuleHit]:
                 hits.append(
                     RuleHit(
                         rule_id="SURGICAL_GLOBAL_PERIOD",
+                        rule_type="coverage",
                         description=f"Procedure {code} billed {days_post} days post {surgery_code} (global: {global_days} days)",
                         weight=0.15,
                         severity="high",
@@ -112,6 +113,7 @@ def surgical_multiple_procedure_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="SURGICAL_MULTIPLE_NO_51",
+                rule_type="coverage",
                 description=f"Multiple procedure {code} billed without modifier 51",
                 weight=0.11,
                 severity="medium",
@@ -152,6 +154,7 @@ def surgical_assistant_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="SURGICAL_ASSISTANT_NOT_ALLOWED",
+                    rule_type="coverage",
                     description=f"Assistant surgeon modifier used on {code} which doesn't allow assistants",
                     weight=0.13,
                     severity="high",
@@ -190,6 +193,7 @@ def surgical_cosurgeon_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="SURGICAL_COSURGEON_NOT_ALLOWED",
+                    rule_type="coverage",
                     description=f"Co-surgeon modifier 62 used on {code} which doesn't allow co-surgeons",
                     weight=0.13,
                     severity="high",
@@ -230,6 +234,7 @@ def surgical_bilateral_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="SURGICAL_BILATERAL_150",
+                    rule_type="coverage",
                     description=f"Bilateral modifier 50 on {code} but payment already includes bilateral",
                     weight=0.12,
                     severity="medium",
@@ -248,6 +253,7 @@ def surgical_bilateral_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="SURGICAL_BILATERAL_NOT_APPLICABLE",
+                    rule_type="coverage",
                     description=f"Bilateral modifier 50 not applicable to {code}",
                     weight=0.14,
                     severity="high",
@@ -270,6 +276,7 @@ def surgical_bilateral_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="SURGICAL_BILATERAL_NOT_ALLOWED",
+                    rule_type="coverage",
                     description=f"Bilateral modifier 50 used on {code} which doesn't allow bilateral billing",
                     weight=0.14,
                     severity="high",

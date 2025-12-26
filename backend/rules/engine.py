@@ -32,6 +32,9 @@ def evaluate_baseline(
     threshold_config = threshold_config or ThresholdConfig()
     policy_docs = policy_docs or []
 
+    # TODO: policy_docs is passed to RuleContext for future use by rules that need
+    # RAG context (e.g., checking policy exceptions, validating coverage decisions).
+    # Currently no rules consume this field - implementation planned for Phase 3.
     context = RuleContext(
         claim=claim, datasets=datasets, config=config, policy_docs=policy_docs
     )

@@ -36,6 +36,7 @@ def pricing_exceeds_fee_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="PRICING_EXCEEDS_FEE",
+                    rule_type="financial",
                     description=f"{code} billed ${billed_amount:.2f} exceeds fee schedule ${allowed:.2f} by {((billed_amount / allowed) - 1) * 100:.0f}%",
                     weight=0.10,
                     severity="medium",
@@ -73,6 +74,7 @@ def pricing_units_exceed_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="PRICING_UNITS_EXCEED",
+                    rule_type="financial",
                     description=f"{code} quantity {quantity} exceeds contract limit of {max_units}",
                     weight=0.12,
                     severity="medium",
@@ -118,6 +120,7 @@ def pricing_drg_mismatch_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="PRICING_DRG_MISMATCH",
+                rule_type="financial",
                 description=f"DRG {assigned_drg} requires diagnosis from: {', '.join(list(required_dx)[:3])}",
                 weight=0.16,
                 severity="high",
@@ -136,6 +139,7 @@ def pricing_drg_mismatch_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="PRICING_DRG_MISMATCH",
+                rule_type="financial",
                 description=f"DRG {assigned_drg} requires procedure from: {', '.join(list(required_px)[:3])}",
                 weight=0.16,
                 severity="high",
@@ -156,6 +160,7 @@ def pricing_drg_mismatch_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="PRICING_DRG_WEIGHT_MISMATCH",
+                rule_type="financial",
                 description=f"DRG {assigned_drg} weight {claimed_weight} differs from expected {expected_weight}",
                 weight=0.14,
                 severity="high",
@@ -196,6 +201,7 @@ def pricing_revenue_code_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="PRICING_REVENUE_CODE_MISMATCH",
+                    rule_type="financial",
                     description=f"Procedure {procedure_code} not valid with revenue code {revenue_code}",
                     weight=0.12,
                     severity="medium",
@@ -214,6 +220,7 @@ def pricing_revenue_code_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="PRICING_REVENUE_CODE_MISMATCH",
+                    rule_type="financial",
                     description=f"Procedure {procedure_code} explicitly excluded from revenue code {revenue_code}",
                     weight=0.14,
                     severity="high",

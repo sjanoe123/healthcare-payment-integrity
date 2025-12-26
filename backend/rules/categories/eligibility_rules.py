@@ -26,6 +26,7 @@ def eligibility_inactive_rule(context: RuleContext) -> list[RuleHit]:
         return [
             RuleHit(
                 rule_id="ELIGIBILITY_INACTIVE",
+                rule_type="eligibility",
                 description=f"Member {member_id} not found in eligibility database",
                 weight=0.22,
                 severity="critical",
@@ -46,6 +47,7 @@ def eligibility_inactive_rule(context: RuleContext) -> list[RuleHit]:
         return [
             RuleHit(
                 rule_id="ELIGIBILITY_INACTIVE",
+                rule_type="eligibility",
                 description=f"Service date {service_date_str} is before member effective date",
                 weight=0.22,
                 severity="critical",
@@ -63,6 +65,7 @@ def eligibility_inactive_rule(context: RuleContext) -> list[RuleHit]:
         return [
             RuleHit(
                 rule_id="ELIGIBILITY_INACTIVE",
+                rule_type="eligibility",
                 description=f"Service date {service_date_str} is after member termination date",
                 weight=0.22,
                 severity="critical",
@@ -97,6 +100,7 @@ def eligibility_non_covered_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="ELIGIBILITY_NON_COVERED",
+                    rule_type="eligibility",
                     description=f"Procedure {code} is excluded from member's benefit plan",
                     weight=0.18,
                     severity="high",
@@ -150,6 +154,7 @@ def eligibility_benefit_limit_rule(context: RuleContext) -> list[RuleHit]:
                 hits.append(
                     RuleHit(
                         rule_id="ELIGIBILITY_LIMIT_EXCEEDED",
+                        rule_type="eligibility",
                         description=f"Procedure {code}: {used_units + quantity} units exceeds limit of {max_units}",
                         weight=0.15,
                         severity="high",
@@ -173,6 +178,7 @@ def eligibility_benefit_limit_rule(context: RuleContext) -> list[RuleHit]:
                 hits.append(
                     RuleHit(
                         rule_id="ELIGIBILITY_LIMIT_EXCEEDED",
+                        rule_type="eligibility",
                         description=f"Procedure {code}: ${used_amount + amount:.2f} exceeds limit of ${max_amount:.2f}",
                         weight=0.15,
                         severity="high",
@@ -215,6 +221,7 @@ def eligibility_no_auth_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="ELIGIBILITY_NO_AUTH",
+                    rule_type="eligibility",
                     description=f"Procedure {code} requires prior authorization but none found",
                     weight=0.16,
                     severity="high",
@@ -234,6 +241,7 @@ def eligibility_no_auth_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="ELIGIBILITY_NO_AUTH",
+                    rule_type="eligibility",
                     description=f"Prior authorization for {code} has status: {auth_status}",
                     weight=0.16,
                     severity="high",

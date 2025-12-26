@@ -11,6 +11,7 @@ Usage:
 
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Any
 
@@ -467,7 +468,7 @@ def denormalize_for_rules(normalized_claim: dict[str, Any]) -> dict[str, Any]:
     (procedure_code, modifier, line_amount) rather than OMOP CDM field names
     (procedure_source_value, modifier_source_value, line_charge).
 
-    This function creates a copy of the normalized claim with both field name
+    This function creates a deep copy of the normalized claim with both field name
     variants present, allowing rules to use their expected field names while
     preserving the canonical OMOP structure.
 
@@ -477,7 +478,8 @@ def denormalize_for_rules(normalized_claim: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Claim with rules-engine-compatible field names added
     """
-    denormalized = normalized_claim.copy()
+    # Use deepcopy to ensure nested dicts (provider, member, etc.) are not shared
+    denormalized = copy.deepcopy(normalized_claim)
 
     # Add rules-engine field names at claim level
     for omop_field, rules_field in RULES_FIELD_MAPPING.items():
@@ -499,12 +501,17 @@ def denormalize_for_rules(normalized_claim: dict[str, Any]) -> dict[str, Any]:
         denormalized["items"] = denormalized_items
 
     # Handle diagnosis codes - ensure diagnosis_codes list is available
-    if "condition_source_value" in denormalized:
-        if "diagnosis_codes" not in denormalized:
-            # Single diagnosis code case
-            denormalized["diagnosis_codes"] = [denormalized["condition_source_value"]]
-        elif isinstance(denormalized["condition_source_value"], list):
-            denormalized["diagnosis_codes"] = denormalized["condition_source_value"]
+    if (
+        "condition_source_value" in denormalized
+        and "diagnosis_codes" not in denormalized
+    ):
+        csv = denormalized["condition_source_value"]
+        if isinstance(csv, list):
+            # Already a list, use directly
+            denormalized["diagnosis_codes"] = csv
+        else:
+            # Single diagnosis code, wrap in list
+            denormalized["diagnosis_codes"] = [csv]
 
     return denormalized
 

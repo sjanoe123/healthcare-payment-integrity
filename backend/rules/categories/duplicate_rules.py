@@ -19,6 +19,7 @@ def duplicate_line_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="DUPLICATE_LINE",
+                    rule_type="financial",
                     description=f"Procedure {code} repeated {count} times",
                     weight=0.08,
                     severity="medium",
@@ -52,6 +53,7 @@ def duplicate_exact_rule(context: RuleContext) -> list[RuleHit]:
         return [
             RuleHit(
                 rule_id="DUPLICATE_EXACT",
+                rule_type="financial",
                 description=f"Exact duplicate of previously submitted claim {original_claim_id}",
                 weight=0.20,
                 severity="critical",
@@ -86,6 +88,7 @@ def duplicate_same_day_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="DUPLICATE_SAME_DAY",
+                    rule_type="financial",
                     description=f"Same-day same-service duplicate: {code} on {dos} without modifier",
                     weight=0.12,
                     severity="high",
@@ -130,6 +133,7 @@ def duplicate_cross_claim_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="DUPLICATE_CROSS_CLAIM",
+                    rule_type="financial",
                     description=f"Services {', '.join(overlapping)} already billed on claim {prev_claim_id}",
                     weight=0.15,
                     severity="high",

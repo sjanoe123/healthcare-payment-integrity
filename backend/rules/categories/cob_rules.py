@@ -25,6 +25,7 @@ def cob_wrong_primary_rule(context: RuleContext) -> list[RuleHit]:
             return [
                 RuleHit(
                     rule_id="COB_WRONG_PRIMARY",
+                    rule_type="coverage",
                     description=f"Claim submitted as primary but payer {other_payer_id} has higher priority",
                     weight=0.16,
                     severity="high",
@@ -58,6 +59,7 @@ def cob_incomplete_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="COB_INCOMPLETE",
+                rule_type="coverage",
                 description="Other coverage indicated but no COB information provided",
                 weight=0.12,
                 severity="medium",
@@ -74,6 +76,7 @@ def cob_incomplete_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="COB_INCOMPLETE",
+                rule_type="coverage",
                 description="Member has Medicare but Medicare COB details not provided",
                 weight=0.14,
                 severity="high",
@@ -94,6 +97,7 @@ def cob_incomplete_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="COB_INCOMPLETE",
+                    rule_type="coverage",
                     description=f"Other payer {idx + 1} missing required fields: {', '.join(missing)}",
                     weight=0.10,
                     severity="medium",
