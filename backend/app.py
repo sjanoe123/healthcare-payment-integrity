@@ -643,7 +643,14 @@ async def search_policies(query: SearchQuery):
 
     if store.count() == 0:
         return {
+            "query": query.query,
             "results": [],
+            "total_documents": 0,
+            "filters_applied": {
+                "sources": query.sources,
+                "document_types": query.document_types,
+                "effective_date": query.effective_date,
+            },
             "message": "No documents indexed. Run seed_chromadb.py to add policy documents.",
         }
 
