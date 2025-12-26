@@ -29,7 +29,7 @@ export interface ClaimSubmission {
 
 // Rule hit types
 export type Severity = 'low' | 'medium' | 'high' | 'critical';
-export type RuleType = 'ncci' | 'coverage' | 'provider' | 'financial' | 'modifier';
+export type RuleType = 'ncci' | 'coverage' | 'provider' | 'financial' | 'modifier' | 'format' | 'eligibility';
 
 export interface RuleHit {
   rule_id: string;

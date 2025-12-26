@@ -314,7 +314,7 @@ def get_kirk_analysis(
         - model: The Claude model used
         - tokens_used: Total tokens consumed
         - agent: "Kirk" identifier
-        - structured: Parsed JSON response (if available)
+        - structured_response: Parsed JSON response (if available)
     """
     if config is None:
         config = KIRK_CONFIG
@@ -331,7 +331,7 @@ def get_kirk_analysis(
             "model": "none",
             "tokens_used": 0,
             "agent": config.name,
-            "structured": None,
+            "structured_response": None,
         }
 
     client = anthropic.Anthropic(api_key=api_key)
@@ -386,7 +386,7 @@ def get_kirk_analysis(
             "model": config.model,
             "tokens_used": response.usage.input_tokens + response.usage.output_tokens,
             "agent": config.name,
-            "structured": structured,
+            "structured_response": structured,
             "primary_category": primary_category,
         }
 
@@ -398,6 +398,6 @@ def get_kirk_analysis(
             "model": None,
             "tokens_used": 0,
             "agent": config.name,
-            "structured": None,
+            "structured_response": None,
             "error": str(e),
         }

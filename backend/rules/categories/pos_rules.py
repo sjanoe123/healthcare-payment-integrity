@@ -22,6 +22,7 @@ def pos_invalid_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="POS_INVALID",
+                    rule_type="coverage",
                     description=f"Invalid place of service code: {pos}",
                     weight=0.12,
                     severity="medium",
@@ -47,6 +48,7 @@ def pos_invalid_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="POS_INVALID",
+                    rule_type="coverage",
                     description=f"Procedure {code} not allowed in place of service {pos}",
                     weight=0.14,
                     severity="high",
@@ -66,6 +68,7 @@ def pos_invalid_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="POS_INVALID",
+                    rule_type="coverage",
                     description=f"Procedure {code} explicitly excluded from place of service {pos}",
                     weight=0.16,
                     severity="high",
@@ -126,6 +129,7 @@ def pos_provider_mismatch_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="POS_PROVIDER_MISMATCH",
+                rule_type="coverage",
                 description=f"Non-facility provider type {provider_type} billing with facility POS {claim_pos}",
                 weight=0.13,
                 severity="high",
@@ -144,6 +148,7 @@ def pos_provider_mismatch_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="POS_PROVIDER_MISMATCH",
+                rule_type="coverage",
                 description=f"Facility provider type {provider_type} billing with non-facility POS {claim_pos}",
                 weight=0.13,
                 severity="high",
@@ -163,6 +168,7 @@ def pos_provider_mismatch_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="POS_PROVIDER_MISMATCH",
+                rule_type="coverage",
                 description=f"Provider type {provider_type} not authorized for POS {claim_pos}",
                 weight=0.12,
                 severity="medium",

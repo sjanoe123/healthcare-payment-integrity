@@ -39,9 +39,9 @@ const databaseConfigSchema = z.object({
 
 const s3ConfigSchema = z.object({
   bucket: z.string().min(1, 'Bucket name is required'),
-  region: z.string().default('us-east-1'),
-  access_key_id: z.string().optional(),
-  secret_access_key: z.string().optional(),
+  aws_region: z.string().default('us-east-1'),
+  aws_access_key: z.string().optional(),
+  aws_secret_key: z.string().optional(),
   endpoint_url: z.string().optional(),
   prefix: z.string().optional(),
   path_pattern: z.string().default('*'),
@@ -77,10 +77,10 @@ const apiConfigSchema = z.object({
   username: z.string().optional(),
   password: z.string().optional(),
   bearer_token: z.string().optional(),
-  oauth2_token_url: z.string().optional(),
-  oauth2_client_id: z.string().optional(),
-  oauth2_client_secret: z.string().optional(),
-  oauth2_scope: z.string().optional(),
+  oauth_token_url: z.string().optional(),
+  oauth_client_id: z.string().optional(),
+  oauth_client_secret: z.string().optional(),
+  oauth_scopes: z.string().optional(),
   pagination_type: z.enum(['none', 'offset', 'page', 'cursor', 'link_header']).default('none'),
   data_path: z.string().optional(),
   rate_limit: z.number().min(1).max(100).default(10),
@@ -1012,8 +1012,8 @@ function S3ConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">AWS Region</label>
         <select
-          value={getConfigValue('region', 'us-east-1')}
-          onChange={(e) => updateConfig('region', e.target.value)}
+          value={getConfigValue('aws_region', 'us-east-1')}
+          onChange={(e) => updateConfig('aws_region', e.target.value)}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
         >
           {AWS_REGIONS.map((r) => (
@@ -1029,8 +1029,8 @@ function S3ConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
           <label className="block text-sm font-medium text-gray-700 mb-1">Access Key ID</label>
           <input
             type="text"
-            value={getConfigValue('access_key_id', '')}
-            onChange={(e) => updateConfig('access_key_id', e.target.value)}
+            value={getConfigValue('aws_access_key', '')}
+            onChange={(e) => updateConfig('aws_access_key', e.target.value)}
             placeholder="AKIA..."
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
           />
@@ -1039,8 +1039,8 @@ function S3ConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
           <label className="block text-sm font-medium text-gray-700 mb-1">Secret Access Key</label>
           <input
             type="password"
-            value={getConfigValue('secret_access_key', '')}
-            onChange={(e) => updateConfig('secret_access_key', e.target.value)}
+            value={getConfigValue('aws_secret_key', '')}
+            onChange={(e) => updateConfig('aws_secret_key', e.target.value)}
             placeholder="********"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
           />
@@ -1605,8 +1605,8 @@ function AuthConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
             <label className="block text-sm font-medium text-gray-700 mb-1">Token URL *</label>
             <input
               type="text"
-              value={getConfigValue('oauth2_token_url', '')}
-              onChange={(e) => updateConfig('oauth2_token_url', e.target.value)}
+              value={getConfigValue('oauth_token_url', '')}
+              onChange={(e) => updateConfig('oauth_token_url', e.target.value)}
               placeholder="https://auth.example.com/oauth/token"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
             />
@@ -1616,8 +1616,8 @@ function AuthConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
               <label className="block text-sm font-medium text-gray-700 mb-1">Client ID *</label>
               <input
                 type="text"
-                value={getConfigValue('oauth2_client_id', '')}
-                onChange={(e) => updateConfig('oauth2_client_id', e.target.value)}
+                value={getConfigValue('oauth_client_id', '')}
+                onChange={(e) => updateConfig('oauth_client_id', e.target.value)}
                 placeholder="client_id"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               />
@@ -1628,8 +1628,8 @@ function AuthConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
               </label>
               <input
                 type="password"
-                value={getConfigValue('oauth2_client_secret', '')}
-                onChange={(e) => updateConfig('oauth2_client_secret', e.target.value)}
+                value={getConfigValue('oauth_client_secret', '')}
+                onChange={(e) => updateConfig('oauth_client_secret', e.target.value)}
                 placeholder="********"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               />
@@ -1639,8 +1639,8 @@ function AuthConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
             <label className="block text-sm font-medium text-gray-700 mb-1">Scope</label>
             <input
               type="text"
-              value={getConfigValue('oauth2_scope', '')}
-              onChange={(e) => updateConfig('oauth2_scope', e.target.value)}
+              value={getConfigValue('oauth_scopes', '')}
+              onChange={(e) => updateConfig('oauth_scopes', e.target.value)}
               placeholder="system/*.read"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
             />

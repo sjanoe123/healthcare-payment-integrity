@@ -16,13 +16,28 @@ def evaluate_baseline(
     datasets: dict[str, Any],
     config: dict[str, Any] | None = None,
     threshold_config: ThresholdConfig | None = None,
+    policy_docs: list[dict[str, Any]] | None = None,
 ) -> BaselineOutcome:
-    """Evaluate claim against baseline rules and return aggregated outcome."""
+    """Evaluate claim against baseline rules and return aggregated outcome.
+
+    Args:
+        claim: Claim data to evaluate
+        datasets: Reference datasets (NCCI, LCD, etc.)
+        config: Rule configuration overrides
+        threshold_config: Score thresholds for decision making
+        policy_docs: RAG policy documents for context-aware evaluation
+    """
 
     config = config or {}
     threshold_config = threshold_config or ThresholdConfig()
+    policy_docs = policy_docs or []
 
-    context = RuleContext(claim=claim, datasets=datasets, config=config)
+    # TODO: policy_docs is passed to RuleContext for future use by rules that need
+    # RAG context (e.g., checking policy exceptions, validating coverage decisions).
+    # Currently no rules consume this field - implementation planned for Phase 3.
+    context = RuleContext(
+        claim=claim, datasets=datasets, config=config, policy_docs=policy_docs
+    )
     rule_result = RuleResult()
     ncci_flags: list[str] = []
     coverage_flags: list[str] = []

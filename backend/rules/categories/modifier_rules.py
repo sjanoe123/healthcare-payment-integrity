@@ -26,6 +26,7 @@ def modifier_invalid_rule(context: RuleContext) -> list[RuleHit]:
                 hits.append(
                     RuleHit(
                         rule_id="MODIFIER_INVALID",
+                        rule_type="modifier",
                         description=f"Invalid modifier {modifier} on line {idx + 1}",
                         weight=0.12,
                         severity="medium",
@@ -46,6 +47,7 @@ def modifier_invalid_rule(context: RuleContext) -> list[RuleHit]:
                 hits.append(
                     RuleHit(
                         rule_id="MODIFIER_INVALID",
+                        rule_type="modifier",
                         description=f"Modifier {modifier} not allowed with procedure {code}",
                         weight=0.14,
                         severity="high",
@@ -94,6 +96,7 @@ def modifier_missing_rule(context: RuleContext) -> list[RuleHit]:
                     hits.append(
                         RuleHit(
                             rule_id="MODIFIER_MISSING",
+                            rule_type="modifier",
                             description=f"Procedure {code} requires one of modifiers: {', '.join(req_mod)}",
                             weight=0.13,
                             severity="high",
@@ -111,6 +114,7 @@ def modifier_missing_rule(context: RuleContext) -> list[RuleHit]:
                     hits.append(
                         RuleHit(
                             rule_id="MODIFIER_MISSING",
+                            rule_type="modifier",
                             description=f"Procedure {code} requires modifier {req_mod}",
                             weight=0.13,
                             severity="high",
@@ -163,6 +167,7 @@ def modifier_59_abuse_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="MODIFIER_59_ABUSE",
+                    rule_type="modifier",
                     description=f"Modifier 59/X used on {code} without apparent NCCI edit conflict",
                     weight=0.11,
                     severity="medium",
@@ -202,6 +207,7 @@ def modifier_bilateral_rule(context: RuleContext) -> list[RuleHit]:
                 hits.append(
                     RuleHit(
                         rule_id="MODIFIER_BILATERAL_INVALID",
+                        rule_type="modifier",
                         description=f"Bilateral modifier 50 used on non-bilateral procedure {code}",
                         weight=0.14,
                         severity="high",
@@ -219,6 +225,7 @@ def modifier_bilateral_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="MODIFIER_BILATERAL_CONFLICT",
+                    rule_type="modifier",
                     description=f"Both bilateral (50) and laterality (LT/RT) modifiers on {code}",
                     weight=0.12,
                     severity="medium",

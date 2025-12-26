@@ -67,10 +67,18 @@ class TransformStage:
         """Load mapping configuration from database."""
         if self.mapping_id:
             try:
-                from ...mapping.persistence import MappingPersistence
+                from ...mapping.persistence import get_mapping_store
 
-                persistence = MappingPersistence()
-                self._loaded_mapping = persistence.get_mapping(self.mapping_id)
+                store = get_mapping_store()
+                mapping = store.get_mapping_by_id(self.mapping_id)
+                if mapping:
+                    # Convert SchemaMapping to dict for backwards compatibility
+                    self._loaded_mapping = {
+                        "id": mapping.id,
+                        "source_schema_id": mapping.source_schema_id,
+                        "mapping_config": {"field_maps": mapping.field_mappings},
+                        "status": mapping.status.value if mapping.status else None,
+                    }
                 if self._loaded_mapping:
                     # Convert to field mappings
                     self._build_field_mappings_from_saved()

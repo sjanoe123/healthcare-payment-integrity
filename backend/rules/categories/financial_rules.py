@@ -49,6 +49,7 @@ def reimbursement_outlier_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="REIMB_OUTLIER",
+                    rule_type="financial",
                     description=f"{code} billed ${line_amount:,.2f} vs benchmark ${benchmark:,.2f}",
                     weight=0.12,
                     severity="medium",
@@ -115,6 +116,7 @@ def misc_code_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="MISC_CODE",
+                    rule_type="financial",
                     description=f"Procedure {code} is an unlisted code requiring documentation",
                     weight=0.05,
                     severity="low",

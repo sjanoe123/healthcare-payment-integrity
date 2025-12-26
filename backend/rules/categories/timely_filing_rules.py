@@ -29,6 +29,7 @@ def timely_filing_late_rule(context: RuleContext) -> list[RuleHit]:
         return [
             RuleHit(
                 rule_id="TIMELY_FILING_LATE",
+                rule_type="coverage",
                 description=f"Claim filed {days_elapsed} days after service, exceeds {filing_limit_days}-day limit",
                 weight=0.22,
                 severity="critical",
@@ -48,6 +49,7 @@ def timely_filing_late_rule(context: RuleContext) -> list[RuleHit]:
         return [
             RuleHit(
                 rule_id="TIMELY_FILING_WARNING",
+                rule_type="coverage",
                 description=f"Claim filed {days_elapsed} days after service, approaching {filing_limit_days}-day limit",
                 weight=0.05,
                 severity="low",
@@ -100,6 +102,7 @@ def timely_filing_no_exception_rule(context: RuleContext) -> list[RuleHit]:
         return [
             RuleHit(
                 rule_id="TIMELY_FILING_NO_EXCEPTION",
+                rule_type="coverage",
                 description=f"Late filing ({days_elapsed} days) without documented exception",
                 weight=0.20,
                 severity="critical",
@@ -117,6 +120,7 @@ def timely_filing_no_exception_rule(context: RuleContext) -> list[RuleHit]:
         return [
             RuleHit(
                 rule_id="TIMELY_FILING_INVALID_EXCEPTION",
+                rule_type="coverage",
                 description=f"Late filing exception code '{exception_code}' is not valid",
                 weight=0.18,
                 severity="high",

@@ -81,18 +81,22 @@ class S3Connector(BaseFileConnector):
                 "service_name": "s3",
             }
 
-            # Region
-            if self.config.get("region"):
-                client_kwargs["region_name"] = self.config["region"]
+            # Region - support both 'aws_region' (standardized) and 'region' (legacy)
+            region = self.config.get("aws_region") or self.config.get("region")
+            if region:
+                client_kwargs["region_name"] = region
 
             # Credentials (optional - can use IAM role)
-            if self.config.get("access_key_id") and self.config.get(
+            # Support both standardized names (aws_access_key/aws_secret_key) and legacy names
+            access_key = self.config.get("aws_access_key") or self.config.get(
+                "access_key_id"
+            )
+            secret_key = self.config.get("aws_secret_key") or self.config.get(
                 "secret_access_key"
-            ):
-                client_kwargs["aws_access_key_id"] = self.config["access_key_id"]
-                client_kwargs["aws_secret_access_key"] = self.config[
-                    "secret_access_key"
-                ]
+            )
+            if access_key and secret_key:
+                client_kwargs["aws_access_key_id"] = access_key
+                client_kwargs["aws_secret_access_key"] = secret_key
 
             # Custom endpoint (for S3-compatible services like MinIO)
             if self.config.get("endpoint_url"):
@@ -128,16 +132,21 @@ class S3Connector(BaseFileConnector):
             # Build client
             client_kwargs: dict[str, Any] = {"service_name": "s3"}
 
-            if self.config.get("region"):
-                client_kwargs["region_name"] = self.config["region"]
+            # Region - support both 'aws_region' (standardized) and 'region' (legacy)
+            region = self.config.get("aws_region") or self.config.get("region")
+            if region:
+                client_kwargs["region_name"] = region
 
-            if self.config.get("access_key_id") and self.config.get(
+            # Credentials - support both standardized and legacy names
+            access_key = self.config.get("aws_access_key") or self.config.get(
+                "access_key_id"
+            )
+            secret_key = self.config.get("aws_secret_key") or self.config.get(
                 "secret_access_key"
-            ):
-                client_kwargs["aws_access_key_id"] = self.config["access_key_id"]
-                client_kwargs["aws_secret_access_key"] = self.config[
-                    "secret_access_key"
-                ]
+            )
+            if access_key and secret_key:
+                client_kwargs["aws_access_key_id"] = access_key
+                client_kwargs["aws_secret_access_key"] = secret_key
 
             if self.config.get("endpoint_url"):
                 client_kwargs["endpoint_url"] = self.config["endpoint_url"]
@@ -171,7 +180,7 @@ class S3Connector(BaseFileConnector):
                 latency_ms=round(latency_ms, 2),
                 details={
                     "bucket": bucket,
-                    "region": self.config.get("region"),
+                    "region": region,
                     "prefix": prefix,
                     "objects_found": object_count,
                     "sample_files": sample_files,

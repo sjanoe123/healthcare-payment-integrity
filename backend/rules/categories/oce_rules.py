@@ -30,6 +30,7 @@ def oce_revenue_code_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="OCE_REVENUE_CODE_INVALID",
+                    rule_type="coverage",
                     description=f"Revenue code {rev_code} requires one of: {', '.join(required_with)}",
                     weight=0.12,
                     severity="medium",
@@ -49,6 +50,7 @@ def oce_revenue_code_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="OCE_REVENUE_CODE_CONFLICT",
+                    rule_type="coverage",
                     description=f"Revenue code {rev_code} conflicts with: {', '.join(conflicts)}",
                     weight=0.14,
                     severity="high",
@@ -87,6 +89,7 @@ def oce_inpatient_only_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="OCE_INPATIENT_ONLY",
+                    rule_type="coverage",
                     description=f"Procedure {code} is inpatient-only but billed in outpatient setting",
                     weight=0.18,
                     severity="critical",
@@ -129,6 +132,7 @@ def oce_observation_hours_rule(context: RuleContext) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 rule_id="OCE_OBSERVATION_EXCESSIVE",
+                rule_type="coverage",
                 description=f"Observation hours {observation_hours} exceeds maximum {max_observation_hours}",
                 weight=0.16,
                 severity="high",
@@ -147,6 +151,7 @@ def oce_observation_hours_rule(context: RuleContext) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     rule_id="OCE_OBSERVATION_EXTENDED",
+                    rule_type="coverage",
                     description=f"Extended observation ({observation_hours}h) requires medical necessity documentation",
                     weight=0.10,
                     severity="medium",
