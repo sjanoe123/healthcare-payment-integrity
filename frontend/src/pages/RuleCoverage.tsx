@@ -73,6 +73,36 @@ const colorClasses = {
   safe: 'from-risk-safe/10 to-risk-safe/5 border-risk-safe/20 text-risk-safe',
 };
 
+// Static classes for Tailwind JIT compilation (avoid dynamic string construction)
+const iconBgClasses = {
+  kirk: 'bg-kirk/10',
+  teal: 'bg-teal/10',
+  electric: 'bg-electric/10',
+  caution: 'bg-risk-caution/10',
+  safe: 'bg-risk-safe/10',
+};
+
+// Coverage color utilities - centralized threshold logic
+function getCoverageTextColor(pct: number): string {
+  if (pct >= 90) return 'text-risk-safe';
+  if (pct >= 70) return 'text-teal';
+  if (pct >= 50) return 'text-risk-caution';
+  return 'text-risk-high';
+}
+
+function getCoverageBgColor(pct: number): string {
+  if (pct >= 90) return 'bg-risk-safe';
+  if (pct >= 70) return 'bg-teal';
+  if (pct >= 50) return 'bg-risk-caution';
+  return 'bg-risk-high';
+}
+
+function getScoreTextColor(score: number): string {
+  if (score >= 80) return 'text-risk-safe';
+  if (score >= 60) return 'text-risk-caution';
+  return 'text-risk-high';
+}
+
 function StatCard({ title, value, subtitle, icon: Icon, color, delay = 0 }: StatCardProps) {
   return (
     <motion.div
@@ -95,7 +125,7 @@ function StatCard({ title, value, subtitle, icon: Icon, color, delay = 0 }: Stat
             </p>
           )}
         </div>
-        <div className={cn('p-3 rounded-xl', `bg-${color}/10`)}>
+        <div className={cn('p-3 rounded-xl', iconBgClasses[color])}>
           <Icon className="w-6 h-6" />
         </div>
       </div>
@@ -105,13 +135,6 @@ function StatCard({ title, value, subtitle, icon: Icon, color, delay = 0 }: Stat
 
 // Coverage bar component
 function CoverageBar({ field, coverage }: { field: string; coverage: number }) {
-  const getBarColor = (pct: number) => {
-    if (pct >= 90) return 'bg-risk-safe';
-    if (pct >= 70) return 'bg-teal';
-    if (pct >= 50) return 'bg-risk-caution';
-    return 'bg-risk-high';
-  };
-
   return (
     <div className="flex items-center gap-4 py-2">
       <span className="w-36 text-sm text-navy-300 font-mono truncate" title={field}>
@@ -122,12 +145,12 @@ function CoverageBar({ field, coverage }: { field: string; coverage: number }) {
           initial={{ width: 0 }}
           animate={{ width: `${coverage}%` }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className={cn('h-full rounded-full', getBarColor(coverage))}
+          className={cn('h-full rounded-full', getCoverageBgColor(coverage))}
         />
       </div>
       <span className={cn(
         'w-14 text-right text-sm font-medium tabular-nums',
-        coverage >= 90 ? 'text-risk-safe' : coverage >= 70 ? 'text-teal' : coverage >= 50 ? 'text-risk-caution' : 'text-risk-high'
+        getCoverageTextColor(coverage)
       )}>
         {coverage}%
       </span>
@@ -367,8 +390,7 @@ export function RuleCoverage() {
                   <span className="ml-auto text-sm font-normal text-navy-400">
                     Overall Score: <span className={cn(
                       'font-medium',
-                      coverage.coverage_score >= 80 ? 'text-risk-safe' :
-                      coverage.coverage_score >= 60 ? 'text-risk-caution' : 'text-risk-high'
+                      getScoreTextColor(coverage.coverage_score)
                     )}>{coverage.coverage_score}%</span>
                   </span>
                 </h3>

@@ -187,6 +187,7 @@ npm run lint
 | POST | `/api/connectors/{id}/deactivate` | Disable sync |
 | GET | `/api/connectors/{id}/schema` | Discover source schema |
 | POST | `/api/connectors/{id}/sync` | Trigger manual sync |
+| POST | `/api/connectors/{id}/sample-analysis` | Run fraud analysis on sample claims |
 | GET | `/api/connectors/types` | List available connector types |
 | **Sync Jobs** | | |
 | GET | `/api/sync-jobs` | List sync jobs |

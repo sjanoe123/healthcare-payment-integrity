@@ -354,6 +354,35 @@ class TestRuleCatalogEndpoint:
         # At least some core rules should exist
         assert len(rule_ids) > 0
 
+    def test_catalog_rule_metadata_extraction(self, client: TestClient):
+        """Test that rule metadata is properly extracted."""
+        response = client.get("/api/rules/catalog")
+        data = response.json()
+
+        # Check that rules have proper metadata structure
+        for rule in data["rules"]:
+            # All rules should have these basic fields
+            assert isinstance(rule.get("rule_id"), str)
+            assert len(rule["rule_id"]) > 0
+            assert isinstance(rule.get("name"), str)
+            assert isinstance(rule.get("description"), str)
+
+            # Optional fields that may exist
+            if "category" in rule:
+                assert isinstance(rule["category"], str)
+            if "severity" in rule:
+                assert rule["severity"] in ["low", "medium", "high", "critical"]
+
+    def test_catalog_empty_response_structure(self, client: TestClient):
+        """Test that response structure is valid even if no rules."""
+        response = client.get("/api/rules/catalog")
+        data = response.json()
+
+        # Structure should always be valid
+        assert isinstance(data.get("rules"), list)
+        assert isinstance(data.get("total_rules"), int)
+        assert data["total_rules"] == len(data["rules"])
+
 
 class TestRuleStatsEdgeCases:
     """Edge case tests for rule stats."""
