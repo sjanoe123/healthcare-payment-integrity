@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,6 +15,7 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, model_validator
 
 from rag import get_store
+from utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
@@ -48,27 +48,6 @@ class PolicyUploadRequest(BaseModel):
     source: str = "user_upload"
     document_type: str = "policy"
     effective_date: str | None = None
-
-
-def sanitize_filename(filename: str | None, max_length: int = 255) -> str:
-    """Sanitize a user-provided filename for safe logging and storage."""
-    if not filename:
-        return "unknown"
-
-    safe_name = filename.replace("\\", "/")
-    safe_name = safe_name.split("/")[-1]
-    safe_name = safe_name.replace("..", "")
-    safe_name = re.sub(r"[\x00-\x1f\x7f-\x9f\n\r]", "", safe_name)
-
-    if len(safe_name) > max_length:
-        if "." in safe_name:
-            name, ext = safe_name.rsplit(".", 1)
-            ext = ext[:10]
-            safe_name = name[: max_length - len(ext) - 1] + "." + ext
-        else:
-            safe_name = safe_name[:max_length]
-
-    return safe_name or "unknown"
 
 
 # Routes
@@ -166,18 +145,24 @@ async def upload_policy_document(request: PolicyUploadRequest):
     if request.effective_date:
         metadata["effective_date"] = request.effective_date
 
-    store.add_documents(
-        documents=[request.content],
-        metadatas=[metadata],
-        ids=[doc_id],
-    )
+    try:
+        store.add_documents(
+            documents=[request.content],
+            metadatas=[metadata],
+            ids=[doc_id],
+        )
 
-    return {
-        "success": True,
-        "document_id": doc_id,
-        "message": "Document uploaded successfully",
-        "total_documents": store.count(),
-    }
+        return {
+            "success": True,
+            "document_id": doc_id,
+            "message": "Document uploaded successfully",
+            "total_documents": store.count(),
+        }
+    except Exception as e:
+        logger.error(f"Failed to upload policy document: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to upload document: {str(e)[:200]}"
+        )
 
 
 @router.post("/policies/upload-file")
