@@ -45,10 +45,8 @@ async def get_rule_stats(limit: int = Query(default=50, le=100)):
     """
     try:
         with sqlite3.connect(DB_PATH) as conn:
-            # Get total claims and all rule hits
-            cursor = conn.execute(
-                "SELECT COUNT(*), GROUP_CONCAT(rule_hits, ',') FROM results"
-            )
+            # Get total claims count
+            cursor = conn.execute("SELECT COUNT(*) FROM results")
             row = cursor.fetchone()
             total_claims = row[0] if row else 0
 
@@ -61,7 +59,7 @@ async def get_rule_stats(limit: int = Query(default=50, le=100)):
                     "average_rules_per_claim": 0,
                 }
 
-            # Aggregate rule statistics
+            # Aggregate rule statistics by iterating through results
             rule_counts: dict[str, int] = defaultdict(int)
             type_counts: dict[str, int] = defaultdict(int)
             severity_counts: dict[str, int] = defaultdict(int)

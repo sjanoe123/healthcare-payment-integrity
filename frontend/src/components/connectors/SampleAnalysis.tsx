@@ -94,7 +94,13 @@ function FraudScoreBar({ score }: { score: number }) {
   );
 }
 
-export function SampleAnalysis({ connectorId, connectorName, hasCompletedSync }: SampleAnalysisProps) {
+export function SampleAnalysis({
+  connectorId,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  connectorName,
+  hasCompletedSync,
+}: SampleAnalysisProps) {
+  // connectorName reserved for future use in UI display
   const [expanded, setExpanded] = useState(false);
   const [results, setResults] = useState<SampleAnalysisResponse | null>(null);
 

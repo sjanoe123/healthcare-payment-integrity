@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import chromadb
@@ -561,7 +561,7 @@ class ChromaStore:
             "version": new_version,
             "content_hash": content_hash,
             "is_current": True,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
         replaced_id = None

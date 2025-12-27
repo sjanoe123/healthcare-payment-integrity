@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+import random
 import sqlite3
 import uuid
 from contextlib import asynccontextmanager
@@ -31,6 +33,11 @@ from routes import policies_router, mappings_router, rules_router
 from utils import sanitize_filename
 from config import DB_PATH
 from schemas import SemanticMatchRequest
+from templates import (
+    get_template_list,
+    get_template as get_connector_template,
+    apply_template,
+)
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -2083,10 +2090,10 @@ async def analyze_connector_samples(
     low_risk_count = 0
     total_flags = 0
 
-    # Simulate analysis of sample claims
-    import random
-
-    random.seed(hash(connector_id))  # Consistent results per connector
+    # Simulate analysis of sample claims with deterministic seed
+    # Use hashlib for deterministic results across Python runs
+    seed_hash = int(hashlib.md5(connector_id.encode()).hexdigest()[:8], 16)
+    random.seed(seed_hash)
 
     for i in range(min(sample_size, 10)):
         score = random.uniform(0.2, 0.95)
@@ -2158,8 +2165,6 @@ async def list_templates(category: str | None = None):
     Templates provide pre-configured connector settings for common
     healthcare data sources like Epic, Cerner, and standard EDI formats.
     """
-    from templates import get_template_list
-
     templates = get_template_list()
 
     if category:
@@ -2187,9 +2192,7 @@ async def get_template_detail(template_id: str):
     Returns the full template configuration that can be used
     to create a new connector.
     """
-    from templates import get_template
-
-    template = get_template(template_id)
+    template = get_connector_template(template_id)
     if not template:
         raise HTTPException(
             status_code=404, detail=f"Template not found: {template_id}"
@@ -2212,8 +2215,6 @@ async def apply_template_to_connector(
     Applies the template configuration with optional overrides
     and creates a new connector entry in the database.
     """
-    from templates import apply_template
-
     try:
         config = apply_template(template_id, overrides)
     except ValueError as e:
