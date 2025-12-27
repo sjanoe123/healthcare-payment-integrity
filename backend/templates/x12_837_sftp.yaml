@@ -1,0 +1,40 @@
+# X12 837 Claims File Template (SFTP)
+name: "X12 837 Claims - SFTP"
+description: "Receive X12 837 Professional (837P) or Institutional (837I) claims files via SFTP. Standard EDI format."
+category: "edi"
+
+connector_type: "file"
+subtype: "sftp"
+data_type: "claims"
+sync_mode: "full"
+status: "inactive"
+
+connection_config:
+  host: "${SFTP_HOST}"
+  port: 22
+  path: "/claims/inbound"
+  file_pattern: "*.837"
+  archive_path: "/claims/processed"
+
+file_format:
+  type: "x12"
+  version: "005010X222A1"  # 837P version
+  segment_delimiter: "~"
+  element_delimiter: "*"
+  sub_element_delimiter: ":"
+
+field_mappings:
+  claim_id: "CLM01"
+  patient_id: "NM109"
+  procedure_code: "SV101"
+  diagnosis_codes: "HI01"
+  billing_npi: "NM109_2"
+  billed_amount: "CLM02"
+  service_date: "DTP_472"
+
+notes: |
+  1. Replace ${SFTP_HOST} with your SFTP server hostname
+  2. Configure SSH key or password authentication
+  3. Supports both 837P (Professional) and 837I (Institutional)
+  4. Files are automatically archived after processing
+  5. Ensure X12 parsing dependencies are installed
