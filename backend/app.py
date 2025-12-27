@@ -46,6 +46,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_JOBS_LIMIT = 100
 MAX_JOBS_LIMIT = 1000
 
+# Sample analysis configuration
+# Maximum number of claims to analyze in a single sample request
+# Limited to prevent long-running requests and excessive API usage
+MAX_SAMPLE_ANALYSIS_SIZE = 10
+
 
 def safe_json_loads(
     data: str | None, default: list | dict | None = None
@@ -2082,60 +2087,120 @@ async def analyze_connector_samples(
             "results": [],
         }
 
-    # For now, generate synthetic sample analysis results
-    # In production, this would query the synced claims table
+    # Check for actual analyzed claims associated with this connector's sync
+    # Claims are stored in jobs/results tables linked via sync_jobs
     sample_results = []
-    high_risk_count = 0
-    medium_risk_count = 0
-    low_risk_count = 0
-    total_flags = 0
+    preview_mode = False
 
-    # Simulate analysis of sample claims with deterministic seed
-    # Use hashlib for deterministic results across Python runs
-    seed_hash = int(hashlib.md5(connector_id.encode()).hexdigest()[:8], 16)
-    random.seed(seed_hash)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
 
-    for i in range(min(sample_size, 10)):
-        score = random.uniform(0.2, 0.95)
-        flags = random.randint(0, 5)
-        total_flags += flags
-
-        if score >= 0.7:
-            risk_level = "high"
-            high_risk_count += 1
-        elif score >= 0.4:
-            risk_level = "medium"
-            medium_risk_count += 1
-        else:
-            risk_level = "low"
-            low_risk_count += 1
-
-        sample_results.append(
-            {
-                "claim_id": f"SAMPLE-{connector_id[:8]}-{i + 1:03d}",
-                "fraud_score": round(score, 3),
-                "risk_level": risk_level,
-                "flags_count": flags,
-                "top_flags": random.sample(
-                    [
-                        "NCCI_CONFLICT",
-                        "LCD_MISMATCH",
-                        "HIGH_DOLLAR",
-                        "DUPLICATE_LINE",
-                        "OIG_EXCLUSION",
-                        "MUE_EXCEEDED",
-                    ],
-                    min(flags, 3),
-                )
-                if flags > 0
-                else [],
-            }
+        # Try to find actual analyzed results from claims imported by this connector
+        # Look for results created after the connector's first sync
+        cursor.execute(
+            """
+            SELECT r.*, j.claim_id, j.claim_data
+            FROM results r
+            JOIN jobs j ON r.job_id = j.job_id
+            WHERE j.created_at >= (
+                SELECT MIN(started_at) FROM sync_jobs WHERE connector_id = ? AND status = 'completed'
+            )
+            ORDER BY r.created_at DESC
+            LIMIT ?
+            """,
+            (connector_id, min(sample_size, MAX_SAMPLE_ANALYSIS_SIZE)),
         )
+        real_results = cursor.fetchall()
+
+        if real_results:
+            # Use actual analyzed claims
+            for row in real_results:
+                rule_hits = safe_json_loads(row["rule_hits"], [])
+                fraud_score = row["fraud_score"] or 0.5
+
+                if fraud_score >= 0.7:
+                    risk_level = "high"
+                elif fraud_score >= 0.4:
+                    risk_level = "medium"
+                else:
+                    risk_level = "low"
+
+                # Extract top flags from rule_hits
+                top_flags = [hit.get("rule_id", "UNKNOWN") for hit in rule_hits[:3]]
+
+                sample_results.append(
+                    {
+                        "claim_id": row["claim_id"],
+                        "fraud_score": round(fraud_score, 3),
+                        "risk_level": risk_level,
+                        "flags_count": len(rule_hits),
+                        "top_flags": top_flags,
+                    }
+                )
+        else:
+            # No real data yet - use preview mode with synthetic data
+            # This helps demonstrate the system's capabilities before real claims are processed
+            preview_mode = True
+
+    # If no real results, generate preview data
+    if preview_mode:
+        # Generate deterministic preview results based on connector ID
+        # Note: MD5 is used here only for deterministic seeding of random data,
+        # not for any security purpose. This ensures the same connector always
+        # shows the same preview data for consistent demo experience.
+        seed_hash = int(hashlib.md5(connector_id.encode()).hexdigest()[:8], 16)
+        random.seed(seed_hash)
+
+        for i in range(min(sample_size, MAX_SAMPLE_ANALYSIS_SIZE)):
+            score = random.uniform(0.2, 0.95)
+            flags = random.randint(0, 5)
+
+            if score >= 0.7:
+                risk_level = "high"
+            elif score >= 0.4:
+                risk_level = "medium"
+            else:
+                risk_level = "low"
+
+            sample_results.append(
+                {
+                    "claim_id": f"PREVIEW-{connector_id[:8]}-{i + 1:03d}",
+                    "fraud_score": round(score, 3),
+                    "risk_level": risk_level,
+                    "flags_count": flags,
+                    "top_flags": random.sample(
+                        [
+                            "NCCI_CONFLICT",
+                            "LCD_MISMATCH",
+                            "HIGH_DOLLAR",
+                            "DUPLICATE_LINE",
+                            "OIG_EXCLUSION",
+                            "MUE_EXCEEDED",
+                        ],
+                        min(flags, 3),
+                    )
+                    if flags > 0
+                    else [],
+                }
+            )
+
+    # Calculate summary statistics
+    high_risk_count = sum(1 for r in sample_results if r["risk_level"] == "high")
+    medium_risk_count = sum(1 for r in sample_results if r["risk_level"] == "medium")
+    low_risk_count = sum(1 for r in sample_results if r["risk_level"] == "low")
+    total_flags = sum(r["flags_count"] for r in sample_results)
+    avg_score = (
+        round(sum(r["fraud_score"] for r in sample_results) / len(sample_results), 3)
+        if sample_results
+        else 0
+    )
 
     return {
         "connector_id": connector_id,
         "connector_name": connector["name"],
         "status": "completed",
+        "preview_mode": preview_mode,
         "sample_size": len(sample_results),
         "last_sync_at": last_sync["completed_at"] if last_sync else None,
         "summary": {
@@ -2143,15 +2208,16 @@ async def analyze_connector_samples(
             "medium_risk": medium_risk_count,
             "low_risk": low_risk_count,
             "total_flags": total_flags,
-            "avg_score": round(
-                sum(r["fraud_score"] for r in sample_results) / len(sample_results), 3
-            )
-            if sample_results
-            else 0,
+            "avg_score": avg_score,
         },
         "results": sample_results,
-        "message": f"Analyzed {len(sample_results)} sample claims. "
-        f"{high_risk_count} high-risk claims detected.",
+        "message": (
+            "Preview: Showing sample fraud detection results. "
+            "Process claims through this connector to see real analysis."
+            if preview_mode
+            else f"Analyzed {len(sample_results)} claims. "
+            f"{high_risk_count} high-risk claims detected."
+        ),
     }
 
 

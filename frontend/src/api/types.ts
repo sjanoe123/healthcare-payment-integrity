@@ -272,3 +272,72 @@ export function getKirkCategoryLabel(category: KirkCategory): string {
   };
   return labels[category];
 }
+
+// Rule Coverage types
+export interface RuleFrequency {
+  rule_id: string;
+  count: number;
+  percentage: number;
+}
+
+export interface RuleStats {
+  total_claims_analyzed: number;
+  total_rule_hits: number;
+  average_rules_per_claim: number;
+  rules_by_frequency: RuleFrequency[];
+  rules_by_type: Record<string, number>;
+  rules_by_severity: Record<string, number>;
+}
+
+export interface FieldCoverage {
+  field: string;
+  present: number;
+  missing: number;
+  coverage_pct: number;
+}
+
+export interface CoverageStats {
+  total_claims: number;
+  field_coverage: FieldCoverage[];
+  coverage_score: number;
+}
+
+export interface RuleEffectiveness {
+  rule_id: string;
+  times_fired: number;
+  avg_weight: number;
+  total_weight_contribution: number;
+  avg_claim_score: number;
+}
+
+export interface EffectivenessStats {
+  rules: RuleEffectiveness[];
+  total_rules_fired: number;
+}
+
+// Sample Analysis types
+export interface SampleResult {
+  claim_id: string;
+  fraud_score: number;
+  risk_level: 'high' | 'medium' | 'low';
+  flags_count: number;
+  top_flags: string[];
+}
+
+export interface SampleAnalysisResponse {
+  connector_id: string;
+  connector_name: string;
+  status: 'completed' | 'no_data';
+  preview_mode?: boolean;
+  sample_size: number;
+  last_sync_at: string | null;
+  summary?: {
+    high_risk: number;
+    medium_risk: number;
+    low_risk: number;
+    total_flags: number;
+    avg_score: number;
+  };
+  results: SampleResult[];
+  message: string;
+}

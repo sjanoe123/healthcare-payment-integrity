@@ -4,6 +4,11 @@ import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import {
+  RuleStats,
+  CoverageStats,
+  EffectivenessStats,
+} from '@/api/types';
+import {
   Shield,
   Activity,
   BarChart3,
@@ -15,48 +20,6 @@ import {
   Loader2,
 } from 'lucide-react';
 import { KirkAvatar } from '@/components/kirk';
-
-// Types for rule statistics
-interface RuleFrequency {
-  rule_id: string;
-  count: number;
-  percentage: number;
-}
-
-interface RuleStats {
-  total_claims_analyzed: number;
-  total_rule_hits: number;
-  average_rules_per_claim: number;
-  rules_by_frequency: RuleFrequency[];
-  rules_by_type: Record<string, number>;
-  rules_by_severity: Record<string, number>;
-}
-
-interface FieldCoverage {
-  field: string;
-  present: number;
-  missing: number;
-  coverage_pct: number;
-}
-
-interface CoverageStats {
-  total_claims: number;
-  field_coverage: FieldCoverage[];
-  coverage_score: number;
-}
-
-interface RuleEffectiveness {
-  rule_id: string;
-  times_fired: number;
-  avg_weight: number;
-  total_weight_contribution: number;
-  avg_claim_score: number;
-}
-
-interface EffectivenessStats {
-  rules: RuleEffectiveness[];
-  total_rules_fired: number;
-}
 
 // Hooks for fetching rule data
 function useRuleStats() {

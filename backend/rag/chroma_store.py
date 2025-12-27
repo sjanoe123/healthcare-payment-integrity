@@ -11,13 +11,17 @@ healthcare policy documents. Features include:
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Any
 
 import chromadb
 from chromadb.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 def _compute_content_hash(content: str) -> str:
@@ -92,6 +96,9 @@ def _parse_date(date_str: str | None) -> datetime | None:
 # Simple cache for metadata aggregations
 _metadata_cache: dict[str, tuple[float, Any]] = {}
 _CACHE_TTL_SECONDS = 60  # Cache for 1 minute
+
+# Lock for thread-safe version replacement operations
+_version_lock = threading.Lock()
 
 
 class ChromaStore:
@@ -334,8 +341,8 @@ class ChromaStore:
                     "content": result["documents"][0],
                     "metadata": result["metadatas"][0] if result["metadatas"] else {},
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to get document {document_id}: {e}")
         return None
 
     def _get_cached_or_compute(
@@ -432,7 +439,8 @@ class ChromaStore:
             self.collection.delete(ids=[document_id])
             self.invalidate_cache()  # Clear cached counts
             return True
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to delete document {document_id}: {e}")
             return False
 
     def bulk_delete_by_source(self, source: str) -> int:
@@ -483,7 +491,8 @@ class ChromaStore:
                 metadatas=[updated_metadata],
             )
             return True
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to update metadata for {document_id}: {e}")
             return False
 
     # ================================================================
@@ -503,6 +512,9 @@ class ChromaStore:
         1. Computing a content hash for deduplication
         2. Checking if identical content already exists
         3. Creating a new version or replacing existing
+
+        Thread-safe: Uses a lock to prevent race conditions when multiple
+        requests try to add versions of the same policy concurrently.
 
         Args:
             document: The policy document text content
@@ -529,58 +541,64 @@ class ChromaStore:
         """
         content_hash = _compute_content_hash(document)
 
-        # Check for existing versions of this policy
-        existing_versions = self.get_document_versions(policy_key)
+        # Use lock to prevent race conditions in version replacement
+        with _version_lock:
+            # Check for existing versions of this policy
+            existing_versions = self.get_document_versions(policy_key)
 
-        # Check for duplicate content
-        for existing in existing_versions:
-            if existing.get("metadata", {}).get("content_hash") == content_hash:
-                return {
-                    "document_id": existing["id"],
-                    "version": existing.get("metadata", {}).get("version", "1"),
-                    "is_duplicate": True,
-                    "replaced_id": None,
-                    "message": "Identical content already exists",
-                }
+            # Check for duplicate content
+            for existing in existing_versions:
+                if existing.get("metadata", {}).get("content_hash") == content_hash:
+                    return {
+                        "document_id": existing["id"],
+                        "version": existing.get("metadata", {}).get("version", "1"),
+                        "is_duplicate": True,
+                        "replaced_id": None,
+                        "message": "Identical content already exists",
+                    }
 
-        # Determine new version number
-        if existing_versions:
-            latest = existing_versions[0]  # Already sorted by version desc
-            latest_version = latest.get("metadata", {}).get("version", "1")
-            new_version = _increment_version(latest_version)
-        else:
-            new_version = "1"
+            # Determine new version number
+            if existing_versions:
+                latest = existing_versions[0]  # Already sorted by version desc
+                latest_version = latest.get("metadata", {}).get("version", "1")
+                new_version = _increment_version(latest_version)
+            else:
+                new_version = "1"
 
-        # Build document ID with version
-        doc_id = f"{policy_key}_v{new_version}"
+            # Build document ID with version
+            doc_id = f"{policy_key}_v{new_version}"
 
-        # Enhance metadata with versioning info
-        enhanced_metadata = {
-            **metadata,
-            "policy_key": policy_key,
-            "version": new_version,
-            "content_hash": content_hash,
-            "is_current": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
+            # Enhance metadata with versioning info
+            enhanced_metadata = {
+                **metadata,
+                "policy_key": policy_key,
+                "version": new_version,
+                "content_hash": content_hash,
+                "is_current": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
 
-        replaced_id = None
+            replaced_id = None
 
-        # Handle replacement mode
-        if replace_existing and existing_versions:
-            # Mark previous version as not current
-            for old_doc in existing_versions:
-                if old_doc.get("metadata", {}).get("is_current"):
-                    self.update_metadata(old_doc["id"], {"is_current": False})
-                    replaced_id = old_doc["id"]
-                    break
+            # Handle replacement mode - atomic with version check
+            if replace_existing and existing_versions:
+                # Mark previous version as not current
+                for old_doc in existing_versions:
+                    if old_doc.get("metadata", {}).get("is_current"):
+                        self.update_metadata(old_doc["id"], {"is_current": False})
+                        replaced_id = old_doc["id"]
+                        break
 
-        # Add the new document
-        self.add_documents(
-            documents=[document],
-            metadatas=[enhanced_metadata],
-            ids=[doc_id],
-        )
+            # Add the new document
+            self.add_documents(
+                documents=[document],
+                metadatas=[enhanced_metadata],
+                ids=[doc_id],
+            )
+
+            # Invalidate policy_keys cache since we added a new policy
+            policy_keys_cache_key = f"{self.collection_name}:policy_keys"
+            _metadata_cache.pop(policy_keys_cache_key, None)
 
         return {
             "document_id": doc_id,
@@ -640,7 +658,8 @@ class ChromaStore:
             versions.sort(key=version_sort_key, reverse=True)
             return versions
 
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to get document versions for {policy_key}: {e}")
             return []
 
     def get_latest_version(
@@ -679,7 +698,8 @@ class ChromaStore:
             versions = self.get_document_versions(policy_key, include_content)
             return versions[0] if versions else None
 
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to get latest version for {policy_key}: {e}")
             return None
 
     def list_policy_keys(self) -> list[str]:

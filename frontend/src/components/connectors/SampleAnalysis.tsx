@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '@/api/client';
+import { SampleAnalysisResponse } from '@/api/types';
 import { cn } from '@/lib/utils';
 import {
   Play,
@@ -14,32 +15,8 @@ import {
   Target,
   TrendingUp,
   Shield,
+  Eye,
 } from 'lucide-react';
-
-interface SampleResult {
-  claim_id: string;
-  fraud_score: number;
-  risk_level: 'high' | 'medium' | 'low';
-  flags_count: number;
-  top_flags: string[];
-}
-
-interface SampleAnalysisResponse {
-  connector_id: string;
-  connector_name: string;
-  status: 'completed' | 'no_data';
-  sample_size: number;
-  last_sync_at: string | null;
-  summary?: {
-    high_risk: number;
-    medium_risk: number;
-    low_risk: number;
-    total_flags: number;
-    avg_score: number;
-  };
-  results: SampleResult[];
-  message: string;
-}
 
 interface SampleAnalysisProps {
   connectorId: string;
@@ -96,11 +73,9 @@ function FraudScoreBar({ score }: { score: number }) {
 
 export function SampleAnalysis({
   connectorId,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   connectorName,
   hasCompletedSync,
 }: SampleAnalysisProps) {
-  // connectorName reserved for future use in UI display
   const [expanded, setExpanded] = useState(false);
   const [results, setResults] = useState<SampleAnalysisResponse | null>(null);
 
@@ -142,14 +117,32 @@ export function SampleAnalysis({
       {/* Header */}
       <div className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-kirk/20 to-electric/20 flex items-center justify-center">
-            <Target className="w-5 h-5 text-kirk" />
+          <div className={cn(
+            "w-10 h-10 rounded-lg flex items-center justify-center",
+            results?.preview_mode
+              ? "bg-gradient-to-br from-amber-500/20 to-orange-500/20"
+              : "bg-gradient-to-br from-kirk/20 to-electric/20"
+          )}>
+            {results?.preview_mode ? (
+              <Eye className="w-5 h-5 text-amber-400" />
+            ) : (
+              <Target className="w-5 h-5 text-kirk" />
+            )}
           </div>
           <div>
-            <h4 className="font-medium text-white">Sample Analysis</h4>
+            <div className="flex items-center gap-2">
+              <h4 className="font-medium text-white">Sample Analysis</h4>
+              {results?.preview_mode && (
+                <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  Preview
+                </span>
+              )}
+            </div>
             <p className="text-sm text-navy-400">
               {results
-                ? `${results.sample_size} claims analyzed`
+                ? results.preview_mode
+                  ? `Preview for ${connectorName}`
+                  : `${results.sample_size} claims from ${connectorName}`
                 : 'Analyze sample claims to preview fraud detection'}
             </p>
           </div>
