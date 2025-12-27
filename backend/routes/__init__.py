@@ -12,13 +12,7 @@ TODO (Week 3+): Extract additional routers from app.py
 - claims: Claim analysis and fraud detection
 """
 
-from fastapi import APIRouter
-
 from .mappings import router as mappings_router
 from .policies import router as policies_router
-
-# Type annotations for exported routers
-mappings_router: APIRouter
-policies_router: APIRouter
 
 __all__: list[str] = ["policies_router", "mappings_router"]

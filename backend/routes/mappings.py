@@ -7,18 +7,16 @@ persistence, and approval workflows.
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, field_validator
 
+from config import DB_PATH
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/mappings", tags=["mappings"])
-
-# Database path from environment
-DB_PATH = os.getenv("DB_PATH", "./data/prototype.db")
 
 
 # Request/Response Models

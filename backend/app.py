@@ -29,13 +29,10 @@ from mapping.templates import get_template
 from connectors.constants import CONNECTOR_SECRET_FIELDS
 from routes import policies_router, mappings_router
 from utils import sanitize_filename
+from config import DB_PATH
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-
-# Database setup
-DB_PATH = os.getenv("DB_PATH", "./data/prototype.db")
 
 # Pagination limits
 DEFAULT_JOBS_LIMIT = 100

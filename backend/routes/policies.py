@@ -236,6 +236,12 @@ async def upload_policy_file(
             status_code=400,
             detail="File must be valid UTF-8 text",
         )
+    except Exception as e:
+        logger.error(f"Failed to upload policy file: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload file: {str(e)[:200]}",
+        )
 
 
 @router.get("/policies/sources")
