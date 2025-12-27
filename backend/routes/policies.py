@@ -331,3 +331,149 @@ async def delete_policies_by_source(source_name: str):
         "message": f"Deleted {count} documents from source '{source_name}'",
         "total_documents": store.count(),
     }
+
+
+# ============================================================
+# Policy Versioning Endpoints
+# ============================================================
+
+
+class VersionedPolicyRequest(BaseModel):
+    """Request model for adding a versioned policy document."""
+
+    content: str
+    policy_key: str  # Unique identifier like "LCD-L38604"
+    source: str = "user_upload"
+    document_type: str = "policy"
+    effective_date: str | None = None
+    expires_date: str | None = None
+    replace_existing: bool = False  # If True, marks old version as not current
+
+
+@router.post("/policies/versioned")
+async def add_versioned_policy(request: VersionedPolicyRequest):
+    """Add a versioned policy document with automatic version tracking.
+
+    This endpoint:
+    - Detects duplicate content via SHA-256 hash
+    - Automatically increments version numbers
+    - Optionally marks previous versions as archived
+
+    Use this for policies that are updated periodically (e.g., LCD revisions).
+    """
+    store = get_store()
+
+    if not request.content or len(request.content.strip()) < 10:
+        raise HTTPException(
+            status_code=400, detail="Document content must be at least 10 characters"
+        )
+
+    if not request.policy_key or len(request.policy_key.strip()) < 2:
+        raise HTTPException(
+            status_code=400, detail="Policy key must be at least 2 characters"
+        )
+
+    # Build metadata
+    metadata = {
+        "source": request.source,
+        "document_type": request.document_type,
+    }
+    if request.effective_date:
+        metadata["effective_date"] = request.effective_date
+    if request.expires_date:
+        metadata["expires_date"] = request.expires_date
+
+    try:
+        result = store.add_document_with_version(
+            document=request.content,
+            metadata=metadata,
+            policy_key=request.policy_key.strip(),
+            replace_existing=request.replace_existing,
+        )
+
+        return {
+            "success": True,
+            **result,
+            "total_documents": store.count(),
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to add versioned policy: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to add versioned policy: {str(e)[:200]}"
+        )
+
+
+@router.get("/policies/versions/{policy_key}")
+async def get_policy_versions(policy_key: str, include_content: bool = False):
+    """Get all versions of a policy document.
+
+    Returns version history sorted by version descending (newest first).
+    """
+    store = get_store()
+    versions = store.get_document_versions(policy_key, include_content=include_content)
+
+    if not versions:
+        raise HTTPException(
+            status_code=404, detail=f"No versions found for policy key: {policy_key}"
+        )
+
+    return {
+        "policy_key": policy_key,
+        "versions": versions,
+        "total_versions": len(versions),
+    }
+
+
+@router.get("/policies/versions/{policy_key}/latest")
+async def get_latest_policy_version(policy_key: str):
+    """Get the latest (current) version of a policy document."""
+    store = get_store()
+    latest = store.get_latest_version(policy_key, include_content=True)
+
+    if not latest:
+        raise HTTPException(
+            status_code=404, detail=f"No versions found for policy key: {policy_key}"
+        )
+
+    return {
+        "policy_key": policy_key,
+        **latest,
+    }
+
+
+@router.get("/policies/versions/{policy_key}/history")
+async def get_policy_version_history(policy_key: str):
+    """Get version history summary for a policy.
+
+    Returns a lightweight summary without document content,
+    useful for building version selector UIs.
+    """
+    store = get_store()
+    history = store.get_version_history(policy_key)
+
+    if not history:
+        raise HTTPException(
+            status_code=404, detail=f"No versions found for policy key: {policy_key}"
+        )
+
+    return {
+        "policy_key": policy_key,
+        "history": history,
+        "total_versions": len(history),
+    }
+
+
+@router.get("/policies/keys")
+async def list_policy_keys():
+    """List all unique policy keys in the system.
+
+    Useful for autocomplete and policy navigation UIs.
+    """
+    store = get_store()
+    keys = store.list_policy_keys()
+
+    return {
+        "policy_keys": keys,
+        "total_policies": len(keys),
+    }

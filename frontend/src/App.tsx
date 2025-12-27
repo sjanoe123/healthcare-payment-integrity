@@ -13,6 +13,7 @@ const MappingReview = lazy(() => import('./pages/MappingReview'));
 const DataSources = lazy(() => import('./pages/DataSources'));
 const SyncJobs = lazy(() => import('./pages/SyncJobs'));
 const ConnectorConfig = lazy(() => import('./pages/ConnectorConfig'));
+const RuleCoverage = lazy(() => import('./pages/RuleCoverage'));
 
 /**
  * React Query client configuration
@@ -64,6 +65,7 @@ function App() {
               <Route path="/connectors/new" element={<ConnectorConfig />} />
               <Route path="/connectors/:id/edit" element={<ConnectorConfig />} />
               <Route path="/sync-jobs" element={<SyncJobs />} />
+              <Route path="/rules" element={<RuleCoverage />} />
             </Route>
           </Routes>
         </Suspense>

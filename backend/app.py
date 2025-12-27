@@ -27,7 +27,7 @@ from kirk_config import KIRK_CONFIG
 from mapping import normalize_claim, denormalize_for_rules
 from mapping.templates import get_template
 from connectors.constants import CONNECTOR_SECRET_FIELDS
-from routes import policies_router, mappings_router
+from routes import policies_router, mappings_router, rules_router
 from utils import sanitize_filename
 from config import DB_PATH
 from schemas import SemanticMatchRequest
@@ -289,6 +289,7 @@ app.add_middleware(
 # Register API routers
 app.include_router(policies_router)
 app.include_router(mappings_router)
+app.include_router(rules_router)
 
 
 # Pydantic models
