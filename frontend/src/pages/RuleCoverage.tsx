@@ -3,10 +3,11 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
-import {
+import type {
   RuleStats,
   CoverageStats,
   EffectivenessStats,
+  RuleFrequency,
 } from '@/api/types';
 import {
   Shield,

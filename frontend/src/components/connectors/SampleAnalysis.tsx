@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '@/api/client';
-import { SampleAnalysisResponse } from '@/api/types';
+import type { SampleAnalysisResponse } from '@/api/types';
 import { cn } from '@/lib/utils';
 import {
   Play,
