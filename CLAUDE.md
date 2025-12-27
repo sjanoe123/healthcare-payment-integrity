@@ -133,6 +133,8 @@ npm run lint
   - `MappingReview.tsx` - Schema mapping review and approval
   - `DataSources.tsx` - External data connector management
   - `SyncJobs.tsx` - Sync job monitoring with real-time updates
+  - `RuleCoverage.tsx` - Rule analytics and effectiveness metrics
+  - `AuditLog.tsx` - HIPAA audit log viewer with filtering and export
 - **Components**: `frontend/src/components/`
   - `kirk/` - Kirk AI avatar, messages, thinking animation, follow-up chat
   - `analysis/` - FraudScoreGauge, ResultsDisplay
@@ -194,6 +196,17 @@ npm run lint
 | GET | `/api/sync-jobs/{id}` | Get job details |
 | POST | `/api/sync-jobs/{id}/cancel` | Cancel running job |
 | GET | `/api/sync-jobs/{id}/logs` | Get job logs |
+| **Audit Log (HIPAA)** | | |
+| GET | `/api/audit` | List audit log entries with filters |
+| GET | `/api/audit/stats` | Get audit statistics |
+| GET | `/api/audit/export` | Export logs (CSV/JSON) |
+| GET | `/api/audit/actions` | List available audit actions |
+| **Policy Sync** | | |
+| POST | `/api/policies/sync` | Trigger CMS policy sync |
+| GET | `/api/policies/sync/status` | Get sync status per source |
+| GET | `/api/policies/sync/history` | Get sync job history |
+| GET | `/api/policies/sync/sources` | List available sources |
+| POST | `/api/policies/bulk-upload` | Bulk upload policy documents |
 
 ### Data Flow
 
@@ -327,10 +340,14 @@ Rules return `RuleHit` objects with weights that adjust the fraud score. Organiz
 | `backend/scheduler/scheduler.py` | APScheduler wrapper |
 | `backend/scheduler/jobs.py` | Sync job lifecycle management |
 | `backend/scheduler/worker.py` | Background job execution |
+| `backend/scheduler/cms_policy_sync.py` | CMS policy document sync job |
 | `backend/etl/pipeline.py` | ETL orchestrator |
 | `frontend/src/pages/DataSources.tsx` | Connector management UI |
 | `frontend/src/pages/SyncJobs.tsx` | Job monitoring UI |
 | `frontend/src/components/connectors/ConnectorForm.tsx` | Connector wizard |
+| **Audit & Compliance** | |
+| `backend/routes/audit.py` | HIPAA audit log endpoints |
+| `frontend/src/pages/AuditLog.tsx` | Audit log dashboard with export |
 
 ## Kirk AI Features
 
@@ -587,6 +604,150 @@ store.approve_mapping(mapping.id, approved_by="reviewer@example.com")
 
 # Get audit history
 audit = store.get_audit_log(mapping.id)
+```
+
+## Audit Log (HIPAA Compliance)
+
+The system maintains comprehensive audit logs for HIPAA compliance and security monitoring.
+
+### Auditable Actions
+
+| Category | Actions | Description |
+|----------|---------|-------------|
+| Claim | `claim.upload`, `claim.analyze`, `claim.view` | Claim processing events |
+| Connector | `connector.create`, `connector.update`, `connector.delete`, `connector.test`, `connector.sync` | Data source management |
+| Policy | `policy.upload`, `policy.delete`, `policy.search`, `policy.sync_start`, `policy.sync_complete` | Policy document operations |
+| Auth | `auth.login`, `auth.logout` | Authentication events |
+| Audit | `audit.export` | Audit log export events |
+
+### API Endpoints
+
+```bash
+# List audit logs with filtering
+GET /api/audit?limit=50&offset=0&action=claim.analyze&status=success
+
+# Get audit statistics
+GET /api/audit/stats
+
+# Export audit logs (CSV or JSON)
+GET /api/audit/export?format=csv&start_date=2024-01-01
+
+# List available audit actions
+GET /api/audit/actions
+```
+
+### Audit Log Entry Structure
+
+```json
+{
+  "id": "uuid",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "action": "claim.analyze",
+  "user_id": "user-123",
+  "user_email": "analyst@example.com",
+  "resource_type": "claim",
+  "resource_id": "CLM-456",
+  "details": {"job_id": "job-789", "fraud_score": 0.75},
+  "ip_address": "192.168.1.1",
+  "status": "success",
+  "error_message": null
+}
+```
+
+### Database Schema
+
+Audit logs are stored in SQLite with indices for efficient querying:
+- `idx_audit_timestamp` - Time-based queries
+- `idx_audit_action` - Action filtering
+- `idx_audit_user` - User activity tracking
+- `idx_audit_resource` - Resource-specific lookups
+
+## Policy Sync (CMS Updates)
+
+The system supports incremental synchronization of healthcare policy documents from CMS sources.
+
+### Policy Sources
+
+| Source | Description | Sync Frequency |
+|--------|-------------|----------------|
+| `mln_matters` | Medicare Learning Network articles | Daily |
+| `internet_only_manuals` | CMS Internet-Only Manuals | Weekly |
+| `lcd_updates` | Local Coverage Determination updates | Daily |
+| `ncd_updates` | National Coverage Determination updates | Weekly |
+| `ncci_edits` | NCCI coding edits | Monthly |
+| `custom` | User-uploaded policy documents | Manual |
+
+### API Endpoints
+
+```bash
+# Trigger policy sync
+POST /api/policies/sync
+{"sources": ["mln_matters", "lcd_updates"], "force": true}
+
+# Get sync status for all sources
+GET /api/policies/sync/status
+
+# Get sync history
+GET /api/policies/sync/history?source=lcd_updates&limit=50
+
+# List available sync sources
+GET /api/policies/sync/sources
+
+# Bulk upload policy documents
+POST /api/policies/bulk-upload
+{
+  "documents": [
+    {"content": "Policy text...", "title": "LCD L38604", "policy_key": "LCD-L38604"}
+  ],
+  "source_type": "lcd_updates"
+}
+```
+
+### Policy Versioning
+
+Documents are tracked with automatic versioning:
+- Content deduplication via SHA-256 hashing
+- Automatic version incrementing (1 → 2 → 3)
+- Current/archived version tracking
+- Effective date filtering for point-in-time queries
+
+### Sync Job Tracking
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Job created, waiting to start |
+| `running` | Sync in progress |
+| `success` | Completed successfully |
+| `partial` | Completed with some errors |
+| `failed` | Sync failed completely |
+
+### Python Usage
+
+```python
+from scheduler.cms_policy_sync import (
+    CMSPolicySyncer,
+    PolicySource,
+    PolicyDocument,
+)
+
+# Create syncer
+syncer = CMSPolicySyncer()
+
+# Sync all sources
+results = syncer.sync_all_sources(force=True)
+
+# Sync specific source with custom documents
+docs = [
+    PolicyDocument(
+        content="Policy content...",
+        title="New LCD Policy",
+        source=PolicySource.LCD,
+        policy_key="LCD-NEW-001",
+        effective_date="2024-01-01",
+    )
+]
+result = syncer.sync_source(PolicySource.LCD, documents=docs)
+print(f"Added: {result.documents_added}, Updated: {result.documents_updated}")
 ```
 
 ## Data Source Connectors

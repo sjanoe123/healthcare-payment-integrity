@@ -29,7 +29,15 @@ from kirk_config import KIRK_CONFIG
 from mapping import normalize_claim, denormalize_for_rules
 from mapping.templates import get_template
 from connectors.constants import CONNECTOR_SECRET_FIELDS
-from routes import policies_router, mappings_router, rules_router
+
+# Import all connectors at startup to trigger their registration with the registry.
+# This ensures GET /api/connectors/types returns all available connector types.
+# Without these imports, connectors only register when first used (lazy loading).
+from connectors.database import PostgreSQLConnector, MySQLConnector, SQLServerConnector  # noqa: F401
+from connectors.file import S3Connector, SFTPConnector, AzureBlobConnector  # noqa: F401
+
+from routes import policies_router, mappings_router, rules_router, audit_router
+from routes.audit import log_audit_event, AuditAction
 from utils import sanitize_filename
 from config import DB_PATH
 from schemas import SemanticMatchRequest
@@ -160,6 +168,41 @@ def init_db():
                 FOREIGN KEY (job_id) REFERENCES sync_jobs(id)
             )
         """)
+
+        # ============================================================
+        # Audit Logging Table (HIPAA Compliance)
+        # ============================================================
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                action TEXT NOT NULL,
+                user_id TEXT,
+                user_email TEXT,
+                resource_type TEXT,
+                resource_id TEXT,
+                details TEXT,
+                ip_address TEXT,
+                user_agent TEXT,
+                status TEXT DEFAULT 'success',
+                error_message TEXT
+            )
+        """)
+
+        # Audit indices for efficient querying
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs(resource_type, resource_id)"
+        )
 
         # Connector indices
         cursor.execute(
@@ -302,6 +345,7 @@ app.add_middleware(
 app.include_router(policies_router)
 app.include_router(mappings_router)
 app.include_router(rules_router)
+app.include_router(audit_router)
 
 
 # Pydantic models
@@ -441,6 +485,16 @@ async def upload_claim(claim: ClaimSubmission):
             "INSERT INTO jobs (job_id, claim_id, status, created_at) VALUES (?, ?, ?, ?)",
             (job_id, claim.claim_id, "pending", datetime.now(timezone.utc).isoformat()),
         )
+
+        # Audit log: claim uploaded
+        log_audit_event(
+            conn,
+            action=AuditAction.CLAIM_UPLOAD.value,
+            resource_type="claim",
+            resource_id=claim.claim_id,
+            details={"job_id": job_id, "items_count": len(claim.items)},
+        )
+
         conn.commit()
 
     return {
@@ -585,6 +639,20 @@ async def analyze_claim(
         cursor.execute(
             "UPDATE jobs SET status = ?, completed_at = ? WHERE job_id = ?",
             ("completed", datetime.now(timezone.utc).isoformat(), job_id),
+        )
+
+        # Audit log: claim analyzed
+        log_audit_event(
+            conn,
+            action=AuditAction.CLAIM_ANALYZE.value,
+            resource_type="claim",
+            resource_id=claim.claim_id,
+            details={
+                "job_id": job_id,
+                "fraud_score": outcome.decision.score,
+                "decision_mode": outcome.decision.decision_mode,
+                "rule_hits_count": len(outcome.rule_result.hits),
+            },
         )
 
         conn.commit()
@@ -1143,6 +1211,22 @@ async def create_connector(request: ConnectorCreateRequest):
                     request.created_by,
                 ),
             )
+
+            # Audit log: connector created
+            log_audit_event(
+                conn,
+                action=AuditAction.CONNECTOR_CREATE.value,
+                user_id=request.created_by,
+                resource_type="connector",
+                resource_id=connector_id,
+                details={
+                    "name": request.name,
+                    "connector_type": request.connector_type,
+                    "subtype": request.subtype,
+                    "data_type": request.data_type,
+                },
+            )
+
             conn.commit()
         except sqlite3.IntegrityError:
             raise HTTPException(
@@ -1319,6 +1403,15 @@ async def delete_connector(connector_id: str):
 
         # Delete connector
         cursor.execute("DELETE FROM connectors WHERE id = ?", (connector_id,))
+
+        # Audit log: connector deleted
+        log_audit_event(
+            conn,
+            action=AuditAction.CONNECTOR_DELETE.value,
+            resource_type="connector",
+            resource_id=connector_id,
+        )
+
         conn.commit()
 
     return {"message": "Connector deleted", "connector_id": connector_id}

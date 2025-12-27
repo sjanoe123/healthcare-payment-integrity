@@ -6,3 +6,4 @@ export { MappingReview } from './MappingReview';
 export { DataSources } from './DataSources';
 export { SyncJobs } from './SyncJobs';
 export { RuleCoverage } from './RuleCoverage';
+export { AuditLog } from './AuditLog';

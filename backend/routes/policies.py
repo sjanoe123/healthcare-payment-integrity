@@ -477,3 +477,310 @@ async def list_policy_keys():
         "policy_keys": keys,
         "total_policies": len(keys),
     }
+
+
+# ============================================================
+# Policy Sync Endpoints (CMS Policy Updates)
+# ============================================================
+
+
+class PolicySyncRequest(BaseModel):
+    """Request model for triggering a policy sync."""
+
+    sources: list[str] | None = None  # If None, sync all sources
+    force: bool = False  # Force sync even if interval hasn't elapsed
+
+
+class BulkPolicyUploadRequest(BaseModel):
+    """Request model for bulk uploading policy documents."""
+
+    documents: list[dict]  # List of {content, title, source, policy_key, ...}
+    source_type: str = "mln_matters"  # Default source type
+
+
+@router.post("/policies/sync")
+async def trigger_policy_sync(request: PolicySyncRequest):
+    """Trigger a CMS policy sync job.
+
+    This endpoint triggers synchronization of policy documents from
+    configured CMS sources. Use this to update the RAG knowledge base
+    with the latest policy changes.
+
+    Args:
+        sources: Optional list of source names to sync. If None, syncs all.
+        force: If True, sync even if minimum interval hasn't elapsed.
+
+    Returns:
+        Sync job result with statistics.
+    """
+    try:
+        from scheduler.cms_policy_sync import run_cms_policy_sync
+
+        result = run_cms_policy_sync(sources=request.sources, force=request.force)
+        return {
+            "success": True,
+            "message": "Policy sync completed",
+            **result,
+        }
+    except Exception as e:
+        logger.error(f"Policy sync failed: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Policy sync failed: {str(e)[:200]}"
+        )
+
+
+@router.get("/policies/sync/status")
+async def get_policy_sync_status():
+    """Get the current status of policy sync for all sources.
+
+    Returns last sync time, status, and document counts per source.
+    """
+    try:
+        from scheduler.cms_policy_sync import (
+            CMSPolicySyncManager,
+            PolicySource,
+        )
+
+        manager = CMSPolicySyncManager()
+        status = {}
+
+        for source in PolicySource:
+            source_state = manager.get_source_state(source)
+            last_sync = manager.get_last_sync(source)
+
+            status[source.value] = {
+                "last_sync_at": source_state.get("last_sync_at")
+                if source_state
+                else None,
+                "last_successful_sync": source_state.get("last_successful_sync")
+                if source_state
+                else None,
+                "total_documents": source_state.get("total_documents", 0)
+                if source_state
+                else 0,
+                "last_status": last_sync.get("status") if last_sync else None,
+                "last_documents_added": last_sync.get("documents_added", 0)
+                if last_sync
+                else 0,
+            }
+
+        return {
+            "sources": status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    except ImportError:
+        return {
+            "sources": {},
+            "message": "Policy sync module not available",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Failed to get sync status: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get sync status: {str(e)[:200]}"
+        )
+
+
+@router.get("/policies/sync/history")
+async def get_policy_sync_history(
+    source: str | None = Query(default=None, description="Filter by source"),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
+    """Get policy sync history with optional filtering.
+
+    Args:
+        source: Optional source name to filter by
+        limit: Maximum number of records to return
+        offset: Pagination offset
+
+    Returns:
+        List of sync history records.
+    """
+    try:
+        from scheduler.cms_policy_sync import (
+            CMSPolicySyncManager,
+            PolicySource,
+        )
+
+        manager = CMSPolicySyncManager()
+
+        # Convert source string to enum if provided
+        source_enum = None
+        if source:
+            try:
+                source_enum = PolicySource(source)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid source: {source}. Valid sources: {[s.value for s in PolicySource]}",
+                )
+
+        history = manager.get_sync_history(
+            source=source_enum, limit=limit, offset=offset
+        )
+
+        return {
+            "history": history,
+            "total": len(history),
+            "limit": limit,
+            "offset": offset,
+            "source_filter": source,
+        }
+
+    except HTTPException:
+        raise
+    except ImportError:
+        return {
+            "history": [],
+            "message": "Policy sync module not available",
+        }
+    except Exception as e:
+        logger.error(f"Failed to get sync history: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get sync history: {str(e)[:200]}"
+        )
+
+
+@router.post("/policies/bulk-upload")
+async def bulk_upload_policies(request: BulkPolicyUploadRequest):
+    """Bulk upload policy documents for sync.
+
+    This endpoint accepts a list of policy documents and indexes them
+    into ChromaDB using the policy sync infrastructure.
+
+    Each document should have:
+    - content: The policy text
+    - title: Document title
+    - source (optional): Source name
+    - policy_key (optional): Unique policy identifier
+    - effective_date (optional): ISO date string
+    - keywords (optional): List of keywords
+    - related_codes (optional): List of procedure/diagnosis codes
+
+    Returns:
+        Summary of sync results.
+    """
+    try:
+        from scheduler.cms_policy_sync import (
+            CMSPolicySyncer,
+            PolicyDocument,
+            PolicySource,
+        )
+
+        if not request.documents:
+            raise HTTPException(status_code=400, detail="No documents provided")
+
+        if len(request.documents) > 100:
+            raise HTTPException(
+                status_code=400,
+                detail="Maximum 100 documents per request. Use multiple requests for larger batches.",
+            )
+
+        # Convert to PolicyDocument objects
+        policy_docs = []
+        for doc in request.documents:
+            if not doc.get("content") or not doc.get("title"):
+                continue
+
+            try:
+                source_type = PolicySource(request.source_type)
+            except ValueError:
+                source_type = PolicySource.CUSTOM
+
+            policy_docs.append(
+                PolicyDocument(
+                    content=doc["content"],
+                    title=doc["title"],
+                    source=source_type,
+                    source_url=doc.get("source_url"),
+                    policy_key=doc.get("policy_key"),
+                    effective_date=doc.get("effective_date"),
+                    expires_date=doc.get("expires_date"),
+                    authority=doc.get("authority", "CMS"),
+                    document_type=doc.get("document_type", "policy"),
+                    keywords=doc.get("keywords"),
+                    related_codes=doc.get("related_codes"),
+                )
+            )
+
+        if not policy_docs:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid documents found. Each document requires 'content' and 'title'.",
+            )
+
+        # Sync using the CMS syncer
+        syncer = CMSPolicySyncer()
+        result = syncer.sync_source(
+            source=PolicySource(request.source_type)
+            if request.source_type in [s.value for s in PolicySource]
+            else PolicySource.CUSTOM,
+            documents=policy_docs,
+            force=True,
+        )
+
+        return {
+            "success": not result.errors,
+            "documents_processed": result.documents_found,
+            "documents_added": result.documents_added,
+            "documents_updated": result.documents_updated,
+            "documents_skipped": result.documents_skipped,
+            "errors": result.errors[:10]
+            if result.errors
+            else [],  # Limit errors returned
+            "duration_seconds": round(result.duration_seconds, 2),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Bulk upload failed: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Bulk upload failed: {str(e)[:200]}"
+        )
+
+
+@router.get("/policies/sync/sources")
+async def list_sync_sources():
+    """List available policy sync sources.
+
+    Returns all configurable CMS policy sources that can be synced.
+    """
+    try:
+        from scheduler.cms_policy_sync import PolicySource
+
+        sources = [
+            {
+                "id": source.value,
+                "name": source.name.replace("_", " ").title(),
+                "description": _get_source_description(source),
+            }
+            for source in PolicySource
+        ]
+
+        return {
+            "sources": sources,
+            "total": len(sources),
+        }
+    except ImportError:
+        return {
+            "sources": [],
+            "message": "Policy sync module not available",
+        }
+
+
+def _get_source_description(source) -> str:
+    """Get description for a policy source."""
+    from scheduler.cms_policy_sync import PolicySource
+
+    descriptions = {
+        PolicySource.MLN_MATTERS: "Medicare Learning Network articles and updates",
+        PolicySource.IOM: "Internet-Only Manuals (CMS guidelines)",
+        PolicySource.LCD: "Local Coverage Determination policy updates",
+        PolicySource.NCD: "National Coverage Determination policy updates",
+        PolicySource.NCCI: "National Correct Coding Initiative edits",
+        PolicySource.CUSTOM: "Custom/user-uploaded policy documents",
+    }
+    return descriptions.get(source, "Policy documents")

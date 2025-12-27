@@ -13,6 +13,7 @@ import {
   Database,
   RefreshCw,
   BarChart3,
+  ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect } from 'react';
@@ -66,6 +67,12 @@ const navItems = [
     icon: BarChart3,
     label: 'Rule Coverage',
     description: 'Fraud rule analytics',
+  },
+  {
+    to: '/audit',
+    icon: ClipboardList,
+    label: 'Audit Log',
+    description: 'HIPAA compliance',
   },
 ];
 

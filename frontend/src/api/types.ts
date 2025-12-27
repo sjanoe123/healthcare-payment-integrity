@@ -341,3 +341,38 @@ export interface SampleAnalysisResponse {
   results: SampleResult[];
   message: string;
 }
+
+// Audit logging types (HIPAA compliance)
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  action: string;
+  user_id: string | null;
+  user_email: string | null;
+  resource_type: string | null;
+  resource_id: string | null;
+  details: Record<string, unknown> | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  status: 'success' | 'error';
+  error_message: string | null;
+}
+
+export interface AuditLogListResponse {
+  entries: AuditLogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+  filters_applied: Record<string, unknown>;
+}
+
+export interface AuditStats {
+  total_entries: number;
+  entries_by_action: Record<string, number>;
+  entries_by_status: Record<string, number>;
+  entries_by_user: Record<string, number>;
+  date_range: {
+    earliest: string;
+    latest: string;
+  };
+}
