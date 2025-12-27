@@ -10,9 +10,10 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 
 from config import DB_PATH
+from schemas import SemanticMatchRequest
 
 logger = logging.getLogger(__name__)
 
@@ -23,20 +24,6 @@ router = APIRouter(prefix="/api/mappings", tags=["mappings"])
 class MappingPreviewRequest(BaseModel):
     sample_data: dict[str, Any]
     template: str | None = None
-
-
-class SemanticMatchRequest(BaseModel):
-    source_fields: list[str]
-    top_k: int = 5
-    min_similarity: float = 0.3
-
-    @field_validator("source_fields")
-    @classmethod
-    def validate_source_fields_length(cls, v: list[str]) -> list[str]:
-        """Validate that source_fields doesn't exceed maximum length."""
-        if len(v) > 100:
-            raise ValueError("Too many fields. Maximum 100 per request.")
-        return v
 
 
 class SemanticPreviewRequest(BaseModel):

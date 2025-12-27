@@ -30,6 +30,7 @@ from connectors.constants import CONNECTOR_SECRET_FIELDS
 from routes import policies_router, mappings_router
 from utils import sanitize_filename
 from config import DB_PATH
+from schemas import SemanticMatchRequest
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -621,20 +622,6 @@ async def get_results(job_id: str):
 # Mapping Endpoints (Rate-Limited)
 # Non-rate-limited mapping endpoints are in routes/mappings.py
 # ============================================================
-
-
-class SemanticMatchRequest(BaseModel):
-    source_fields: list[str]
-    top_k: int = 5
-    min_similarity: float = 0.3
-
-    @field_validator("source_fields")
-    @classmethod
-    def validate_source_fields_length(cls, v: list[str]) -> list[str]:
-        """Validate that source_fields doesn't exceed maximum length."""
-        if len(v) > 100:
-            raise ValueError("Too many fields. Maximum 100 per request.")
-        return v
 
 
 class RerankerRequest(BaseModel):
