@@ -1,0 +1,39 @@
+# Demo/Synthetic Data Template
+name: "Demo - Synthetic Claims"
+description: "Generate synthetic claims data for testing and demos. No external connection required."
+category: "demo"
+
+connector_type: "database"
+subtype: "postgresql"
+data_type: "claims"
+sync_mode: "full"
+status: "inactive"
+is_demo: true
+
+connection_config:
+  host: "localhost"
+  port: 5432
+  database: "demo_claims"
+  schema: "public"
+
+demo_settings:
+  record_count: 1000
+  date_range_days: 365
+  include_fraud_patterns: true
+  fraud_rate: 0.15
+
+field_mappings:
+  claim_id: "claim_id"
+  patient_id: "patient_id"
+  procedure_code: "procedure_code"
+  diagnosis_codes: "diagnosis_codes"
+  billing_npi: "billing_npi"
+  billed_amount: "billed_amount"
+  service_date: "service_date"
+
+notes: |
+  1. Perfect for demos and POC evaluations
+  2. Generates realistic but synthetic healthcare claims
+  3. Includes intentional fraud patterns for testing
+  4. No PHI or real patient data used
+  5. Adjust fraud_rate to simulate different environments

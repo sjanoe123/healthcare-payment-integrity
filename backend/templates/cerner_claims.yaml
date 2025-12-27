@@ -1,0 +1,50 @@
+# Cerner (Oracle Health) Claims Data Template
+name: "Cerner - Claims"
+description: "Connect to Cerner Millennium for claims and billing data. Uses Cerner Command Language (CCL) compatible queries."
+category: "ehr"
+
+connector_type: "database"
+subtype: "sqlserver"
+data_type: "claims"
+sync_mode: "incremental"
+status: "inactive"
+
+connection_config:
+  host: "${CERNER_DB_HOST}"
+  port: 1433
+  database: "cerner_millennium"
+  schema: "dbo"
+  trust_server_certificate: true
+
+default_query: |
+  SELECT
+    e.encntr_id as claim_id,
+    p.person_id as patient_id,
+    e.arrive_dt_tm as service_date,
+    c.source_identifier as procedure_code,
+    d.source_identifier as diagnosis_code,
+    pr.person_id as provider_npi,
+    ce.result_val as billed_amount
+  FROM encounter e
+  JOIN person p ON e.person_id = p.person_id
+  LEFT JOIN clinical_event ce ON e.encntr_id = ce.encntr_id
+  LEFT JOIN code_value c ON ce.event_cd = c.code_value
+  LEFT JOIN diagnosis d ON e.encntr_id = d.encntr_id
+  LEFT JOIN encntr_prsnl_reltn pr ON e.encntr_id = pr.encntr_id
+  WHERE e.updt_dt_tm > @last_sync_date
+  ORDER BY e.updt_dt_tm
+
+field_mappings:
+  claim_id: "claim_id"
+  patient_id: "patient_id"
+  procedure_code: "procedure_code"
+  diagnosis_codes: "diagnosis_code"
+  billing_npi: "provider_npi"
+  billed_amount: "billed_amount"
+  service_date: "service_date"
+
+notes: |
+  1. Requires read access to Cerner Millennium database
+  2. May need Discern Analytics or CCL expertise for complex queries
+  3. Adjust schema based on your Cerner configuration
+  4. Contact your Cerner admin for database access credentials

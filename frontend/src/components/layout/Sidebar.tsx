@@ -12,6 +12,7 @@ import {
   GitMerge,
   Database,
   RefreshCw,
+  BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect } from 'react';
@@ -59,6 +60,12 @@ const navItems = [
     icon: RefreshCw,
     label: 'Sync Jobs',
     description: 'Data sync monitoring',
+  },
+  {
+    to: '/rules',
+    icon: BarChart3,
+    label: 'Rule Coverage',
+    description: 'Fraud rule analytics',
   },
 ];
 

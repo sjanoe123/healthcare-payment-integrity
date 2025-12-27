@@ -1,0 +1,48 @@
+# Epic EHR Claims Data Template
+name: "Epic EHR - Claims"
+description: "Connect to Epic EHR system for claims data extraction. Supports Caboodle or Clarity databases."
+category: "ehr"
+
+connector_type: "database"
+subtype: "postgresql"
+data_type: "claims"
+sync_mode: "incremental"
+status: "inactive"
+
+connection_config:
+  host: "${EPIC_DB_HOST}"
+  port: 5432
+  database: "caboodle"
+  schema: "claims"
+  ssl_mode: "require"
+
+default_query: |
+  SELECT
+    claim_id,
+    patient_mrn,
+    service_date,
+    procedure_code,
+    diagnosis_codes,
+    billing_npi,
+    billed_amount,
+    created_at,
+    updated_at
+  FROM claims.claim_header ch
+  JOIN claims.claim_line cl ON ch.claim_id = cl.claim_id
+  WHERE ch.updated_at > :last_sync_date
+  ORDER BY ch.updated_at
+
+field_mappings:
+  claim_id: "claim_id"
+  patient_id: "patient_mrn"
+  procedure_code: "procedure_code"
+  diagnosis_codes: "diagnosis_codes"
+  billing_npi: "billing_npi"
+  billed_amount: "billed_amount"
+  service_date: "service_date"
+
+notes: |
+  1. Replace ${EPIC_DB_HOST} with your Epic database hostname
+  2. Ensure appropriate database credentials are configured
+  3. May need to adjust query based on your Caboodle/Clarity schema version
+  4. Contact your Epic admin for read-only database access

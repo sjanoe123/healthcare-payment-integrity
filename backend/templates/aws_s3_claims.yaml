@@ -1,0 +1,39 @@
+# AWS S3 Claims Data Template
+name: "AWS S3 - Claims Data"
+description: "Connect to AWS S3 bucket containing claims data files. Supports CSV, JSON, and Parquet formats."
+category: "cloud"
+
+connector_type: "file"
+subtype: "s3"
+data_type: "claims"
+sync_mode: "incremental"
+status: "inactive"
+
+connection_config:
+  bucket: "${S3_BUCKET_NAME}"
+  region: "us-east-1"
+  prefix: "claims/"
+  file_pattern: "*.csv"
+
+file_format:
+  type: "csv"
+  has_header: true
+  delimiter: ","
+  quote_char: "\""
+  encoding: "utf-8"
+
+field_mappings:
+  claim_id: "CLAIM_ID"
+  patient_id: "PATIENT_ID"
+  procedure_code: "PROC_CODE"
+  diagnosis_codes: "DIAG_CODES"
+  billing_npi: "BILLING_NPI"
+  billed_amount: "BILLED_AMT"
+  service_date: "SERVICE_DATE"
+
+notes: |
+  1. Replace ${S3_BUCKET_NAME} with your bucket name
+  2. Configure AWS credentials via environment variables or IAM role
+  3. Supports CSV, JSON, Parquet, and NDJSON formats
+  4. Enable versioning for audit trail
+  5. Consider using AWS KMS for encryption at rest

@@ -1,14 +1,67 @@
-"""ChromaDB vector store for RAG."""
+"""ChromaDB vector store for RAG.
+
+This module provides a wrapper around ChromaDB for storing and retrieving
+healthcare policy documents. Features include:
+- Semantic search with metadata filtering
+- Policy versioning with automatic version tracking
+- Deduplication via content hashing
+- Date-aware policy lookups
+"""
 
 from __future__ import annotations
 
+import hashlib
+import logging
 import os
+import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import chromadb
 from chromadb.config import Settings
+
+logger = logging.getLogger(__name__)
+
+
+def _compute_content_hash(content: str) -> str:
+    """Compute SHA-256 hash of document content for deduplication.
+
+    Args:
+        content: Document text content
+
+    Returns:
+        First 16 characters of hex-encoded SHA-256 hash
+    """
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+
+
+def _increment_version(current_version: str | None) -> str:
+    """Increment a version string.
+
+    Supports formats:
+    - "1" -> "2"
+    - "1.0" -> "1.1"
+    - "2024.1" -> "2024.2"
+    - None -> "1"
+
+    Args:
+        current_version: Existing version string or None
+
+    Returns:
+        Incremented version string
+    """
+    if not current_version:
+        return "1"
+
+    # Try to increment last numeric component
+    parts = current_version.split(".")
+    try:
+        parts[-1] = str(int(parts[-1]) + 1)
+        return ".".join(parts)
+    except ValueError:
+        # If last part isn't numeric, append .1
+        return f"{current_version}.1"
 
 
 def _parse_date(date_str: str | None) -> datetime | None:
@@ -43,6 +96,9 @@ def _parse_date(date_str: str | None) -> datetime | None:
 # Simple cache for metadata aggregations
 _metadata_cache: dict[str, tuple[float, Any]] = {}
 _CACHE_TTL_SECONDS = 60  # Cache for 1 minute
+
+# Lock for thread-safe version replacement operations
+_version_lock = threading.Lock()
 
 
 class ChromaStore:
@@ -285,8 +341,8 @@ class ChromaStore:
                     "content": result["documents"][0],
                     "metadata": result["metadatas"][0] if result["metadatas"] else {},
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to get document {document_id}: {e}")
         return None
 
     def _get_cached_or_compute(
@@ -383,7 +439,8 @@ class ChromaStore:
             self.collection.delete(ids=[document_id])
             self.invalidate_cache()  # Clear cached counts
             return True
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to delete document {document_id}: {e}")
             return False
 
     def bulk_delete_by_source(self, source: str) -> int:
@@ -434,8 +491,261 @@ class ChromaStore:
                 metadatas=[updated_metadata],
             )
             return True
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to update metadata for {document_id}: {e}")
             return False
+
+    # ================================================================
+    # Policy Versioning Methods
+    # ================================================================
+
+    def add_document_with_version(
+        self,
+        document: str,
+        metadata: dict[str, Any],
+        policy_key: str,
+        replace_existing: bool = False,
+    ) -> dict[str, Any]:
+        """Add a versioned policy document with automatic version tracking.
+
+        This method handles policy versioning by:
+        1. Computing a content hash for deduplication
+        2. Checking if identical content already exists
+        3. Creating a new version or replacing existing
+
+        Thread-safe: Uses a lock to prevent race conditions when multiple
+        requests try to add versions of the same policy concurrently.
+
+        Args:
+            document: The policy document text content
+            metadata: Document metadata (source, document_type, effective_date, etc.)
+            policy_key: Unique key identifying this policy (e.g., "LCD-L38604")
+            replace_existing: If True, archives old version and replaces.
+                            If False, adds as new version alongside existing.
+
+        Returns:
+            Dict with:
+            - document_id: The new document's ID
+            - version: The assigned version number
+            - is_duplicate: True if content was already indexed
+            - replaced_id: ID of replaced document (if replace_existing=True)
+
+        Example:
+            >>> store.add_document_with_version(
+            ...     document="Policy content...",
+            ...     metadata={"source": "LCD", "effective_date": "2024-01-01"},
+            ...     policy_key="LCD-L38604",
+            ...     replace_existing=True
+            ... )
+            {"document_id": "LCD-L38604_v3", "version": "3", ...}
+        """
+        content_hash = _compute_content_hash(document)
+
+        # Use lock to prevent race conditions in version replacement
+        with _version_lock:
+            # Check for existing versions of this policy
+            existing_versions = self.get_document_versions(policy_key)
+
+            # Check for duplicate content
+            for existing in existing_versions:
+                if existing.get("metadata", {}).get("content_hash") == content_hash:
+                    return {
+                        "document_id": existing["id"],
+                        "version": existing.get("metadata", {}).get("version", "1"),
+                        "is_duplicate": True,
+                        "replaced_id": None,
+                        "message": "Identical content already exists",
+                    }
+
+            # Determine new version number
+            if existing_versions:
+                latest = existing_versions[0]  # Already sorted by version desc
+                latest_version = latest.get("metadata", {}).get("version", "1")
+                new_version = _increment_version(latest_version)
+            else:
+                new_version = "1"
+
+            # Build document ID with version
+            doc_id = f"{policy_key}_v{new_version}"
+
+            # Enhance metadata with versioning info
+            enhanced_metadata = {
+                **metadata,
+                "policy_key": policy_key,
+                "version": new_version,
+                "content_hash": content_hash,
+                "is_current": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+            replaced_id = None
+
+            # Handle replacement mode - atomic with version check
+            if replace_existing and existing_versions:
+                # Mark previous version as not current
+                for old_doc in existing_versions:
+                    if old_doc.get("metadata", {}).get("is_current"):
+                        self.update_metadata(old_doc["id"], {"is_current": False})
+                        replaced_id = old_doc["id"]
+                        break
+
+            # Add the new document
+            self.add_documents(
+                documents=[document],
+                metadatas=[enhanced_metadata],
+                ids=[doc_id],
+            )
+
+            # Invalidate policy_keys cache since we added a new policy
+            policy_keys_cache_key = f"{self.collection_name}:policy_keys"
+            _metadata_cache.pop(policy_keys_cache_key, None)
+
+        return {
+            "document_id": doc_id,
+            "version": new_version,
+            "is_duplicate": False,
+            "replaced_id": replaced_id,
+            "message": f"Added version {new_version}",
+        }
+
+    def get_document_versions(
+        self,
+        policy_key: str,
+        include_content: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Get all versions of a policy document.
+
+        Args:
+            policy_key: The unique policy key (e.g., "LCD-L38604")
+            include_content: If True, include document content in results
+
+        Returns:
+            List of document versions, sorted by version descending (newest first).
+            Each entry contains id, metadata, and optionally content.
+        """
+        try:
+            # Query for all documents with this policy_key
+            results = self.collection.get(
+                where={"policy_key": policy_key},
+                include=["metadatas", "documents"]
+                if include_content
+                else ["metadatas"],
+            )
+
+            if not results["ids"]:
+                return []
+
+            versions = []
+            for i, doc_id in enumerate(results["ids"]):
+                entry = {
+                    "id": doc_id,
+                    "metadata": results["metadatas"][i] if results["metadatas"] else {},
+                }
+                if include_content and results.get("documents"):
+                    entry["content"] = results["documents"][i]
+                versions.append(entry)
+
+            # Sort by version descending (newest first)
+            def version_sort_key(item: dict) -> tuple:
+                version = item.get("metadata", {}).get("version", "0")
+                # Split version and convert to tuple of ints for proper sorting
+                try:
+                    parts = [int(p) for p in version.split(".")]
+                    return tuple(parts)
+                except ValueError:
+                    return (0,)
+
+            versions.sort(key=version_sort_key, reverse=True)
+            return versions
+
+        except Exception as e:
+            logger.warning(f"Failed to get document versions for {policy_key}: {e}")
+            return []
+
+    def get_latest_version(
+        self,
+        policy_key: str,
+        include_content: bool = True,
+    ) -> dict[str, Any] | None:
+        """Get the latest (current) version of a policy document.
+
+        Args:
+            policy_key: The unique policy key (e.g., "LCD-L38604")
+            include_content: If True, include document content
+
+        Returns:
+            The latest version document, or None if not found.
+        """
+        try:
+            # First try to find the document marked as current
+            results = self.collection.get(
+                where={"$and": [{"policy_key": policy_key}, {"is_current": True}]},
+                include=["metadatas", "documents"]
+                if include_content
+                else ["metadatas"],
+            )
+
+            if results["ids"]:
+                entry = {
+                    "id": results["ids"][0],
+                    "metadata": results["metadatas"][0] if results["metadatas"] else {},
+                }
+                if include_content and results.get("documents"):
+                    entry["content"] = results["documents"][0]
+                return entry
+
+            # Fallback: get all versions and return the highest
+            versions = self.get_document_versions(policy_key, include_content)
+            return versions[0] if versions else None
+
+        except Exception as e:
+            logger.warning(f"Failed to get latest version for {policy_key}: {e}")
+            return None
+
+    def list_policy_keys(self) -> list[str]:
+        """List all unique policy keys in the collection.
+
+        Returns:
+            List of unique policy_key values.
+        """
+        cache_key = f"{self.collection_name}:policy_keys"
+
+        def compute():
+            all_docs = self.collection.get(include=["metadatas"])
+            keys = set()
+            if all_docs["metadatas"]:
+                for meta in all_docs["metadatas"]:
+                    key = meta.get("policy_key")
+                    if key:
+                        keys.add(key)
+            return sorted(keys)
+
+        return self._get_cached_or_compute(cache_key, compute)
+
+    def get_version_history(
+        self,
+        policy_key: str,
+    ) -> list[dict[str, Any]]:
+        """Get version history summary for a policy.
+
+        Args:
+            policy_key: The unique policy key
+
+        Returns:
+            List of version summaries with id, version, created_at, is_current.
+        """
+        versions = self.get_document_versions(policy_key, include_content=False)
+        return [
+            {
+                "id": v["id"],
+                "version": v.get("metadata", {}).get("version", "?"),
+                "created_at": v.get("metadata", {}).get("created_at"),
+                "is_current": v.get("metadata", {}).get("is_current", False),
+                "effective_date": v.get("metadata", {}).get("effective_date"),
+                "expires_date": v.get("metadata", {}).get("expires_date"),
+            }
+            for v in versions
+        ]
 
 
 # Global instance
