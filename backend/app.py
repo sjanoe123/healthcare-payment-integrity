@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
-import re
 import sqlite3
 import uuid
 from contextlib import asynccontextmanager
@@ -17,7 +15,7 @@ from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -29,13 +27,13 @@ from kirk_config import KIRK_CONFIG
 from mapping import normalize_claim, denormalize_for_rules
 from mapping.templates import get_template
 from connectors.constants import CONNECTOR_SECRET_FIELDS
+from routes import policies_router, mappings_router
+from utils import sanitize_filename
+from config import DB_PATH
+from schemas import SemanticMatchRequest
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-
-# Database setup
-DB_PATH = os.getenv("DB_PATH", "./data/prototype.db")
 
 # Pagination limits
 DEFAULT_JOBS_LIMIT = 100
@@ -55,45 +53,6 @@ def safe_json_loads(
     except json.JSONDecodeError:
         logger.warning(f"Failed to parse JSON: {data[:100]}...")
         return default
-
-
-def sanitize_filename(filename: str | None, max_length: int = 255) -> str:
-    """Sanitize a user-provided filename for safe logging and storage.
-
-    Prevents:
-    - Path traversal attacks (../, etc.)
-    - Log injection (newlines, control characters)
-    - Excessively long filenames
-
-    Args:
-        filename: The raw filename from user input
-        max_length: Maximum allowed filename length
-
-    Returns:
-        A safe filename string
-    """
-    if not filename:
-        return "unknown"
-
-    # Remove path separators and parent directory references
-    safe_name = filename.replace("\\", "/")  # Normalize separators
-    safe_name = safe_name.split("/")[-1]  # Take only the filename part
-    safe_name = safe_name.replace("..", "")  # Remove parent directory references
-
-    # Remove control characters and newlines (prevent log injection)
-    safe_name = re.sub(r"[\x00-\x1f\x7f-\x9f\n\r]", "", safe_name)
-
-    # Limit length
-    if len(safe_name) > max_length:
-        # Preserve extension if present
-        if "." in safe_name:
-            name, ext = safe_name.rsplit(".", 1)
-            ext = ext[:10]  # Limit extension length
-            safe_name = name[: max_length - len(ext) - 1] + "." + ext
-        else:
-            safe_name = safe_name[:max_length]
-
-    return safe_name or "unknown"
 
 
 def init_db():
@@ -327,6 +286,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register API routers
+app.include_router(policies_router)
+app.include_router(mappings_router)
+
 
 # Pydantic models
 class ClaimItem(BaseModel):
@@ -357,22 +320,6 @@ class AnalysisResult(BaseModel):
     provider_flags: list[str]
     roi_estimate: float | None
     claude_analysis: dict[str, Any]
-
-
-class SearchQuery(BaseModel):
-    query: str
-    n_results: int = 5
-    top_k: int | None = None  # Accept frontend's top_k parameter
-    sources: list[str] | None = None  # Filter by source(s)
-    document_types: list[str] | None = None  # Filter by document type(s)
-    effective_date: str | None = None  # Filter for policies effective at this date
-
-    @model_validator(mode="after")
-    def normalize_result_count(self) -> "SearchQuery":
-        """Use top_k if n_results not explicitly set."""
-        if self.top_k and self.n_results == 5:  # default was used
-            object.__setattr__(self, "n_results", self.top_k)
-        return self
 
 
 # Sample reference datasets (load from files in production)
@@ -671,441 +618,10 @@ async def get_results(job_id: str):
     }
 
 
-@app.post("/api/search")
-async def search_policies(query: SearchQuery):
-    """Search policy documents using RAG with optional filters.
-
-    Supports filtering by:
-    - sources: List of source names (e.g., ["NCCI", "LCD"])
-    - document_types: List of document types (e.g., ["policy", "guideline"])
-    - effective_date: ISO date string to filter for currently effective policies
-    """
-    store = get_store()
-
-    if store.count() == 0:
-        return {
-            "query": query.query,
-            "results": [],
-            "total_documents": 0,
-            "filters_applied": {
-                "sources": query.sources,
-                "document_types": query.document_types,
-                "effective_date": query.effective_date,
-            },
-            "message": "No documents indexed. Run seed_chromadb.py to add policy documents.",
-        }
-
-    # Build filters based on query parameters
-    filters: dict[str, Any] | None = None
-
-    if query.sources or query.document_types:
-        filter_conditions = []
-        if query.sources:
-            if len(query.sources) == 1:
-                filter_conditions.append({"source": query.sources[0]})
-            else:
-                filter_conditions.append({"source": {"$in": query.sources}})
-        if query.document_types:
-            if len(query.document_types) == 1:
-                filter_conditions.append({"document_type": query.document_types[0]})
-            else:
-                filter_conditions.append(
-                    {"document_type": {"$in": query.document_types}}
-                )
-
-        if len(filter_conditions) == 1:
-            filters = filter_conditions[0]
-        else:
-            filters = {"$and": filter_conditions}
-
-    # Use date-aware search if effective_date specified
-    if query.effective_date:
-        results = store.search_current_policies(
-            query.query, query.effective_date, n_results=query.n_results
-        )
-    else:
-        results = store.search(query.query, n_results=query.n_results, filters=filters)
-
-    return {
-        "query": query.query,
-        "results": results,
-        "total_documents": store.count(),
-        "filters_applied": {
-            "sources": query.sources,
-            "document_types": query.document_types,
-            "effective_date": query.effective_date,
-        },
-    }
-
-
-class PolicyUploadRequest(BaseModel):
-    """Request model for uploading policy documents."""
-
-    content: str
-    source: str = "user_upload"
-    document_type: str = "policy"
-    effective_date: str | None = None
-
-
-@app.post("/api/policies/upload")
-async def upload_policy_document(request: PolicyUploadRequest):
-    """Upload a policy document to the RAG system.
-
-    Accepts text content and adds it to the ChromaDB vector store
-    for use in policy search and rules context.
-    """
-    store = get_store()
-
-    if not request.content or len(request.content.strip()) < 10:
-        raise HTTPException(
-            status_code=400, detail="Document content must be at least 10 characters"
-        )
-
-    # Generate document ID
-    doc_hash = hashlib.sha256(request.content.encode()).hexdigest()[:12]
-    doc_id = f"upload_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{doc_hash}"
-
-    # Build metadata
-    metadata = {
-        "source": request.source,
-        "document_type": request.document_type,
-        "upload_date": datetime.now(timezone.utc).isoformat(),
-    }
-    if request.effective_date:
-        metadata["effective_date"] = request.effective_date
-
-    try:
-        store.add_documents(
-            documents=[request.content],
-            metadatas=[metadata],
-            ids=[doc_id],
-        )
-
-        return {
-            "success": True,
-            "document_id": doc_id,
-            "message": "Document uploaded successfully",
-            "total_documents": store.count(),
-        }
-    except Exception as e:
-        logger.error(f"Failed to upload policy document: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to upload document: {str(e)[:200]}"
-        )
-
-
-@app.post("/api/policies/upload-file")
-async def upload_policy_file(
-    file: UploadFile = File(...),
-    source: str = Query(default="file_upload"),
-    document_type: str = Query(default="policy"),
-):
-    """Upload a policy document file to the RAG system.
-
-    Supports: .txt, .md files
-    PDF support requires additional dependencies.
-    """
-    store = get_store()
-
-    # Sanitize filename to prevent path traversal and log injection
-    raw_filename = file.filename or "unknown"
-    filename = sanitize_filename(raw_filename)
-
-    # Check file extension
-    allowed_extensions = {".txt", ".md"}
-    file_ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-
-    if file_ext not in allowed_extensions:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}",
-        )
-
-    try:
-        # Read file content
-        content = await file.read()
-        text_content = content.decode("utf-8")
-
-        if len(text_content.strip()) < 10:
-            raise HTTPException(
-                status_code=400,
-                detail="Document content must be at least 10 characters",
-            )
-
-        # Generate document ID
-        doc_hash = hashlib.sha256(content).hexdigest()[:12]
-        doc_id = (
-            f"file_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{doc_hash}"
-        )
-
-        # Build metadata
-        metadata = {
-            "source": source,
-            "document_type": document_type,
-            "filename": filename,
-            "upload_date": datetime.now(timezone.utc).isoformat(),
-        }
-
-        store.add_documents(
-            documents=[text_content],
-            metadatas=[metadata],
-            ids=[doc_id],
-        )
-
-        return {
-            "success": True,
-            "document_id": doc_id,
-            "filename": filename,
-            "message": "File uploaded successfully",
-            "total_documents": store.count(),
-        }
-
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="File must be valid UTF-8 text")
-    except Exception as e:
-        logger.error(f"Failed to upload policy file: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to upload file: {str(e)[:200]}"
-        )
-
-
-@app.get("/api/policies/sources")
-async def list_policy_sources():
-    """List all unique policy sources and their document counts.
-
-    Returns dictionary mapping source names to document counts.
-    Useful for building filter UIs.
-    """
-    store = get_store()
-    return {
-        "sources": store.list_sources(),
-        "total_documents": store.count(),
-    }
-
-
-@app.get("/api/policies/types")
-async def list_policy_types():
-    """List all unique document types and their counts.
-
-    Returns dictionary mapping document types to counts.
-    Useful for building filter UIs.
-    """
-    store = get_store()
-    return {
-        "document_types": store.list_document_types(),
-        "total_documents": store.count(),
-    }
-
-
-@app.get("/api/policies/{document_id}")
-async def get_policy_document(document_id: str):
-    """Get a specific policy document by ID.
-
-    Returns the document content and metadata.
-    """
-    store = get_store()
-    document = store.get_document(document_id)
-
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-
-    return document
-
-
-@app.delete("/api/policies/{document_id}")
-async def delete_policy_document(document_id: str):
-    """Delete a policy document by ID.
-
-    Returns success status.
-    """
-    store = get_store()
-    deleted = store.delete_document(document_id)
-
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Document not found")
-
-    return {
-        "success": True,
-        "document_id": document_id,
-        "message": "Document deleted successfully",
-        "total_documents": store.count(),
-    }
-
-
-@app.delete("/api/policies/source/{source_name}")
-async def delete_policies_by_source(source_name: str):
-    """Delete all policy documents from a specific source.
-
-    Useful for bulk cleanup when re-importing updated policies.
-    """
-    # Validate source_name to prevent unexpected behavior
-    if not source_name or not source_name.strip():
-        raise HTTPException(status_code=400, detail="Source name cannot be empty")
-    if len(source_name) > 256:
-        raise HTTPException(
-            status_code=400, detail="Source name too long (max 256 characters)"
-        )
-
-    store = get_store()
-    count = store.bulk_delete_by_source(source_name)
-
-    return {
-        "success": True,
-        "source": source_name,
-        "deleted_count": count,
-        "message": f"Deleted {count} documents from source '{source_name}'",
-        "total_documents": store.count(),
-    }
-
-
-@app.get("/api/mappings/templates")
-async def list_mapping_templates():
-    """List available field mapping templates."""
-    return {
-        "templates": [
-            {
-                "name": "edi_837p",
-                "description": "EDI 837P Professional Claims (CMS-1500)",
-                "claim_types": ["professional"],
-            },
-            {
-                "name": "edi_837i",
-                "description": "EDI 837I Institutional Claims (UB-04)",
-                "claim_types": ["institutional", "hospital"],
-            },
-            {
-                "name": "csv",
-                "description": "Generic CSV field naming conventions",
-                "claim_types": ["all"],
-            },
-        ],
-        "default": "alias-based mapping (no template required)",
-    }
-
-
-class MappingPreviewRequest(BaseModel):
-    sample_data: dict[str, Any]
-    template: str | None = None
-
-
-@app.post("/api/mappings/preview")
-async def preview_mapping(request: MappingPreviewRequest):
-    """Preview how sample data would be mapped to OMOP CDM schema.
-
-    This endpoint allows testing field mappings before submitting claims.
-    """
-    custom_mapping = None
-    template_used = "alias-based (default)"
-
-    if request.template:
-        try:
-            custom_mapping = get_template(request.template)
-            template_used = request.template
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-    normalized = normalize_claim(request.sample_data, custom_mapping=custom_mapping)
-
-    return {
-        "template_used": template_used,
-        "input_fields": list(request.sample_data.keys()),
-        "normalized": normalized,
-        "mapped_fields": [
-            k for k, v in normalized.items() if v is not None and v != {} and v != []
-        ],
-    }
-
-
-@app.get("/api/mappings/schema")
-async def get_canonical_schema():
-    """Get the canonical OMOP CDM schema definition."""
-    from mapping.omop_schema import OMOP_CLAIMS_SCHEMA
-
-    schema_info = {}
-    for field_name, field_def in OMOP_CLAIMS_SCHEMA.items():
-        schema_info[field_name] = {
-            "type": field_def.field_type,
-            "required": field_def.required,
-            "aliases": field_def.aliases,
-            "description": field_def.description,
-        }
-
-    return {
-        "schema_name": "OMOP CDM v5.4 (Claims Subset)",
-        "fields": schema_info,
-        "reference": "https://ohdsi.github.io/CommonDataModel/",
-    }
-
-
-class SemanticMatchRequest(BaseModel):
-    source_fields: list[str]
-    top_k: int = 5
-    min_similarity: float = 0.3
-
-    @field_validator("source_fields")
-    @classmethod
-    def validate_source_fields_length(cls, v: list[str]) -> list[str]:
-        """Validate that source_fields doesn't exceed maximum length."""
-        if len(v) > 100:
-            raise ValueError("Too many fields. Maximum 100 per request.")
-        return v
-
-
-@app.post("/api/mappings/semantic")
-async def find_semantic_matches(request: SemanticMatchRequest):
-    """Find semantic matches for unknown field names using PubMedBERT embeddings.
-
-    This endpoint uses biomedical embeddings to find the closest OMOP CDM
-    field matches for unknown field names. Useful for mapping fields from
-    new data sources that don't match built-in aliases.
-    """
-    try:
-        from mapping.embeddings import get_embedding_matcher
-    except ImportError:
-        raise HTTPException(
-            status_code=503,
-            detail="Semantic matching unavailable: sentence-transformers not installed",
-        )
-
-    matcher = get_embedding_matcher()
-
-    if len(request.source_fields) == 1:
-        # Single field
-        candidates = matcher.find_candidates(
-            request.source_fields[0],
-            top_k=request.top_k,
-            min_similarity=request.min_similarity,
-        )
-        return {
-            "source_field": request.source_fields[0],
-            "candidates": [
-                {"canonical_field": field, "similarity": round(score, 4)}
-                for field, score in candidates
-            ],
-        }
-    else:
-        # Batch mode
-        all_results = matcher.batch_find_candidates(
-            request.source_fields,
-            top_k=request.top_k,
-            min_similarity=request.min_similarity,
-        )
-        return {
-            "results": {
-                source: [
-                    {"canonical_field": field, "similarity": round(score, 4)}
-                    for field, score in candidates
-                ]
-                for source, candidates in all_results.items()
-            }
-        }
-
-
-class SemanticPreviewRequest(BaseModel):
-    sample_data: dict[str, Any]
-    template: str | None = None
-    use_semantic: bool = True
-    semantic_threshold: float = 0.7
+# ============================================================
+# Mapping Endpoints (Rate-Limited)
+# Non-rate-limited mapping endpoints are in routes/mappings.py
+# ============================================================
 
 
 class RerankerRequest(BaseModel):
@@ -1128,57 +644,6 @@ class BatchRerankerRequest(BaseModel):
         if len(v) > 20:
             raise ValueError("Batch size too large. Maximum 20 mappings per request.")
         return v
-
-
-@app.post("/api/mappings/preview/semantic")
-async def preview_semantic_mapping(request: SemanticPreviewRequest):
-    """Preview field mapping with semantic matching for unknown fields.
-
-    This endpoint shows how semantic matching would handle fields that
-    don't match built-in aliases. Returns both the normalized claim and
-    details about which fields were matched semantically.
-    """
-    from mapping import normalize_claim_with_review
-
-    custom_mapping = None
-    template_used = "alias-based (default)"
-
-    if request.template:
-        try:
-            custom_mapping = get_template(request.template)
-            template_used = request.template
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-    try:
-        normalized, semantic_matches = normalize_claim_with_review(
-            request.sample_data,
-            custom_mapping=custom_mapping,
-            semantic_threshold=request.semantic_threshold,
-        )
-    except ImportError:
-        raise HTTPException(
-            status_code=503,
-            detail="Semantic matching unavailable: sentence-transformers not installed",
-        )
-
-    return {
-        "template_used": template_used,
-        "input_fields": list(request.sample_data.keys()),
-        "normalized": normalized,
-        "mapped_fields": [
-            k for k, v in normalized.items() if v is not None and v != {} and v != []
-        ],
-        "semantic_matches": {
-            source: {"canonical": canonical, "similarity": round(score, 4)}
-            for source, (canonical, score) in semantic_matches.items()
-        },
-        "requires_review": [
-            source
-            for source, (_, score) in semantic_matches.items()
-            if score < 0.85  # Flag lower confidence matches
-        ],
-    }
 
 
 @app.post("/api/mappings/rerank")
@@ -1343,172 +808,8 @@ async def smart_field_mapping(request: Request, smart_request: SemanticMatchRequ
 
 
 # ============================================================================
-# Mapping Persistence Endpoints
+# Jobs & Claims Endpoints
 # ============================================================================
-
-
-class SaveMappingRequest(BaseModel):
-    """Request model for saving a mapping."""
-
-    source_schema_id: str
-    field_mappings: list[dict[str, Any]]
-    created_by: str | None = None
-
-
-class ApproveMappingRequest(BaseModel):
-    """Request model for approving a mapping."""
-
-    approved_by: str
-
-
-class RejectMappingRequest(BaseModel):
-    """Request model for rejecting a mapping."""
-
-    rejected_by: str
-    reason: str | None = None
-
-
-@app.post("/api/mappings/save")
-async def save_mapping(request: SaveMappingRequest):
-    """Save a new schema mapping for review.
-
-    Creates a new mapping version and stores it with audit trail.
-    The mapping starts in 'pending' status until approved.
-    """
-    from mapping.persistence import get_mapping_store
-
-    store = get_mapping_store(DB_PATH)
-    mapping = store.save_mapping(
-        source_schema_id=request.source_schema_id,
-        field_mappings=request.field_mappings,
-        created_by=request.created_by,
-    )
-
-    return {
-        "mapping_id": mapping.id,
-        "source_schema_id": mapping.source_schema_id,
-        "version": mapping.source_schema_version,
-        "status": mapping.status.value,
-        "created_at": mapping.created_at,
-    }
-
-
-@app.get("/api/mappings/stored")
-async def list_stored_mappings(
-    status: str | None = None,
-    limit: int = Query(default=100, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
-):
-    """List stored schema mappings with optional status filter."""
-    from mapping.persistence import get_mapping_store, MappingStatus
-
-    store = get_mapping_store(DB_PATH)
-
-    status_filter = None
-    if status:
-        try:
-            status_filter = MappingStatus(status)
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid status: {status}. Valid values: pending, approved, rejected, archived",
-            )
-
-    mappings = store.list_mappings(status=status_filter, limit=limit, offset=offset)
-
-    return {
-        "mappings": [m.to_dict() for m in mappings],
-        "total": len(mappings),
-        "limit": limit,
-        "offset": offset,
-    }
-
-
-@app.get("/api/mappings/stored/{mapping_id}")
-async def get_stored_mapping(mapping_id: str):
-    """Get a specific stored mapping by ID."""
-    from mapping.persistence import get_mapping_store
-
-    store = get_mapping_store(DB_PATH)
-    mapping = store.get_mapping_by_id(mapping_id)
-
-    if not mapping:
-        raise HTTPException(status_code=404, detail="Mapping not found")
-
-    return mapping.to_dict()
-
-
-@app.get("/api/mappings/stored/schema/{source_schema_id}")
-async def get_mapping_by_schema(
-    source_schema_id: str,
-    version: int | None = None,
-):
-    """Get mapping for a source schema (latest version by default)."""
-    from mapping.persistence import get_mapping_store
-
-    store = get_mapping_store(DB_PATH)
-    mapping = store.get_mapping(source_schema_id, version=version)
-
-    if not mapping:
-        raise HTTPException(status_code=404, detail="Mapping not found")
-
-    return mapping.to_dict()
-
-
-@app.post("/api/mappings/stored/{mapping_id}/approve")
-async def approve_stored_mapping(mapping_id: str, request: ApproveMappingRequest):
-    """Approve a pending mapping."""
-    from mapping.persistence import get_mapping_store
-
-    store = get_mapping_store(DB_PATH)
-    mapping = store.approve_mapping(mapping_id, approved_by=request.approved_by)
-
-    if not mapping:
-        raise HTTPException(status_code=404, detail="Mapping not found")
-
-    return {
-        "mapping_id": mapping.id,
-        "status": mapping.status.value,
-        "approved_by": mapping.approved_by,
-        "approved_at": mapping.approved_at,
-    }
-
-
-@app.post("/api/mappings/stored/{mapping_id}/reject")
-async def reject_stored_mapping(mapping_id: str, request: RejectMappingRequest):
-    """Reject a pending mapping."""
-    from mapping.persistence import get_mapping_store
-
-    store = get_mapping_store(DB_PATH)
-    mapping = store.reject_mapping(
-        mapping_id,
-        rejected_by=request.rejected_by,
-        reason=request.reason,
-    )
-
-    if not mapping:
-        raise HTTPException(status_code=404, detail="Mapping not found")
-
-    return {
-        "mapping_id": mapping.id,
-        "status": mapping.status.value,
-    }
-
-
-@app.get("/api/mappings/stored/{mapping_id}/audit")
-async def get_mapping_audit_log(
-    mapping_id: str, limit: int = Query(default=50, ge=1, le=200)
-):
-    """Get audit log for a mapping."""
-    from mapping.persistence import get_mapping_store
-
-    store = get_mapping_store(DB_PATH)
-    logs = store.get_audit_log(mapping_id, limit=limit)
-
-    return {
-        "mapping_id": mapping_id,
-        "audit_log": [log.to_dict() for log in logs],
-    }
 
 
 @app.get("/api/jobs")
