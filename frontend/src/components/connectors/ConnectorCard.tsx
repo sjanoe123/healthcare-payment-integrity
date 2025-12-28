@@ -21,17 +21,17 @@ const CONNECTOR_ICONS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
-  active: { bg: 'bg-green-100', text: 'text-green-800', dot: 'bg-green-500' },
-  inactive: { bg: 'bg-gray-100', text: 'text-gray-800', dot: 'bg-gray-500' },
-  error: { bg: 'bg-red-100', text: 'text-red-800', dot: 'bg-red-500' },
-  testing: { bg: 'bg-yellow-100', text: 'text-yellow-800', dot: 'bg-yellow-500' },
+  active: { bg: 'bg-risk-safe/20', text: 'text-risk-safe', dot: 'bg-risk-safe' },
+  inactive: { bg: 'bg-navy-700', text: 'text-navy-300', dot: 'bg-navy-500' },
+  error: { bg: 'bg-risk-critical/20', text: 'text-risk-critical', dot: 'bg-risk-critical' },
+  testing: { bg: 'bg-risk-caution/20', text: 'text-risk-caution', dot: 'bg-risk-caution' },
 };
 
 const DATA_TYPE_COLORS: Record<string, string> = {
-  claims: 'bg-blue-100 text-blue-800',
-  eligibility: 'bg-purple-100 text-purple-800',
-  providers: 'bg-teal-100 text-teal-800',
-  reference: 'bg-orange-100 text-orange-800',
+  claims: 'bg-electric/20 text-electric',
+  eligibility: 'bg-kirk/20 text-kirk-light',
+  providers: 'bg-risk-safe/20 text-risk-safe',
+  reference: 'bg-risk-caution/20 text-risk-caution',
 };
 
 export function ConnectorCard({ connector, onEdit }: ConnectorCardProps) {
@@ -45,7 +45,7 @@ export function ConnectorCard({ connector, onEdit }: ConnectorCardProps) {
   const triggerSync = useTriggerSync();
 
   const statusColors = STATUS_COLORS[connector.status] || STATUS_COLORS.inactive;
-  const dataTypeColor = DATA_TYPE_COLORS[connector.data_type] || 'bg-gray-100 text-gray-800';
+  const dataTypeColor = DATA_TYPE_COLORS[connector.data_type] || 'bg-navy-700 text-navy-300';
   const iconPath = CONNECTOR_ICONS[connector.connector_type] || CONNECTOR_ICONS.database;
 
   const handleTest = async () => {
@@ -80,17 +80,17 @@ export function ConnectorCard({ connector, onEdit }: ConnectorCardProps) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden"
+      className="bg-navy-800/50 rounded-lg border border-navy-700/50 overflow-hidden"
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
       {/* Header */}
-      <div className="p-4 border-b border-gray-100">
+      <div className="p-4 border-b border-navy-700/50">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-100 rounded-lg">
+            <div className="p-2 bg-kirk/20 rounded-lg">
               <svg
-                className="w-6 h-6 text-indigo-600"
+                className="w-6 h-6 text-kirk"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -104,8 +104,8 @@ export function ConnectorCard({ connector, onEdit }: ConnectorCardProps) {
               </svg>
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">{connector.name}</h3>
-              <p className="text-sm text-gray-500 capitalize">
+              <h3 className="font-semibold text-white">{connector.name}</h3>
+              <p className="text-sm text-navy-400 capitalize">
                 {connector.subtype.replace(/_/g, ' ')}
               </p>
             </div>
@@ -122,28 +122,28 @@ export function ConnectorCard({ connector, onEdit }: ConnectorCardProps) {
       {/* Details */}
       <div className="p-4 space-y-3">
         <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-500">Data Type</span>
+          <span className="text-navy-400">Data Type</span>
           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${dataTypeColor}`}>
             {connector.data_type}
           </span>
         </div>
 
         <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-500">Sync Mode</span>
-          <span className="text-gray-900 capitalize">{connector.sync_mode}</span>
+          <span className="text-navy-400">Sync Mode</span>
+          <span className="text-white capitalize">{connector.sync_mode}</span>
         </div>
 
         {connector.sync_schedule && (
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-500">Schedule</span>
-            <span className="text-gray-900 font-mono text-xs">{connector.sync_schedule}</span>
+            <span className="text-navy-400">Schedule</span>
+            <span className="text-white font-mono text-xs">{connector.sync_schedule}</span>
           </div>
         )}
 
         {connector.last_sync_at && (
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-500">Last Sync</span>
-            <span className="text-gray-900">
+            <span className="text-navy-400">Last Sync</span>
+            <span className="text-white">
               {new Date(connector.last_sync_at).toLocaleString()}
             </span>
           </div>
@@ -156,8 +156,8 @@ export function ConnectorCard({ connector, onEdit }: ConnectorCardProps) {
             animate={{ opacity: 1, height: 'auto' }}
             className={`p-2 rounded-md text-sm ${
               testResult.success
-                ? 'bg-green-50 text-green-700'
-                : 'bg-red-50 text-red-700'
+                ? 'bg-risk-safe/10 text-risk-safe'
+                : 'bg-risk-critical/10 text-risk-critical'
             }`}
           >
             {testResult.message}
@@ -169,13 +169,13 @@ export function ConnectorCard({ connector, onEdit }: ConnectorCardProps) {
       <motion.div
         initial={{ opacity: 0, height: 0 }}
         animate={{ opacity: showActions ? 1 : 0, height: showActions ? 'auto' : 0 }}
-        className="border-t border-gray-100 bg-gray-50"
+        className="border-t border-navy-700/50 bg-navy-900/30"
       >
         <div className="p-3 flex items-center gap-2">
           <button
             onClick={handleTest}
             disabled={testConnection.isPending}
-            className="flex-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+            className="flex-1 px-3 py-1.5 text-sm font-medium text-navy-300 bg-navy-800 border border-navy-600 rounded-md hover:bg-navy-700 disabled:opacity-50"
           >
             {testConnection.isPending ? 'Testing...' : 'Test'}
           </button>
@@ -183,14 +183,14 @@ export function ConnectorCard({ connector, onEdit }: ConnectorCardProps) {
           <button
             onClick={handleSync}
             disabled={triggerSync.isPending || connector.status !== 'active'}
-            className="flex-1 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+            className="flex-1 px-3 py-1.5 text-sm font-medium text-white bg-kirk rounded-md hover:bg-kirk-dark disabled:opacity-50"
           >
             {triggerSync.isPending ? 'Starting...' : 'Sync Now'}
           </button>
 
           <button
             onClick={() => onEdit?.(connector)}
-            className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md"
+            className="p-1.5 text-navy-400 hover:text-white hover:bg-navy-700 rounded-md"
             title="Edit"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -203,8 +203,8 @@ export function ConnectorCard({ connector, onEdit }: ConnectorCardProps) {
             disabled={activateConnector.isPending || deactivateConnector.isPending}
             className={`p-1.5 rounded-md ${
               connector.status === 'active'
-                ? 'text-yellow-600 hover:bg-yellow-50'
-                : 'text-green-600 hover:bg-green-50'
+                ? 'text-risk-caution hover:bg-risk-caution/20'
+                : 'text-risk-safe hover:bg-risk-safe/20'
             }`}
             title={connector.status === 'active' ? 'Deactivate' : 'Activate'}
           >
@@ -223,7 +223,7 @@ export function ConnectorCard({ connector, onEdit }: ConnectorCardProps) {
           <button
             onClick={handleDelete}
             disabled={deleteConnector.isPending}
-            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md"
+            className="p-1.5 text-risk-critical hover:bg-risk-critical/20 rounded-md"
             title="Delete"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
