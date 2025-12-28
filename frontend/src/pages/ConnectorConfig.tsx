@@ -516,7 +516,7 @@ export function ConnectorConfig() {
                           <span className="font-medium text-navy-200 group-hover:text-kirk-light">
                             {st.label}
                           </span>
-                          <p className="text-xs text-navy-500 mt-1">Port {st.port}</p>
+                          <p className="text-xs text-navy-400 mt-1">Port {st.port}</p>
                         </button>
                       ))}
                     </div>
@@ -737,7 +737,7 @@ export function ConnectorConfig() {
                       }`}
                     >
                       <span className="font-medium text-navy-200">{preset.label}</span>
-                      <p className="text-xs text-navy-500 mt-0.5">{preset.description}</p>
+                      <p className="text-xs text-navy-400 mt-0.5">{preset.description}</p>
                     </button>
                   ))}
                 </div>
@@ -1136,7 +1136,7 @@ function SFTPConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
           rows={3}
           className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk font-mono text-sm"
         />
-        <p className="text-xs text-navy-500 mt-1">Use instead of password for key-based auth</p>
+        <p className="text-xs text-navy-400 mt-1">Use instead of password for key-based auth</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -1207,7 +1207,7 @@ function AzureBlobConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) 
           placeholder="DefaultEndpointsProtocol=https;AccountName=..."
           className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
         />
-        <p className="text-xs text-navy-500 mt-1">Leave empty to use Managed Identity</p>
+        <p className="text-xs text-navy-400 mt-1">Leave empty to use Managed Identity</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -1376,7 +1376,7 @@ function RESTConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
               placeholder="data.items"
               className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
             />
-            <p className="text-xs text-navy-500 mt-1">JSON path to records array</p>
+            <p className="text-xs text-navy-400 mt-1">JSON path to records array</p>
           </div>
         </div>
 
@@ -1402,7 +1402,7 @@ function RESTConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
               max={100}
               className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
             />
-            <p className="text-xs text-navy-500 mt-1">req/sec</p>
+            <p className="text-xs text-navy-400 mt-1">req/sec</p>
           </div>
           <div className="flex items-end pb-2">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -1495,7 +1495,7 @@ function FHIRConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
               max={50}
               className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
             />
-            <p className="text-xs text-navy-500 mt-1">req/sec</p>
+            <p className="text-xs text-navy-400 mt-1">req/sec</p>
           </div>
           <div className="flex items-end pb-2">
             <label className="flex items-center gap-2 cursor-pointer">

@@ -100,7 +100,7 @@ export function ConnectionTest({ connector, onClose }: ConnectionTestProps) {
                   {testConnection.data.message}
                 </p>
                 {testConnection.data.latency_ms && (
-                  <p className="mt-1 text-xs text-navy-500">
+                  <p className="mt-1 text-xs text-navy-400">
                     Latency: {testConnection.data.latency_ms}ms
                   </p>
                 )}

@@ -372,7 +372,7 @@ export function DataSources() {
                     {job.status}
                   </span>
                   {job.started_at && (
-                    <p className="text-xs text-navy-500 mt-1">
+                    <p className="text-xs text-navy-400 mt-1">
                       {new Date(job.started_at).toLocaleString()}
                     </p>
                   )}

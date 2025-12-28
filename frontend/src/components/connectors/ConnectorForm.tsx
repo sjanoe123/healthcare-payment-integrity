@@ -527,7 +527,7 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
             </option>
           ))}
         </select>
-        <p className="text-xs text-navy-500 mt-1">Leave empty for IAM role-based authentication</p>
+        <p className="text-xs text-navy-400 mt-1">Leave empty for IAM role-based authentication</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -562,7 +562,7 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
           placeholder="https://minio.example.com"
           className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
         />
-        <p className="text-xs text-navy-500 mt-1">For S3-compatible services like MinIO</p>
+        <p className="text-xs text-navy-400 mt-1">For S3-compatible services like MinIO</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -650,7 +650,7 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
           rows={4}
           className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk font-mono text-sm"
         />
-        <p className="text-xs text-navy-500 mt-1">Use instead of password for key-based auth</p>
+        <p className="text-xs text-navy-400 mt-1">Use instead of password for key-based auth</p>
       </div>
 
       {formData.private_key && (
@@ -951,7 +951,7 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
               placeholder="data.items"
               className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
             />
-            <p className="text-xs text-navy-500 mt-1">JSON path to records array</p>
+            <p className="text-xs text-navy-400 mt-1">JSON path to records array</p>
           </div>
         </div>
 
@@ -977,7 +977,7 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
               max={100}
               className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
             />
-            <p className="text-xs text-navy-500 mt-1">req/sec</p>
+            <p className="text-xs text-navy-400 mt-1">req/sec</p>
           </div>
           <div className="flex items-end pb-2">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -1058,7 +1058,7 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
               max={50}
               className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
             />
-            <p className="text-xs text-navy-500 mt-1">req/sec</p>
+            <p className="text-xs text-navy-400 mt-1">req/sec</p>
           </div>
           <div className="flex items-end pb-2">
             <label className="flex items-center gap-2 cursor-pointer">
