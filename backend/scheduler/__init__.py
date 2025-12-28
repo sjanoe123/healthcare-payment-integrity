@@ -18,6 +18,15 @@ from .worker import (
     SyncWorker,
     execute_sync_job,
 )
+from .cms_policy_sync import (
+    CMSPolicySyncer,
+    CMSPolicySyncManager,
+    PolicySource,
+    PolicyDocument,
+    SyncResult,
+    get_policy_syncer,
+    run_cms_policy_sync,
+)
 
 __all__ = [
     "SyncScheduler",
@@ -28,4 +37,12 @@ __all__ = [
     "get_job_manager",
     "SyncWorker",
     "execute_sync_job",
+    # CMS Policy Sync
+    "CMSPolicySyncer",
+    "CMSPolicySyncManager",
+    "PolicySource",
+    "PolicyDocument",
+    "SyncResult",
+    "get_policy_syncer",
+    "run_cms_policy_sync",
 ]
