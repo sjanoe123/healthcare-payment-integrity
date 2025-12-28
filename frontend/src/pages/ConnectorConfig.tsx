@@ -12,6 +12,19 @@ import {
   useTestConnection,
 } from '../api/hooks/useConnectors';
 import { ArrowLeft, Database, Globe, Folder, Check, Loader2, AlertCircle, Clock, Zap } from 'lucide-react';
+import {
+  inputClassesLg,
+  selectClassesLg,
+  textareaClasses,
+  checkboxClasses,
+  helperTextClasses,
+  labelClasses,
+  inlineLabelClasses,
+  sectionHeaderClasses,
+  subsectionHeaderClasses,
+  dividerClasses,
+  inputLgWithError,
+} from '../utils/formStyles';
 
 // Zod schema for connector configuration
 const baseSchema = z.object({
@@ -537,7 +550,7 @@ export function ConnectorConfig() {
             >
               {/* Connector Name */}
               <div>
-                <label className="block text-sm font-medium text-navy-300 mb-1">
+                <label className={labelClasses}>
                   Connector Name *
                 </label>
                 <Controller
@@ -548,9 +561,7 @@ export function ConnectorConfig() {
                       {...field}
                       type="text"
                       placeholder={`e.g., Production ${subtype?.toUpperCase()} Claims`}
-                      className={`w-full px-4 py-2 border rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk focus:border-kirk ${
-                        errors.name ? 'border-risk-critical/50' : 'border-navy-600'
-                      }`}
+                      className={inputLgWithError(!!errors.name)}
                     />
                   )}
                 />
@@ -561,14 +572,14 @@ export function ConnectorConfig() {
 
               {/* Data Type */}
               <div>
-                <label className="block text-sm font-medium text-navy-300 mb-1">Data Type</label>
+                <label className={labelClasses}>Data Type</label>
                 <Controller
                   name="data_type"
                   control={control}
                   render={({ field }) => (
                     <select
                       {...field}
-                      className="w-full px-4 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+                      className={selectClassesLg}
                     >
                       {DATA_TYPES.map((dt) => (
                         <option key={dt.value} value={dt.value}>
@@ -689,21 +700,21 @@ export function ConnectorConfig() {
 
               {/* Sync Mode */}
               <div>
-                <label className="block text-sm font-medium text-navy-300 mb-1">Sync Mode</label>
+                <label className={labelClasses}>Sync Mode</label>
                 <Controller
                   name="sync_mode"
                   control={control}
                   render={({ field }) => (
                     <select
                       {...field}
-                      className="w-full px-4 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+                      className={selectClassesLg}
                     >
                       <option value="incremental">Incremental (recommended)</option>
                       <option value="full">Full sync</option>
                     </select>
                   )}
                 />
-                <p className="text-sm text-navy-400 mt-1">
+                <p className={helperTextClasses}>
                   {connectorType === 'file'
                     ? 'Incremental sync tracks processed files by modification time.'
                     : 'Incremental sync only fetches new/updated records using a watermark column.'}
@@ -712,7 +723,7 @@ export function ConnectorConfig() {
 
               {/* Sync Schedule with Presets */}
               <div>
-                <label className="block text-sm font-medium text-navy-300 mb-2">
+                <label className={labelClasses}>
                   <Clock className="w-4 h-4 inline mr-1" />
                   Sync Schedule
                 </label>
@@ -752,7 +763,7 @@ export function ConnectorConfig() {
                           {...field}
                           type="text"
                           placeholder="0 */6 * * *"
-                          className="w-full px-4 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+                          className={inputClassesLg}
                         />
                       )}
                     />
@@ -778,7 +789,7 @@ export function ConnectorConfig() {
 
               {/* Batch Size */}
               <div>
-                <label className="block text-sm font-medium text-navy-300 mb-1">Batch Size</label>
+                <label className={labelClasses}>Batch Size</label>
                 <Controller
                   name="batch_size"
                   control={control}
@@ -789,11 +800,11 @@ export function ConnectorConfig() {
                       min={100}
                       max={10000}
                       onChange={(e) => field.onChange(parseInt(e.target.value))}
-                      className="w-full px-4 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+                      className={inputClassesLg}
                     />
                   )}
                 />
-                <p className="text-sm text-navy-400 mt-1">
+                <p className={helperTextClasses}>
                   Number of records to process per batch (100-10,000).
                 </p>
               </div>
@@ -801,7 +812,7 @@ export function ConnectorConfig() {
               {/* Watermark Column for incremental database sync */}
               {syncMode === 'incremental' && connectorType === 'database' && (
                 <div>
-                  <label className="block text-sm font-medium text-navy-300 mb-1">
+                  <label className={labelClasses}>
                     Watermark Column
                   </label>
                   <input
@@ -809,9 +820,9 @@ export function ConnectorConfig() {
                     value={getConfigValue('watermark_column', '')}
                     onChange={(e) => updateConfig('watermark_column', e.target.value)}
                     placeholder="updated_at"
-                    className="w-full px-4 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+                    className={inputClassesLg}
                   />
-                  <p className="text-sm text-navy-400 mt-1">
+                  <p className={helperTextClasses}>
                     Column used to track incremental updates (e.g., updated_at, modified_date).
                   </p>
                 </div>
@@ -893,72 +904,72 @@ function DatabaseConfigForm({ getConfigValue, updateConfig, subtype }: ConfigFor
   const defaultPort = subtype === 'postgresql' ? 5432 : subtype === 'mysql' ? 3306 : 1433;
 
   return (
-    <div className="space-y-4 border-t border-navy-700/50 pt-4">
-      <h4 className="font-medium text-white">Database Connection</h4>
+    <div className={`space-y-4 ${dividerClasses}`}>
+      <h4 className={sectionHeaderClasses}>Database Connection</h4>
 
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2">
-          <label className="block text-sm font-medium text-navy-300 mb-1">Host *</label>
+          <label className={labelClasses}>Host *</label>
           <input
             type="text"
             value={getConfigValue('host', 'localhost')}
             onChange={(e) => updateConfig('host', e.target.value)}
             placeholder="localhost"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">Port *</label>
+          <label className={labelClasses}>Port *</label>
           <input
             type="number"
             value={getConfigValue('port', defaultPort)}
             onChange={(e) => updateConfig('port', parseInt(e.target.value))}
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-navy-300 mb-1">Database *</label>
+        <label className={labelClasses}>Database *</label>
         <input
           type="text"
           value={getConfigValue('database', '')}
           onChange={(e) => updateConfig('database', e.target.value)}
           placeholder="claims_db"
-          className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+          className={inputClassesLg}
         />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">Username *</label>
+          <label className={labelClasses}>Username *</label>
           <input
             type="text"
             value={getConfigValue('username', '')}
             onChange={(e) => updateConfig('username', e.target.value)}
             placeholder="db_user"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">Password</label>
+          <label className={labelClasses}>Password</label>
           <input
             type="password"
             value={getConfigValue('password', '')}
             onChange={(e) => updateConfig('password', e.target.value)}
             placeholder="********"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">SSL Mode</label>
+          <label className={labelClasses}>SSL Mode</label>
           <select
             value={getConfigValue('ssl_mode', 'prefer')}
             onChange={(e) => updateConfig('ssl_mode', e.target.value)}
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+            className={selectClassesLg}
           >
             {SSL_MODES.map((mode) => (
               <option key={mode.value} value={mode.value}>
@@ -968,25 +979,25 @@ function DatabaseConfigForm({ getConfigValue, updateConfig, subtype }: ConfigFor
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">Schema</label>
+          <label className={labelClasses}>Schema</label>
           <input
             type="text"
             value={getConfigValue('schema_name', 'public')}
             onChange={(e) => updateConfig('schema_name', e.target.value)}
             placeholder="public"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-navy-300 mb-1">Table (optional)</label>
+        <label className={labelClasses}>Table (optional)</label>
         <input
           type="text"
           value={getConfigValue('table', '')}
           onChange={(e) => updateConfig('table', e.target.value)}
           placeholder="claims"
-          className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+          className={inputClassesLg}
         />
       </div>
     </div>
@@ -995,26 +1006,26 @@ function DatabaseConfigForm({ getConfigValue, updateConfig, subtype }: ConfigFor
 
 function S3ConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
   return (
-    <div className="space-y-4 border-t border-navy-700/50 pt-4">
-      <h4 className="font-medium text-white">S3 Configuration</h4>
+    <div className={`space-y-4 ${dividerClasses}`}>
+      <h4 className={sectionHeaderClasses}>S3 Configuration</h4>
 
       <div>
-        <label className="block text-sm font-medium text-navy-300 mb-1">Bucket Name *</label>
+        <label className={labelClasses}>Bucket Name *</label>
         <input
           type="text"
           value={getConfigValue('bucket', '')}
           onChange={(e) => updateConfig('bucket', e.target.value)}
           placeholder="my-claims-bucket"
-          className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+          className={inputClassesLg}
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-navy-300 mb-1">AWS Region</label>
+        <label className={labelClasses}>AWS Region</label>
         <select
           value={getConfigValue('aws_region', 'us-east-1')}
           onChange={(e) => updateConfig('aws_region', e.target.value)}
-          className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+          className={selectClassesLg}
         >
           {AWS_REGIONS.map((r) => (
             <option key={r.value} value={r.value}>
@@ -1026,46 +1037,46 @@ function S3ConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">Access Key ID</label>
+          <label className={labelClasses}>Access Key ID</label>
           <input
             type="text"
             value={getConfigValue('aws_access_key', '')}
             onChange={(e) => updateConfig('aws_access_key', e.target.value)}
             placeholder="AKIA..."
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">Secret Access Key</label>
+          <label className={labelClasses}>Secret Access Key</label>
           <input
             type="password"
             value={getConfigValue('aws_secret_key', '')}
             onChange={(e) => updateConfig('aws_secret_key', e.target.value)}
             placeholder="********"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">Path Prefix</label>
+          <label className={labelClasses}>Path Prefix</label>
           <input
             type="text"
             value={getConfigValue('prefix', '')}
             onChange={(e) => updateConfig('prefix', e.target.value)}
             placeholder="claims/incoming/"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">File Pattern</label>
+          <label className={labelClasses}>File Pattern</label>
           <input
             type="text"
             value={getConfigValue('path_pattern', '*')}
             onChange={(e) => updateConfig('path_pattern', e.target.value)}
             placeholder="*.csv"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
       </div>
@@ -1077,56 +1088,56 @@ function S3ConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
 
 function SFTPConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
   return (
-    <div className="space-y-4 border-t border-navy-700/50 pt-4">
-      <h4 className="font-medium text-white">SFTP Configuration</h4>
+    <div className={`space-y-4 ${dividerClasses}`}>
+      <h4 className={sectionHeaderClasses}>SFTP Configuration</h4>
 
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2">
-          <label className="block text-sm font-medium text-navy-300 mb-1">Host *</label>
+          <label className={labelClasses}>Host *</label>
           <input
             type="text"
             value={getConfigValue('host', '')}
             onChange={(e) => updateConfig('host', e.target.value)}
             placeholder="sftp.example.com"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">Port</label>
+          <label className={labelClasses}>Port</label>
           <input
             type="number"
             value={getConfigValue('port', 22)}
             onChange={(e) => updateConfig('port', parseInt(e.target.value))}
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">Username *</label>
+          <label className={labelClasses}>Username *</label>
           <input
             type="text"
             value={getConfigValue('username', '')}
             onChange={(e) => updateConfig('username', e.target.value)}
             placeholder="sftp_user"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">Password</label>
+          <label className={labelClasses}>Password</label>
           <input
             type="password"
             value={getConfigValue('password', '')}
             onChange={(e) => updateConfig('password', e.target.value)}
             placeholder="********"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-navy-300 mb-1">
+        <label className={labelClasses}>
           Private Key (PEM format)
         </label>
         <textarea
@@ -1134,30 +1145,30 @@ function SFTPConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
           onChange={(e) => updateConfig('private_key', e.target.value)}
           placeholder="-----BEGIN RSA PRIVATE KEY-----"
           rows={3}
-          className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk font-mono text-sm"
+          className={textareaClasses}
         />
-        <p className="text-xs text-navy-400 mt-1">Use instead of password for key-based auth</p>
+        <p className={helperTextClasses}>Use instead of password for key-based auth</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">Remote Path</label>
+          <label className={labelClasses}>Remote Path</label>
           <input
             type="text"
             value={getConfigValue('remote_path', '/')}
             onChange={(e) => updateConfig('remote_path', e.target.value)}
             placeholder="/claims/incoming"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">File Pattern</label>
+          <label className={labelClasses}>File Pattern</label>
           <input
             type="text"
             value={getConfigValue('path_pattern', '*')}
             onChange={(e) => updateConfig('path_pattern', e.target.value)}
             placeholder="*.edi"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
       </div>
@@ -1169,11 +1180,11 @@ function SFTPConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
 
 function AzureBlobConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
   return (
-    <div className="space-y-4 border-t border-navy-700/50 pt-4">
-      <h4 className="font-medium text-white">Azure Blob Configuration</h4>
+    <div className={`space-y-4 ${dividerClasses}`}>
+      <h4 className={sectionHeaderClasses}>Azure Blob Configuration</h4>
 
       <div>
-        <label className="block text-sm font-medium text-navy-300 mb-1">
+        <label className={labelClasses}>
           Storage Account Name *
         </label>
         <input
@@ -1181,23 +1192,23 @@ function AzureBlobConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) 
           value={getConfigValue('account_name', '')}
           onChange={(e) => updateConfig('account_name', e.target.value)}
           placeholder="mystorageaccount"
-          className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+          className={inputClassesLg}
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-navy-300 mb-1">Container Name *</label>
+        <label className={labelClasses}>Container Name *</label>
         <input
           type="text"
           value={getConfigValue('container_name', '')}
           onChange={(e) => updateConfig('container_name', e.target.value)}
           placeholder="claims-data"
-          className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+          className={inputClassesLg}
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-navy-300 mb-1">
+        <label className={labelClasses}>
           Connection String (optional)
         </label>
         <input
@@ -1205,30 +1216,30 @@ function AzureBlobConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) 
           value={getConfigValue('connection_string', '')}
           onChange={(e) => updateConfig('connection_string', e.target.value)}
           placeholder="DefaultEndpointsProtocol=https;AccountName=..."
-          className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+          className={inputClassesLg}
         />
-        <p className="text-xs text-navy-400 mt-1">Leave empty to use Managed Identity</p>
+        <p className={helperTextClasses}>Leave empty to use Managed Identity</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">Blob Prefix</label>
+          <label className={labelClasses}>Blob Prefix</label>
           <input
             type="text"
             value={getConfigValue('prefix', '')}
             onChange={(e) => updateConfig('prefix', e.target.value)}
             placeholder="claims/incoming/"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">File Pattern</label>
+          <label className={labelClasses}>File Pattern</label>
           <input
             type="text"
             value={getConfigValue('path_pattern', '*')}
             onChange={(e) => updateConfig('path_pattern', e.target.value)}
             placeholder="*.csv"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
       </div>
@@ -1242,16 +1253,16 @@ function FileFormatConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
   const fileFormat = getConfigValue('file_format', 'csv');
 
   return (
-    <div className="border-t border-navy-700/50 pt-4 mt-4">
-      <h4 className="text-sm font-medium text-white mb-3">File Format Settings</h4>
+    <div className={dividerClasses}>
+      <h4 className={subsectionHeaderClasses}>File Format Settings</h4>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">File Format</label>
+          <label className={labelClasses}>File Format</label>
           <select
             value={fileFormat}
             onChange={(e) => updateConfig('file_format', e.target.value)}
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+            className={selectClassesLg}
           >
             {FILE_FORMATS.map((f) => (
               <option key={f.value} value={f.value}>
@@ -1263,11 +1274,11 @@ function FileFormatConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
 
         {fileFormat === 'csv' && (
           <div>
-            <label className="block text-sm font-medium text-navy-300 mb-1">Delimiter</label>
+            <label className={labelClasses}>Delimiter</label>
             <select
               value={getConfigValue('delimiter', ',')}
               onChange={(e) => updateConfig('delimiter', e.target.value)}
-              className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+              className={selectClassesLg}
             >
               <option value=",">Comma (,)</option>
               <option value=";">Semicolon (;)</option>
@@ -1285,9 +1296,9 @@ function FileFormatConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
               type="checkbox"
               checked={getConfigValue('has_header', true)}
               onChange={(e) => updateConfig('has_header', e.target.checked)}
-              className="w-4 h-4 text-kirk border-navy-600 rounded focus:ring-kirk bg-navy-900/50"
+              className={checkboxClasses}
             />
-            <span className="text-sm text-navy-300">File has header row</span>
+            <span className={inlineLabelClasses}>File has header row</span>
           </label>
         </div>
       )}
@@ -1298,21 +1309,21 @@ function FileFormatConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
             type="checkbox"
             checked={getConfigValue('archive_processed', false)}
             onChange={(e) => updateConfig('archive_processed', e.target.checked)}
-            className="w-4 h-4 text-kirk border-navy-600 rounded focus:ring-kirk bg-navy-900/50"
+            className={checkboxClasses}
           />
-          <span className="text-sm text-navy-300">Archive files after processing</span>
+          <span className={inlineLabelClasses}>Archive files after processing</span>
         </label>
       </div>
 
       {getConfigValue('archive_processed', false) && (
         <div className="mt-3">
-          <label className="block text-sm font-medium text-navy-300 mb-1">Archive Path</label>
+          <label className={labelClasses}>Archive Path</label>
           <input
             type="text"
             value={getConfigValue('archive_path', '')}
             onChange={(e) => updateConfig('archive_path', e.target.value)}
             placeholder="archive/processed/"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
       )}
@@ -1322,43 +1333,43 @@ function FileFormatConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
 
 function RESTConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
   return (
-    <div className="space-y-4 border-t border-navy-700/50 pt-4">
-      <h4 className="font-medium text-white">REST API Configuration</h4>
+    <div className={`space-y-4 ${dividerClasses}`}>
+      <h4 className={sectionHeaderClasses}>REST API Configuration</h4>
 
       <div>
-        <label className="block text-sm font-medium text-navy-300 mb-1">Base URL *</label>
+        <label className={labelClasses}>Base URL *</label>
         <input
           type="text"
           value={getConfigValue('base_url', '')}
           onChange={(e) => updateConfig('base_url', e.target.value)}
           placeholder="https://api.example.com"
-          className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+          className={inputClassesLg}
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-navy-300 mb-1">Data Endpoint</label>
+        <label className={labelClasses}>Data Endpoint</label>
         <input
           type="text"
           value={getConfigValue('endpoint', '/')}
           onChange={(e) => updateConfig('endpoint', e.target.value)}
           placeholder="/v1/claims"
-          className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+          className={inputClassesLg}
         />
       </div>
 
       <AuthConfig getConfigValue={getConfigValue} updateConfig={updateConfig} />
 
-      <div className="border-t border-navy-700/50 pt-4 mt-4">
-        <h4 className="text-sm font-medium text-white mb-3">Response Settings</h4>
+      <div className={dividerClasses}>
+        <h4 className={subsectionHeaderClasses}>Response Settings</h4>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-navy-300 mb-1">Pagination Type</label>
+            <label className={labelClasses}>Pagination Type</label>
             <select
               value={getConfigValue('pagination_type', 'none')}
               onChange={(e) => updateConfig('pagination_type', e.target.value)}
-              className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+              className={selectClassesLg}
             >
               {PAGINATION_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>
@@ -1368,41 +1379,41 @@ function RESTConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-navy-300 mb-1">Data Path</label>
+            <label className={labelClasses}>Data Path</label>
             <input
               type="text"
               value={getConfigValue('data_path', '')}
               onChange={(e) => updateConfig('data_path', e.target.value)}
               placeholder="data.items"
-              className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+              className={inputClassesLg}
             />
-            <p className="text-xs text-navy-400 mt-1">JSON path to records array</p>
+            <p className={helperTextClasses}>JSON path to records array</p>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mt-3">
           <div>
-            <label className="block text-sm font-medium text-navy-300 mb-1">Timeout (sec)</label>
+            <label className={labelClasses}>Timeout (sec)</label>
             <input
               type="number"
               value={getConfigValue('timeout', 30)}
               onChange={(e) => updateConfig('timeout', parseInt(e.target.value))}
               min={5}
               max={300}
-              className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+              className={inputClassesLg}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-navy-300 mb-1">Rate Limit</label>
+            <label className={labelClasses}>Rate Limit</label>
             <input
               type="number"
               value={getConfigValue('rate_limit', 10)}
               onChange={(e) => updateConfig('rate_limit', parseInt(e.target.value))}
               min={1}
               max={100}
-              className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+              className={inputClassesLg}
             />
-            <p className="text-xs text-navy-400 mt-1">req/sec</p>
+            <p className={helperTextClasses}>req/sec</p>
           </div>
           <div className="flex items-end pb-2">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -1410,9 +1421,9 @@ function RESTConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
                 type="checkbox"
                 checked={getConfigValue('verify_ssl', true)}
                 onChange={(e) => updateConfig('verify_ssl', e.target.checked)}
-                className="w-4 h-4 text-kirk border-navy-600 rounded focus:ring-kirk bg-navy-900/50"
+                className={checkboxClasses}
               />
-              <span className="text-sm text-navy-300">Verify SSL</span>
+              <span className={inlineLabelClasses}>Verify SSL</span>
             </label>
           </div>
         </div>
@@ -1425,22 +1436,22 @@ function FHIRConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
   const resourceTypes = getConfigValue<string[]>('resource_types', ['Claim']);
 
   return (
-    <div className="space-y-4 border-t border-navy-700/50 pt-4">
-      <h4 className="font-medium text-white">FHIR Server Configuration</h4>
+    <div className={`space-y-4 ${dividerClasses}`}>
+      <h4 className={sectionHeaderClasses}>FHIR Server Configuration</h4>
 
       <div>
-        <label className="block text-sm font-medium text-navy-300 mb-1">FHIR Server URL *</label>
+        <label className={labelClasses}>FHIR Server URL *</label>
         <input
           type="text"
           value={getConfigValue('base_url', '')}
           onChange={(e) => updateConfig('base_url', e.target.value)}
           placeholder="https://fhir.example.com/r4"
-          className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+          className={inputClassesLg}
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-navy-300 mb-2">Resource Types</label>
+        <label className={labelClasses}>Resource Types</label>
         <div className="grid grid-cols-2 gap-2">
           {FHIR_RESOURCES.map((r) => (
             <label
@@ -1460,9 +1471,9 @@ function FHIRConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
                     );
                   }
                 }}
-                className="w-4 h-4 text-kirk border-navy-600 rounded focus:ring-kirk bg-navy-900/50"
+                className={checkboxClasses}
               />
-              <span className="text-sm text-navy-300">{r.label}</span>
+              <span className={inlineLabelClasses}>{r.label}</span>
             </label>
           ))}
         </div>
@@ -1470,32 +1481,32 @@ function FHIRConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
 
       <AuthConfig getConfigValue={getConfigValue} updateConfig={updateConfig} />
 
-      <div className="border-t border-navy-700/50 pt-4 mt-4">
-        <h4 className="text-sm font-medium text-white mb-3">Connection Settings</h4>
+      <div className={dividerClasses}>
+        <h4 className={subsectionHeaderClasses}>Connection Settings</h4>
 
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-navy-300 mb-1">Timeout (sec)</label>
+            <label className={labelClasses}>Timeout (sec)</label>
             <input
               type="number"
               value={getConfigValue('timeout', 30)}
               onChange={(e) => updateConfig('timeout', parseInt(e.target.value))}
               min={10}
               max={300}
-              className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+              className={inputClassesLg}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-navy-300 mb-1">Rate Limit</label>
+            <label className={labelClasses}>Rate Limit</label>
             <input
               type="number"
               value={getConfigValue('rate_limit', 10)}
               onChange={(e) => updateConfig('rate_limit', parseInt(e.target.value))}
               min={1}
               max={50}
-              className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+              className={inputClassesLg}
             />
-            <p className="text-xs text-navy-400 mt-1">req/sec</p>
+            <p className={helperTextClasses}>req/sec</p>
           </div>
           <div className="flex items-end pb-2">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -1503,9 +1514,9 @@ function FHIRConfigForm({ getConfigValue, updateConfig }: ConfigFormProps) {
                 type="checkbox"
                 checked={getConfigValue('verify_ssl', true)}
                 onChange={(e) => updateConfig('verify_ssl', e.target.checked)}
-                className="w-4 h-4 text-kirk border-navy-600 rounded focus:ring-kirk bg-navy-900/50"
+                className={checkboxClasses}
               />
-              <span className="text-sm text-navy-300">Verify SSL</span>
+              <span className={inlineLabelClasses}>Verify SSL</span>
             </label>
           </div>
         </div>
@@ -1522,11 +1533,11 @@ function AuthConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-navy-300 mb-1">Authentication</label>
+        <label className={labelClasses}>Authentication</label>
         <select
           value={authType}
           onChange={(e) => updateConfig('auth_type', e.target.value)}
-          className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk"
+          className={selectClassesLg}
         >
           {AUTH_TYPES.map((t) => (
             <option key={t.value} value={t.value}>
@@ -1539,23 +1550,23 @@ function AuthConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
       {authType === 'api_key' && (
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-navy-300 mb-1">API Key *</label>
+            <label className={labelClasses}>API Key *</label>
             <input
               type="password"
               value={getConfigValue('api_key', '')}
               onChange={(e) => updateConfig('api_key', e.target.value)}
               placeholder="Your API key"
-              className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+              className={inputClassesLg}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-navy-300 mb-1">Header Name</label>
+            <label className={labelClasses}>Header Name</label>
             <input
               type="text"
               value={getConfigValue('api_key_header', 'X-API-Key')}
               onChange={(e) => updateConfig('api_key_header', e.target.value)}
               placeholder="X-API-Key"
-              className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+              className={inputClassesLg}
             />
           </div>
         </div>
@@ -1564,23 +1575,23 @@ function AuthConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
       {authType === 'basic' && (
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-navy-300 mb-1">Username *</label>
+            <label className={labelClasses}>Username *</label>
             <input
               type="text"
               value={getConfigValue('username', '')}
               onChange={(e) => updateConfig('username', e.target.value)}
               placeholder="username"
-              className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+              className={inputClassesLg}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-navy-300 mb-1">Password *</label>
+            <label className={labelClasses}>Password *</label>
             <input
               type="password"
               value={getConfigValue('password', '')}
               onChange={(e) => updateConfig('password', e.target.value)}
               placeholder="********"
-              className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+              className={inputClassesLg}
             />
           </div>
         </div>
@@ -1588,13 +1599,13 @@ function AuthConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
 
       {authType === 'bearer' && (
         <div>
-          <label className="block text-sm font-medium text-navy-300 mb-1">Bearer Token *</label>
+          <label className={labelClasses}>Bearer Token *</label>
           <input
             type="password"
             value={getConfigValue('bearer_token', '')}
             onChange={(e) => updateConfig('bearer_token', e.target.value)}
             placeholder="Your bearer token"
-            className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+            className={inputClassesLg}
           />
         </div>
       )}
@@ -1602,28 +1613,28 @@ function AuthConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
       {authType === 'oauth2' && (
         <>
           <div>
-            <label className="block text-sm font-medium text-navy-300 mb-1">Token URL *</label>
+            <label className={labelClasses}>Token URL *</label>
             <input
               type="text"
               value={getConfigValue('oauth_token_url', '')}
               onChange={(e) => updateConfig('oauth_token_url', e.target.value)}
               placeholder="https://auth.example.com/oauth/token"
-              className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+              className={inputClassesLg}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-navy-300 mb-1">Client ID *</label>
+              <label className={labelClasses}>Client ID *</label>
               <input
                 type="text"
                 value={getConfigValue('oauth_client_id', '')}
                 onChange={(e) => updateConfig('oauth_client_id', e.target.value)}
                 placeholder="client_id"
-                className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+                className={inputClassesLg}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-navy-300 mb-1">
+              <label className={labelClasses}>
                 Client Secret *
               </label>
               <input
@@ -1631,18 +1642,18 @@ function AuthConfig({ getConfigValue, updateConfig }: ConfigFormProps) {
                 value={getConfigValue('oauth_client_secret', '')}
                 onChange={(e) => updateConfig('oauth_client_secret', e.target.value)}
                 placeholder="********"
-                className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+                className={inputClassesLg}
               />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-navy-300 mb-1">Scope</label>
+            <label className={labelClasses}>Scope</label>
             <input
               type="text"
               value={getConfigValue('oauth_scopes', '')}
               onChange={(e) => updateConfig('oauth_scopes', e.target.value)}
               placeholder="system/*.read"
-              className="w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk"
+              className={inputClassesLg}
             />
           </div>
         </>
