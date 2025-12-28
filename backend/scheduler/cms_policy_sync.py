@@ -608,7 +608,11 @@ class CMSPolicySyncer:
         # Generate policy key if not provided
         policy_key = doc.policy_key
         if not policy_key:
-            # Create a stable key from title and source
+            # Create a stable key from title and source for deduplication.
+            # NOTE: MD5 is used here for uniqueness/deduplication only, not for
+            # cryptographic security. It provides a short, stable identifier from
+            # the document source and title. SHA256 would also work but produces
+            # longer hashes; the 12-char truncation makes MD5 sufficient.
             key_source = f"{doc.source.value}_{doc.title}"
             policy_key = hashlib.md5(key_source.encode()).hexdigest()[:12]
             policy_key = f"{doc.source.value.upper()}_{policy_key}"
@@ -721,6 +725,9 @@ def run_cms_policy_sync(
 
 
 # Global syncer instance
+# NOTE: This singleton pattern is NOT thread-safe. It is designed for use with
+# APScheduler's single-threaded executors or sequential job execution.
+# If multi-threaded access is needed, add threading.Lock around instance creation.
 _syncer_instance: CMSPolicySyncer | None = None
 
 
@@ -729,6 +736,11 @@ def get_policy_syncer(
     chroma_persist_dir: str | None = None,
 ) -> CMSPolicySyncer:
     """Get or create the global policy syncer instance.
+
+    Note:
+        This uses a simple singleton pattern without thread locks. It is intended
+        for single-threaded scheduler use. For concurrent access, consider adding
+        a threading.Lock or using dependency injection instead.
 
     Args:
         db_path: Database path (only used on first call)

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import type { AuditLogListResponse, AuditStats } from '@/api/types';
@@ -11,6 +11,7 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   AlertCircle,
   CheckCircle,
   Clock,
@@ -102,7 +103,20 @@ export function AuditLog() {
   const [page, setPage] = useState(0);
   const [actionFilter, setActionFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const limit = 20;
+
+  const toggleRowExpanded = (id: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   // Fetch audit logs
   const { data: logsData, isLoading: logsLoading } = useQuery<AuditLogListResponse>({
@@ -322,51 +336,78 @@ export function AuditLog() {
                   </tr>
                 </thead>
                 <tbody>
-                  {logsData.entries.map((entry, i) => (
-                    <motion.tr
-                      key={entry.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.02 }}
-                      className="border-b border-navy-700/50 hover:bg-navy-700/20"
-                    >
-                      <td className="py-3 px-4 text-sm text-navy-300 whitespace-nowrap">
-                        {formatTimestamp(entry.timestamp)}
-                      </td>
-                      <td className="py-3 px-4">
-                        <ActionBadge action={entry.action} />
-                      </td>
-                      <td className="py-3 px-4 text-sm text-navy-300">
-                        {entry.user_email || entry.user_id || (
-                          <span className="text-navy-500 italic">anonymous</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        {entry.resource_type && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-navy-400">{entry.resource_type}:</span>
-                            <span className="font-mono text-xs text-white truncate max-w-32">
-                              {entry.resource_id}
-                            </span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={entry.status} />
-                      </td>
-                      <td className="py-3 px-4">
-                        {entry.details && Object.keys(entry.details).length > 0 && (
-                          <button
-                            onClick={() => console.log(entry.details)}
-                            className="text-xs text-kirk hover:text-kirk/80"
-                            title={JSON.stringify(entry.details, null, 2)}
-                          >
-                            View details
-                          </button>
-                        )}
-                      </td>
-                    </motion.tr>
-                  ))}
+                  {logsData.entries.map((entry, i) => {
+                    const hasDetails = entry.details && Object.keys(entry.details).length > 0;
+                    const isExpanded = expandedRows.has(entry.id);
+                    return (
+                      <motion.tr
+                        key={entry.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: Math.min(i * 0.005, 0.1) }}
+                        className="border-b border-navy-700/50 hover:bg-navy-700/20"
+                      >
+                        <td className="py-3 px-4 text-sm text-navy-300 whitespace-nowrap">
+                          {formatTimestamp(entry.timestamp)}
+                        </td>
+                        <td className="py-3 px-4">
+                          <ActionBadge action={entry.action} />
+                        </td>
+                        <td className="py-3 px-4 text-sm text-navy-300">
+                          {entry.user_email || entry.user_id || (
+                            <span className="text-navy-500 italic">anonymous</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          {entry.resource_type && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-navy-400">{entry.resource_type}:</span>
+                              <span className="font-mono text-xs text-white truncate max-w-32">
+                                {entry.resource_id}
+                              </span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={entry.status} />
+                        </td>
+                        <td className="py-3 px-4">
+                          {hasDetails && (
+                            <button
+                              onClick={() => toggleRowExpanded(entry.id)}
+                              className="flex items-center gap-1 text-xs text-kirk hover:text-kirk/80"
+                            >
+                              <ChevronDown className={cn(
+                                'w-3 h-3 transition-transform',
+                                isExpanded && 'rotate-180'
+                              )} />
+                              {isExpanded ? 'Hide' : 'View'} details
+                            </button>
+                          )}
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                  {/* Expanded details rows */}
+                  <AnimatePresence>
+                    {logsData.entries
+                      .filter((entry) => expandedRows.has(entry.id) && entry.details)
+                      .map((entry) => (
+                        <motion.tr
+                          key={`${entry.id}-details`}
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="bg-navy-900/50"
+                        >
+                          <td colSpan={6} className="py-3 px-4">
+                            <pre className="text-xs text-navy-300 font-mono overflow-x-auto max-w-full whitespace-pre-wrap">
+                              {JSON.stringify(entry.details, null, 2)}
+                            </pre>
+                          </td>
+                        </motion.tr>
+                      ))}
+                  </AnimatePresence>
                 </tbody>
               </table>
             </div>

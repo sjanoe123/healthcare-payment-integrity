@@ -659,8 +659,13 @@ async def bulk_upload_policies(request: BulkPolicyUploadRequest):
     - keywords (optional): List of keywords
     - related_codes (optional): List of procedure/diagnosis codes
 
+    Security Note:
+        This endpoint should be protected with authentication and rate limiting
+        in production. Currently limited to 100 documents per request to prevent
+        abuse, but additional controls (API keys, request quotas) are recommended.
+
     Returns:
-        Summary of sync results.
+        Summary of sync results including skipped documents with reasons.
     """
     try:
         from scheduler.cms_policy_sync import (
@@ -678,10 +683,23 @@ async def bulk_upload_policies(request: BulkPolicyUploadRequest):
                 detail="Maximum 100 documents per request. Use multiple requests for larger batches.",
             )
 
-        # Convert to PolicyDocument objects
+        # Convert to PolicyDocument objects, tracking skipped docs
         policy_docs = []
-        for doc in request.documents:
+        skipped_docs = []
+        for i, doc in enumerate(request.documents):
             if not doc.get("content") or not doc.get("title"):
+                reason = []
+                if not doc.get("content"):
+                    reason.append("missing content")
+                if not doc.get("title"):
+                    reason.append("missing title")
+                skipped_docs.append(
+                    {
+                        "index": i,
+                        "title": doc.get("title", f"document_{i}"),
+                        "reason": ", ".join(reason),
+                    }
+                )
                 continue
 
             try:
@@ -726,7 +744,8 @@ async def bulk_upload_policies(request: BulkPolicyUploadRequest):
             "documents_processed": result.documents_found,
             "documents_added": result.documents_added,
             "documents_updated": result.documents_updated,
-            "documents_skipped": result.documents_skipped,
+            "documents_skipped": result.documents_skipped + len(skipped_docs),
+            "skipped_documents": skipped_docs[:20],  # Limit to first 20 skipped
             "errors": result.errors[:10]
             if result.errors
             else [],  # Limit errors returned

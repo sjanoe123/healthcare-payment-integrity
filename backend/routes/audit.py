@@ -4,6 +4,12 @@ Provides endpoints for:
 - Listing audit log entries
 - Exporting audit logs for compliance review
 - Filtering by date range, action type, user, and resource
+
+Security Note:
+    These endpoints should be protected by authentication middleware in production.
+    Access to audit logs should be restricted to authorized personnel only (e.g.,
+    compliance officers, security admins). Consider adding role-based access control
+    via FastAPI dependencies when implementing authentication.
 """
 
 from __future__ import annotations
@@ -20,6 +26,13 @@ from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
+
+# Module-level flag to track if audit table has been initialized
+# This avoids redundant CREATE TABLE IF NOT EXISTS checks on every request
+_audit_table_initialized = False
+
+# Maximum rows for export to prevent memory issues
+MAX_EXPORT_ROWS = 10000
 
 
 class AuditAction(str, Enum):
@@ -94,7 +107,15 @@ def get_db():
 
 
 def init_audit_table(conn: sqlite3.Connection) -> None:
-    """Initialize the audit_logs table if it doesn't exist."""
+    """Initialize the audit_logs table if it doesn't exist.
+
+    Uses a module-level flag to avoid redundant schema checks on every request.
+    The CREATE TABLE IF NOT EXISTS is idempotent but involves disk I/O.
+    """
+    global _audit_table_initialized
+    if _audit_table_initialized:
+        return
+
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS audit_logs (
@@ -124,6 +145,7 @@ def init_audit_table(conn: sqlite3.Connection) -> None:
     )
 
     conn.commit()
+    _audit_table_initialized = True
 
 
 def log_audit_event(
@@ -232,6 +254,9 @@ async def list_audit_logs(
 
     where_clause = " AND ".join(conditions) if conditions else "1=1"
 
+    # SAFETY NOTE: The where_clause is constructed from hardcoded column names only
+    # (action, user_id, resource_type, resource_id, status, timestamp).
+    # User input is passed via parameterized queries (?), preventing SQL injection.
     # Get total count
     cursor.execute(f"SELECT COUNT(*) FROM audit_logs WHERE {where_clause}", params)
     total = cursor.fetchone()[0]
@@ -389,10 +414,18 @@ async def export_audit_logs(
     start_date: str | None = Query(default=None, description="Start date (ISO format)"),
     end_date: str | None = Query(default=None, description="End date (ISO format)"),
     action: str | None = Query(default=None, description="Filter by action type"),
+    limit: int = Query(
+        default=MAX_EXPORT_ROWS,
+        ge=1,
+        le=MAX_EXPORT_ROWS,
+        description=f"Maximum rows to export (max {MAX_EXPORT_ROWS})",
+    ),
 ) -> Response:
     """Export audit logs for compliance review.
 
     Returns CSV or JSON format for external analysis tools.
+    Limited to MAX_EXPORT_ROWS rows to prevent memory issues.
+    For larger exports, use date range filters to batch the export.
     """
     conn = get_db()
     init_audit_table(conn)
@@ -429,6 +462,7 @@ async def export_audit_logs(
 
     where_clause = " AND ".join(conditions) if conditions else "1=1"
 
+    # SAFETY NOTE: where_clause uses hardcoded column names; user input is parameterized
     cursor.execute(
         f"""
         SELECT id, timestamp, action, user_id, user_email,
@@ -437,8 +471,9 @@ async def export_audit_logs(
         FROM audit_logs
         WHERE {where_clause}
         ORDER BY timestamp DESC
+        LIMIT ?
         """,
-        params,
+        params + [limit],
     )
 
     rows = cursor.fetchall()
