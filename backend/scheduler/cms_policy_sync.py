@@ -413,12 +413,20 @@ class CMSPolicySyncer:
             "CHROMA_PERSIST_DIR", "./data/chroma"
         )
         self.sync_manager = CMSPolicySyncManager(self.db_path)
+        # Cache store instance to avoid repeated initialization during sync
+        self._store_cache: Any = None
 
     def _get_store(self):
-        """Get ChromaDB store instance."""
-        from rag.chroma_store import ChromaStore
+        """Get or create cached ChromaDB store instance.
 
-        return ChromaStore(persist_dir=self.chroma_persist_dir)
+        Caches the store instance for the lifetime of the syncer to avoid
+        repeated initialization overhead when syncing many documents.
+        """
+        if self._store_cache is None:
+            from rag.chroma_store import ChromaStore
+
+            self._store_cache = ChromaStore(persist_dir=self.chroma_persist_dir)
+        return self._store_cache
 
     def _log_audit_event(
         self,

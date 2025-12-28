@@ -104,6 +104,8 @@ export function AuditLog() {
   const [actionFilter, setActionFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const limit = 20;
 
   const toggleRowExpanded = (id: string) => {
@@ -116,6 +118,12 @@ export function AuditLog() {
       }
       return next;
     });
+  };
+
+  // Clear export error after 5 seconds
+  const showExportError = (message: string) => {
+    setExportError(message);
+    setTimeout(() => setExportError(null), 5000);
   };
 
   // Fetch audit logs
@@ -156,6 +164,10 @@ export function AuditLog() {
   });
 
   const handleExport = async (format: 'csv' | 'json') => {
+    if (isExporting) return;
+    setIsExporting(true);
+    setExportError(null);
+
     try {
       const params = new URLSearchParams({ format });
       if (actionFilter) params.set('action', actionFilter);
@@ -177,6 +189,10 @@ export function AuditLog() {
       document.body.removeChild(a);
     } catch (error) {
       console.error('Export failed:', error);
+      const message = error instanceof Error ? error.message : 'Export failed. Please try again.';
+      showExportError(message);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -279,20 +295,53 @@ export function AuditLog() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => handleExport('csv')}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-navy-700 border border-navy-600 text-white text-sm hover:bg-navy-600 transition-colors"
+            disabled={isExporting}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-lg border text-sm transition-colors",
+              isExporting
+                ? "bg-navy-800 border-navy-700 text-navy-500 cursor-not-allowed"
+                : "bg-navy-700 border-navy-600 text-white hover:bg-navy-600"
+            )}
           >
-            <Download className="w-4 h-4" />
+            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             Export CSV
           </button>
           <button
             onClick={() => handleExport('json')}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-navy-700 border border-navy-600 text-white text-sm hover:bg-navy-600 transition-colors"
+            disabled={isExporting}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-lg border text-sm transition-colors",
+              isExporting
+                ? "bg-navy-800 border-navy-700 text-navy-500 cursor-not-allowed"
+                : "bg-navy-700 border-navy-600 text-white hover:bg-navy-600"
+            )}
           >
-            <FileText className="w-4 h-4" />
+            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
             Export JSON
           </button>
         </div>
       </motion.div>
+
+      {/* Export Error Toast */}
+      <AnimatePresence>
+        {exportError && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 20, x: '-50%' }}
+            className="fixed bottom-6 left-1/2 transform z-50 flex items-center gap-3 px-4 py-3 rounded-lg bg-risk-high/20 border border-risk-high/30 text-risk-high shadow-lg"
+          >
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <span className="text-sm">{exportError}</span>
+            <button
+              onClick={() => setExportError(null)}
+              className="ml-2 text-risk-high/70 hover:text-risk-high"
+            >
+              ×
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Audit Log Table */}
       <motion.div
@@ -339,12 +388,20 @@ export function AuditLog() {
                   {logsData.entries.map((entry, i) => {
                     const hasDetails = entry.details && Object.keys(entry.details).length > 0;
                     const isExpanded = expandedRows.has(entry.id);
+                    // Disable animations for large datasets (>50 rows) for better performance
+                    const shouldAnimate = logsData.entries.length <= 50;
+                    const RowComponent = shouldAnimate ? motion.tr : 'tr';
+                    const animationProps = shouldAnimate
+                      ? {
+                          initial: { opacity: 0, x: -10 },
+                          animate: { opacity: 1, x: 0 },
+                          transition: { delay: Math.min(i * 0.005, 0.1) },
+                        }
+                      : {};
                     return (
-                      <motion.tr
+                      <RowComponent
                         key={entry.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: Math.min(i * 0.005, 0.1) }}
+                        {...animationProps}
                         className="border-b border-navy-700/50 hover:bg-navy-700/20"
                       >
                         <td className="py-3 px-4 text-sm text-navy-300 whitespace-nowrap">
@@ -385,7 +442,7 @@ export function AuditLog() {
                             </button>
                           )}
                         </td>
-                      </motion.tr>
+                      </RowComponent>
                     );
                   })}
                   {/* Expanded details rows */}
@@ -412,31 +469,35 @@ export function AuditLog() {
               </table>
             </div>
 
-            {/* Pagination */}
-            <div className="flex items-center justify-between p-4 border-t border-navy-700">
-              <p className="text-sm text-navy-400">
-                Showing {page * limit + 1} - {Math.min((page + 1) * limit, logsData.total)} of {logsData.total}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(page - 1)}
-                  disabled={page === 0}
-                  className="p-2 rounded-lg text-navy-400 hover:text-white hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-                <span className="text-sm text-navy-300">
-                  Page {page + 1} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage(page + 1)}
-                  disabled={page >= totalPages - 1}
-                  className="p-2 rounded-lg text-navy-400 hover:text-white hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
+            {/* Pagination - only show if there are multiple pages or at least one entry */}
+            {totalPages > 0 && (
+              <div className="flex items-center justify-between p-4 border-t border-navy-700">
+                <p className="text-sm text-navy-400">
+                  Showing {page * limit + 1} - {Math.min((page + 1) * limit, logsData.total)} of {logsData.total}
+                </p>
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPage(page - 1)}
+                      disabled={page === 0}
+                      className="p-2 rounded-lg text-navy-400 hover:text-white hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <span className="text-sm text-navy-300">
+                      Page {page + 1} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setPage(page + 1)}
+                      disabled={page >= totalPages - 1}
+                      className="p-2 rounded-lg text-navy-400 hover:text-white hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
           </>
         ) : (
           <div className="flex flex-col items-center justify-center py-16 px-8">

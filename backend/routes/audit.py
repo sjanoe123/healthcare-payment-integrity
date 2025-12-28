@@ -10,6 +10,9 @@ Security Note:
     Access to audit logs should be restricted to authorized personnel only (e.g.,
     compliance officers, security admins). Consider adding role-based access control
     via FastAPI dependencies when implementing authentication.
+
+    TODO: Implement authentication middleware before production deployment.
+    Track this in your issue tracker to ensure it's not forgotten.
 """
 
 from __future__ import annotations
@@ -17,7 +20,9 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
@@ -27,12 +32,14 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 
-# Module-level flag to track if audit table has been initialized
-# This avoids redundant CREATE TABLE IF NOT EXISTS checks on every request
+# Thread-safe initialization flag with lock
+# Prevents race conditions when multiple async handlers check/set the flag
 _audit_table_initialized = False
+_audit_table_lock = threading.Lock()
 
 # Maximum rows for export to prevent memory issues
-MAX_EXPORT_ROWS = 10000
+# Configurable via AUDIT_MAX_EXPORT_ROWS environment variable
+MAX_EXPORT_ROWS = int(os.environ.get("AUDIT_MAX_EXPORT_ROWS", "10000"))
 
 
 class AuditAction(str, Enum):
@@ -109,43 +116,63 @@ def get_db():
 def init_audit_table(conn: sqlite3.Connection) -> None:
     """Initialize the audit_logs table if it doesn't exist.
 
-    Uses a module-level flag to avoid redundant schema checks on every request.
-    The CREATE TABLE IF NOT EXISTS is idempotent but involves disk I/O.
+    Uses a module-level flag with thread lock to avoid redundant schema checks
+    on every request. The CREATE TABLE IF NOT EXISTS is idempotent but involves
+    disk I/O, so we skip it after first successful initialization.
+
+    Thread-safe via _audit_table_lock to prevent race conditions in async handlers.
     """
     global _audit_table_initialized
+
+    # Fast path: already initialized (no lock needed for read)
     if _audit_table_initialized:
         return
 
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS audit_logs (
-            id TEXT PRIMARY KEY,
-            timestamp TEXT NOT NULL,
-            action TEXT NOT NULL,
-            user_id TEXT,
-            user_email TEXT,
-            resource_type TEXT,
-            resource_id TEXT,
-            details TEXT,
-            ip_address TEXT,
-            user_agent TEXT,
-            status TEXT DEFAULT 'success',
-            error_message TEXT
+    # Slow path: acquire lock and double-check
+    with _audit_table_lock:
+        # Double-check after acquiring lock (another thread may have initialized)
+        if _audit_table_initialized:
+            return
+
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                action TEXT NOT NULL,
+                user_id TEXT,
+                user_email TEXT,
+                resource_type TEXT,
+                resource_id TEXT,
+                details TEXT,
+                ip_address TEXT,
+                user_agent TEXT,
+                status TEXT DEFAULT 'success',
+                error_message TEXT
+            )
+        """)
+
+        # Create indices for common queries
+        # Consider adding composite index for (action, timestamp) for common filter patterns
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp)"
         )
-    """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs(resource_type, resource_id)"
+        )
+        # Composite index for common filter: action + timestamp
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_action_time ON audit_logs(action, timestamp)"
+        )
 
-    # Create indices for common queries
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp)"
-    )
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id)")
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs(resource_type, resource_id)"
-    )
-
-    conn.commit()
-    _audit_table_initialized = True
+        conn.commit()
+        _audit_table_initialized = True
 
 
 def log_audit_event(
@@ -564,7 +591,7 @@ async def export_audit_logs(
 
 
 @router.get("/actions")
-async def list_audit_actions() -> dict[str, list[str]]:
+async def list_audit_actions() -> dict[str, Any]:
     """List all available audit action types."""
     return {
         "actions": [action.value for action in AuditAction],
