@@ -134,6 +134,9 @@ def get_db_context() -> Generator[sqlite3.Connection, None, None]:
 def validate_iso_date(date_str: str, param_name: str) -> str:
     """Validate and normalize an ISO 8601 date string.
 
+    Requires at least YYYY-MM-DD format for proper SQLite timestamp comparisons.
+    Partial dates like "2024-01" are rejected to prevent unexpected behavior.
+
     Args:
         date_str: The date string to validate
         param_name: Parameter name for error messages
@@ -142,7 +145,7 @@ def validate_iso_date(date_str: str, param_name: str) -> str:
         The validated date string
 
     Raises:
-        HTTPException: If the date format is invalid
+        HTTPException: If the date format is invalid or incomplete
     """
     if not date_str:
         return date_str
@@ -151,7 +154,17 @@ def validate_iso_date(date_str: str, param_name: str) -> str:
         # Handle common formats: ISO 8601 with or without timezone
         # Normalize 'Z' suffix to '+00:00' for fromisoformat
         normalized = date_str.replace("Z", "+00:00")
-        datetime.fromisoformat(normalized)
+        datetime.fromisoformat(normalized)  # Validate format
+
+        # Enforce minimum YYYY-MM-DD format for reliable SQLite comparisons
+        # Check that the original string contains at least a full date (10 chars: YYYY-MM-DD)
+        if len(date_str) < 10:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Date '{param_name}' must include at least year, month, and day (YYYY-MM-DD). "
+                f"Example: 2024-01-15 or 2024-01-15T10:00:00Z",
+            )
+
         return date_str
     except ValueError:
         raise HTTPException(

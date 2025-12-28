@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuditLog } from './AuditLog';
@@ -10,6 +11,7 @@ vi.mock('@/api/client', () => ({
   api: {
     get: vi.fn(),
   },
+  getErrorMessage: (error: unknown) => error instanceof Error ? error.message : String(error),
 }));
 
 // Types for framer-motion mock
