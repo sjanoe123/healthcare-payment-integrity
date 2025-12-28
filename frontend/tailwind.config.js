@@ -8,12 +8,16 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Navy backgrounds
+        // Navy backgrounds (based on Tailwind slate palette)
         navy: {
           900: '#0F172A',
           800: '#1E293B',
           700: '#334155',
           600: '#475569',
+          500: '#64748B',
+          400: '#94A3B8',
+          300: '#CBD5E1',
+          200: '#E2E8F0',
         },
         // Kirk's signature purple
         kirk: {

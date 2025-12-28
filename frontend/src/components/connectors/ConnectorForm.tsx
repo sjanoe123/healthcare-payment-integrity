@@ -9,7 +9,6 @@ import {
   helperTextClasses,
   labelClasses,
   inlineLabelClasses,
-  sectionHeaderClasses,
   subsectionHeaderClasses,
   dividerClasses,
 } from '../../utils/formStyles';
