@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { api, getErrorMessage } from '@/api/client';
@@ -397,85 +397,84 @@ export function AuditLog() {
                   </tr>
                 </thead>
                 <tbody>
-                  {logsData.entries.map((entry, i) => {
-                    const hasDetails = entry.details && Object.keys(entry.details).length > 0;
-                    const isExpanded = expandedRows.has(entry.id);
-                    // Disable animations for large datasets (>50 rows) for better performance
-                    const shouldAnimate = logsData.entries.length <= 50;
-                    const RowComponent = shouldAnimate ? motion.tr : 'tr';
-                    const animationProps = shouldAnimate
-                      ? {
-                          initial: { opacity: 0, x: -10 },
-                          animate: { opacity: 1, x: 0 },
-                          transition: { delay: Math.min(i * 0.005, 0.1) },
-                        }
-                      : {};
-                    return (
-                      <RowComponent
-                        key={entry.id}
-                        {...animationProps}
-                        className="border-b border-navy-700/50 hover:bg-navy-700/20"
-                      >
-                        <td className="py-3 px-4 text-sm text-navy-300 whitespace-nowrap">
-                          {formatTimestamp(entry.timestamp)}
-                        </td>
-                        <td className="py-3 px-4">
-                          <ActionBadge action={entry.action} />
-                        </td>
-                        <td className="py-3 px-4 text-sm text-navy-300">
-                          {entry.user_email || entry.user_id || (
-                            <span className="text-navy-500 italic">anonymous</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
-                          {entry.resource_type && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-navy-400">{entry.resource_type}:</span>
-                              <span className="font-mono text-xs text-white truncate max-w-32">
-                                {entry.resource_id}
-                              </span>
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
-                          <StatusBadge status={entry.status} />
-                        </td>
-                        <td className="py-3 px-4">
-                          {hasDetails && (
-                            <button
-                              onClick={() => toggleRowExpanded(entry.id)}
-                              className="flex items-center gap-1 text-xs text-kirk hover:text-kirk/80"
-                            >
-                              <ChevronDown className={cn(
-                                'w-3 h-3 transition-transform',
-                                isExpanded && 'rotate-180'
-                              )} />
-                              {isExpanded ? 'Hide' : 'View'} details
-                            </button>
-                          )}
-                        </td>
-                      </RowComponent>
-                    );
-                  })}
-                  {/* Expanded details rows */}
                   <AnimatePresence>
-                    {logsData.entries
-                      .filter((entry) => expandedRows.has(entry.id) && entry.details)
-                      .map((entry) => (
-                        <motion.tr
-                          key={`${entry.id}-details`}
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="bg-navy-900/50"
-                        >
-                          <td colSpan={6} className="py-3 px-4">
-                            <pre className="text-xs text-navy-300 font-mono overflow-x-auto max-w-full whitespace-pre-wrap">
-                              {JSON.stringify(entry.details, null, 2)}
-                            </pre>
-                          </td>
-                        </motion.tr>
-                      ))}
+                    {logsData.entries.map((entry, i) => {
+                      const hasDetails = entry.details && Object.keys(entry.details).length > 0;
+                      const isExpanded = expandedRows.has(entry.id);
+                      // Disable animations for large datasets (>50 rows) for better performance
+                      const shouldAnimate = logsData.entries.length <= 50;
+                      const RowComponent = shouldAnimate ? motion.tr : 'tr';
+                      const animationProps = shouldAnimate
+                        ? {
+                            initial: { opacity: 0, x: -10 },
+                            animate: { opacity: 1, x: 0 },
+                            transition: { delay: Math.min(i * 0.005, 0.1) },
+                          }
+                        : {};
+                      return (
+                        <React.Fragment key={entry.id}>
+                          <RowComponent
+                            {...animationProps}
+                            className="border-b border-navy-700/50 hover:bg-navy-700/20"
+                          >
+                            <td className="py-3 px-4 text-sm text-navy-300 whitespace-nowrap">
+                              {formatTimestamp(entry.timestamp)}
+                            </td>
+                            <td className="py-3 px-4">
+                              <ActionBadge action={entry.action} />
+                            </td>
+                            <td className="py-3 px-4 text-sm text-navy-300">
+                              {entry.user_email || entry.user_id || (
+                                <span className="text-navy-500 italic">anonymous</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              {entry.resource_type && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-navy-400">{entry.resource_type}:</span>
+                                  <span className="font-mono text-xs text-white truncate max-w-32">
+                                    {entry.resource_id}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <StatusBadge status={entry.status} />
+                            </td>
+                            <td className="py-3 px-4">
+                              {hasDetails && (
+                                <button
+                                  onClick={() => toggleRowExpanded(entry.id)}
+                                  className="flex items-center gap-1 text-xs text-kirk hover:text-kirk/80"
+                                >
+                                  <ChevronDown className={cn(
+                                    'w-3 h-3 transition-transform',
+                                    isExpanded && 'rotate-180'
+                                  )} />
+                                  {isExpanded ? 'Hide' : 'View'} details
+                                </button>
+                              )}
+                            </td>
+                          </RowComponent>
+                          {/* Expanded details row - rendered directly after parent for accessibility */}
+                          {isExpanded && hasDetails && (
+                            <motion.tr
+                              key={`${entry.id}-details`}
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="bg-navy-900/50"
+                            >
+                              <td colSpan={6} className="py-3 px-4">
+                                <pre className="text-xs text-navy-300 font-mono overflow-x-auto max-w-full whitespace-pre-wrap">
+                                  {JSON.stringify(entry.details, null, 2)}
+                                </pre>
+                              </td>
+                            </motion.tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </AnimatePresence>
                 </tbody>
               </table>

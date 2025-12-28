@@ -62,6 +62,9 @@ class AuditAction(str, Enum):
     POLICY_UPLOAD = "policy.upload"
     POLICY_DELETE = "policy.delete"
     POLICY_SEARCH = "policy.search"
+    POLICY_SYNC_START = "policy.sync_start"
+    POLICY_SYNC_COMPLETE = "policy.sync_complete"
+    POLICY_SYNC_FAILED = "policy.sync_failed"
 
     # System
     AUTH_LOGIN = "auth.login"
