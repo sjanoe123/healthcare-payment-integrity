@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
 import tempfile
 from unittest.mock import patch
 
@@ -102,7 +101,9 @@ class TestAuditLogEvent:
             )
 
             cursor = conn.cursor()
-            cursor.execute("SELECT status, error_message FROM audit_logs WHERE id = ?", (audit_id,))
+            cursor.execute(
+                "SELECT status, error_message FROM audit_logs WHERE id = ?", (audit_id,)
+            )
             row = cursor.fetchone()
 
             assert row[0] == "error"
@@ -219,9 +220,15 @@ class TestAuditStats:
             init_audit_table(conn)
 
             # Add varied logs
-            log_audit_event(conn, action="claim.upload", user_id="user1", status="success")
-            log_audit_event(conn, action="claim.upload", user_id="user1", status="success")
-            log_audit_event(conn, action="claim.analyze", user_id="user2", status="error")
+            log_audit_event(
+                conn, action="claim.upload", user_id="user1", status="success"
+            )
+            log_audit_event(
+                conn, action="claim.upload", user_id="user1", status="success"
+            )
+            log_audit_event(
+                conn, action="claim.analyze", user_id="user2", status="error"
+            )
 
             conn.close()
 

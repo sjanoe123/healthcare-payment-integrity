@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuditLog } from './AuditLog';
 import { api } from '@/api/client';
+import type { ReactNode, HTMLAttributes } from 'react';
 
 // Mock the API client
 vi.mock('@/api/client', () => ({
@@ -11,13 +12,18 @@ vi.mock('@/api/client', () => ({
   },
 }));
 
+// Types for framer-motion mock
+interface MotionProps extends HTMLAttributes<HTMLElement> {
+  children?: ReactNode;
+}
+
 // Mock framer-motion to avoid animation issues in tests
 vi.mock('framer-motion', () => ({
   motion: {
-    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
-    tr: ({ children, ...props }: any) => <tr {...props}>{children}</tr>,
+    div: ({ children, ...props }: MotionProps) => <div {...props}>{children}</div>,
+    tr: ({ children, ...props }: MotionProps) => <tr {...props}>{children}</tr>,
   },
-  AnimatePresence: ({ children }: any) => children,
+  AnimatePresence: ({ children }: { children: ReactNode }) => children,
 }));
 
 const createQueryClient = () =>
@@ -37,6 +43,9 @@ const renderWithClient = (ui: React.ReactElement) => {
   );
 };
 
+// Helper to get the mocked api.get function
+const mockApiGet = api.get as Mock;
+
 describe('AuditLog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -45,7 +54,7 @@ describe('AuditLog', () => {
   describe('Loading State', () => {
     it('shows loading spinner while fetching data', async () => {
       // Mock slow response
-      (api.get as any).mockImplementation(
+      mockApiGet.mockImplementation(
         () => new Promise((resolve) => setTimeout(resolve, 100))
       );
 
@@ -59,7 +68,7 @@ describe('AuditLog', () => {
 
   describe('Empty State', () => {
     it('shows empty state when no audit logs exist', async () => {
-      (api.get as any).mockImplementation((url: string) => {
+      mockApiGet.mockImplementation((url: string) => {
         if (url.includes('/api/audit/stats')) {
           return Promise.resolve({
             data: {
@@ -146,7 +155,7 @@ describe('AuditLog', () => {
     };
 
     beforeEach(() => {
-      (api.get as any).mockImplementation((url: string) => {
+      mockApiGet.mockImplementation((url: string) => {
         if (url.includes('/api/audit/stats')) {
           return Promise.resolve({ data: mockStatsResponse });
         }
@@ -207,7 +216,7 @@ describe('AuditLog', () => {
 
   describe('Filtering', () => {
     it('renders action filter dropdown', async () => {
-      (api.get as any).mockImplementation((url: string) => {
+      mockApiGet.mockImplementation((url: string) => {
         if (url.includes('/api/audit/stats')) {
           return Promise.resolve({
             data: {
@@ -244,7 +253,7 @@ describe('AuditLog', () => {
     });
 
     it('renders status filter dropdown', async () => {
-      (api.get as any).mockImplementation((url: string) => {
+      mockApiGet.mockImplementation((url: string) => {
         if (url.includes('/api/audit/stats')) {
           return Promise.resolve({
             data: {
@@ -290,7 +299,7 @@ describe('AuditLog', () => {
     };
 
     it('renders export buttons', async () => {
-      (api.get as any).mockImplementation((url: string) => {
+      mockApiGet.mockImplementation((url: string) => {
         if (url.includes('/api/audit/stats')) {
           return Promise.resolve({ data: mockStatsResponse });
         }
@@ -320,7 +329,7 @@ describe('AuditLog', () => {
 
     it('calls export API when CSV button clicked', async () => {
       const mockBlob = new Blob(['test'], { type: 'text/csv' });
-      (api.get as any).mockImplementation((url: string, config?: any) => {
+      mockApiGet.mockImplementation((url: string, config?: { responseType?: string }) => {
         if (url.includes('/api/audit/stats')) {
           return Promise.resolve({ data: mockStatsResponse });
         }
@@ -395,7 +404,7 @@ describe('AuditLog', () => {
         date_range: { earliest: '2024-01-15T10:00:00Z', latest: '2024-01-15T10:00:00Z' },
       };
 
-      (api.get as any).mockImplementation((url: string) => {
+      mockApiGet.mockImplementation((url: string) => {
         if (url.includes('/api/audit/stats')) {
           return Promise.resolve({ data: mockStatsResponse });
         }
@@ -423,8 +432,29 @@ describe('AuditLog', () => {
 
   describe('Header', () => {
     it('displays Audit Log title', async () => {
-      (api.get as any).mockResolvedValue({
-        data: { entries: [], total: 0, limit: 20, offset: 0, filters_applied: {} },
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/api/audit/stats')) {
+          return Promise.resolve({
+            data: {
+              total_entries: 0,
+              entries_by_action: {},
+              entries_by_status: {},
+              entries_by_user: {},
+              date_range: { earliest: '', latest: '' },
+            },
+          });
+        }
+        if (url.includes('/api/audit/actions')) {
+          return Promise.resolve({
+            data: {
+              actions: ['claim.upload'],
+              categories: { claim: ['claim.upload'] },
+            },
+          });
+        }
+        return Promise.resolve({
+          data: { entries: [], total: 0, limit: 20, offset: 0, filters_applied: {} },
+        });
       });
 
       renderWithClient(<AuditLog />);
@@ -433,8 +463,29 @@ describe('AuditLog', () => {
     });
 
     it('displays HIPAA compliance description', async () => {
-      (api.get as any).mockResolvedValue({
-        data: { entries: [], total: 0, limit: 20, offset: 0, filters_applied: {} },
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/api/audit/stats')) {
+          return Promise.resolve({
+            data: {
+              total_entries: 0,
+              entries_by_action: {},
+              entries_by_status: {},
+              entries_by_user: {},
+              date_range: { earliest: '', latest: '' },
+            },
+          });
+        }
+        if (url.includes('/api/audit/actions')) {
+          return Promise.resolve({
+            data: {
+              actions: ['claim.upload'],
+              categories: { claim: ['claim.upload'] },
+            },
+          });
+        }
+        return Promise.resolve({
+          data: { entries: [], total: 0, limit: 20, offset: 0, filters_applied: {} },
+        });
       });
 
       renderWithClient(<AuditLog />);

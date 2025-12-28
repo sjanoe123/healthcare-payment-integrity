@@ -23,11 +23,12 @@ import json
 import os
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Generator
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
@@ -111,6 +112,52 @@ def get_db():
 
     db_path = os.environ.get("DB_PATH", "prototype.db")
     return sqlite3.connect(db_path, check_same_thread=False)
+
+
+@contextmanager
+def get_db_context() -> Generator[sqlite3.Connection, None, None]:
+    """Context manager for database connections.
+
+    Ensures connections are properly closed even if exceptions occur.
+    Usage:
+        with get_db_context() as conn:
+            cursor = conn.cursor()
+            ...
+    """
+    conn = get_db()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def validate_iso_date(date_str: str, param_name: str) -> str:
+    """Validate and normalize an ISO 8601 date string.
+
+    Args:
+        date_str: The date string to validate
+        param_name: Parameter name for error messages
+
+    Returns:
+        The validated date string
+
+    Raises:
+        HTTPException: If the date format is invalid
+    """
+    if not date_str:
+        return date_str
+
+    try:
+        # Handle common formats: ISO 8601 with or without timezone
+        # Normalize 'Z' suffix to '+00:00' for fromisoformat
+        normalized = date_str.replace("Z", "+00:00")
+        datetime.fromisoformat(normalized)
+        return date_str
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid date format for '{param_name}'. Use ISO 8601 format (e.g., 2024-01-15T10:00:00Z)",
+        )
 
 
 def init_audit_table(conn: sqlite3.Connection) -> None:
@@ -243,92 +290,96 @@ async def list_audit_logs(
     end_date: str | None = Query(default=None, description="End date (ISO format)"),
 ) -> AuditLogListResponse:
     """List audit log entries with filtering and pagination."""
-    conn = get_db()
-    init_audit_table(conn)
-    cursor = conn.cursor()
-
-    # Build query with filters
-    conditions = []
-    params: list[Any] = []
-
-    if action:
-        conditions.append("action = ?")
-        params.append(action)
-
-    if user_id:
-        conditions.append("user_id = ?")
-        params.append(user_id)
-
-    if resource_type:
-        conditions.append("resource_type = ?")
-        params.append(resource_type)
-
-    if resource_id:
-        conditions.append("resource_id = ?")
-        params.append(resource_id)
-
-    if status:
-        conditions.append("status = ?")
-        params.append(status)
-
+    # Validate date parameters
     if start_date:
-        conditions.append("timestamp >= ?")
-        params.append(start_date)
-
+        validate_iso_date(start_date, "start_date")
     if end_date:
-        conditions.append("timestamp <= ?")
-        params.append(end_date)
+        validate_iso_date(end_date, "end_date")
 
-    where_clause = " AND ".join(conditions) if conditions else "1=1"
+    with get_db_context() as conn:
+        init_audit_table(conn)
+        cursor = conn.cursor()
 
-    # SAFETY NOTE: The where_clause is constructed from hardcoded column names only
-    # (action, user_id, resource_type, resource_id, status, timestamp).
-    # User input is passed via parameterized queries (?), preventing SQL injection.
-    # Get total count
-    cursor.execute(f"SELECT COUNT(*) FROM audit_logs WHERE {where_clause}", params)
-    total = cursor.fetchone()[0]
+        # Build query with filters
+        conditions = []
+        params: list[Any] = []
 
-    # Get entries
-    cursor.execute(
-        f"""
-        SELECT id, timestamp, action, user_id, user_email,
-               resource_type, resource_id, details,
-               ip_address, user_agent, status, error_message
-        FROM audit_logs
-        WHERE {where_clause}
-        ORDER BY timestamp DESC
-        LIMIT ? OFFSET ?
-        """,
-        params + [limit, offset],
-    )
+        if action:
+            conditions.append("action = ?")
+            params.append(action)
 
-    entries = []
-    for row in cursor.fetchall():
-        details = None
-        if row[7]:
-            try:
-                details = json.loads(row[7])
-            except json.JSONDecodeError:
-                details = {"raw": row[7]}
+        if user_id:
+            conditions.append("user_id = ?")
+            params.append(user_id)
 
-        entries.append(
-            AuditLogEntry(
-                id=row[0],
-                timestamp=row[1],
-                action=row[2],
-                user_id=row[3],
-                user_email=row[4],
-                resource_type=row[5],
-                resource_id=row[6],
-                details=details,
-                ip_address=row[8],
-                user_agent=row[9],
-                status=row[10] or "success",
-                error_message=row[11],
-            )
+        if resource_type:
+            conditions.append("resource_type = ?")
+            params.append(resource_type)
+
+        if resource_id:
+            conditions.append("resource_id = ?")
+            params.append(resource_id)
+
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+
+        if start_date:
+            conditions.append("timestamp >= ?")
+            params.append(start_date)
+
+        if end_date:
+            conditions.append("timestamp <= ?")
+            params.append(end_date)
+
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+
+        # SAFETY NOTE: The where_clause is constructed from hardcoded column names only
+        # (action, user_id, resource_type, resource_id, status, timestamp).
+        # User input is passed via parameterized queries (?), preventing SQL injection.
+        # Get total count
+        cursor.execute(f"SELECT COUNT(*) FROM audit_logs WHERE {where_clause}", params)
+        total = cursor.fetchone()[0]
+
+        # Get entries
+        cursor.execute(
+            f"""
+            SELECT id, timestamp, action, user_id, user_email,
+                   resource_type, resource_id, details,
+                   ip_address, user_agent, status, error_message
+            FROM audit_logs
+            WHERE {where_clause}
+            ORDER BY timestamp DESC
+            LIMIT ? OFFSET ?
+            """,
+            params + [limit, offset],
         )
 
-    conn.close()
+        entries = []
+        for row in cursor.fetchall():
+            details = None
+            if row[7]:
+                try:
+                    details = json.loads(row[7])
+                except json.JSONDecodeError:
+                    details = {"raw": row[7]}
+
+            entries.append(
+                AuditLogEntry(
+                    id=row[0],
+                    timestamp=row[1],
+                    action=row[2],
+                    user_id=row[3],
+                    user_email=row[4],
+                    resource_type=row[5],
+                    resource_id=row[6],
+                    details=details,
+                    ip_address=row[8],
+                    user_agent=row[9],
+                    status=row[10] or "success",
+                    error_message=row[11],
+                )
+            )
 
     return AuditLogListResponse(
         entries=entries,
@@ -353,78 +404,82 @@ async def get_audit_stats(
     end_date: str | None = Query(default=None, description="End date (ISO format)"),
 ) -> AuditStats:
     """Get summary statistics for audit logs."""
-    conn = get_db()
-    init_audit_table(conn)
-    cursor = conn.cursor()
-
-    # Build date filter
-    conditions = []
-    params: list[Any] = []
-
+    # Validate date parameters
     if start_date:
-        conditions.append("timestamp >= ?")
-        params.append(start_date)
-
+        validate_iso_date(start_date, "start_date")
     if end_date:
-        conditions.append("timestamp <= ?")
-        params.append(end_date)
+        validate_iso_date(end_date, "end_date")
 
-    where_clause = " AND ".join(conditions) if conditions else "1=1"
+    with get_db_context() as conn:
+        init_audit_table(conn)
+        cursor = conn.cursor()
 
-    # Total entries
-    cursor.execute(f"SELECT COUNT(*) FROM audit_logs WHERE {where_clause}", params)
-    total_entries = cursor.fetchone()[0]
+        # Build date filter
+        conditions = []
+        params: list[Any] = []
 
-    # By action
-    cursor.execute(
-        f"""
-        SELECT action, COUNT(*) FROM audit_logs
-        WHERE {where_clause}
-        GROUP BY action
-        """,
-        params,
-    )
-    entries_by_action = dict(cursor.fetchall())
+        if start_date:
+            conditions.append("timestamp >= ?")
+            params.append(start_date)
 
-    # By status
-    cursor.execute(
-        f"""
-        SELECT COALESCE(status, 'success'), COUNT(*) FROM audit_logs
-        WHERE {where_clause}
-        GROUP BY status
-        """,
-        params,
-    )
-    entries_by_status = dict(cursor.fetchall())
+        if end_date:
+            conditions.append("timestamp <= ?")
+            params.append(end_date)
 
-    # By user (top 10)
-    cursor.execute(
-        f"""
-        SELECT COALESCE(user_id, 'anonymous'), COUNT(*) FROM audit_logs
-        WHERE {where_clause}
-        GROUP BY user_id
-        ORDER BY COUNT(*) DESC
-        LIMIT 10
-        """,
-        params,
-    )
-    entries_by_user = dict(cursor.fetchall())
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
 
-    # Date range
-    cursor.execute(
-        f"""
-        SELECT MIN(timestamp), MAX(timestamp) FROM audit_logs
-        WHERE {where_clause}
-        """,
-        params,
-    )
-    row = cursor.fetchone()
-    date_range = {
-        "earliest": row[0] or "",
-        "latest": row[1] or "",
-    }
+        # Total entries
+        cursor.execute(f"SELECT COUNT(*) FROM audit_logs WHERE {where_clause}", params)
+        total_entries = cursor.fetchone()[0]
 
-    conn.close()
+        # By action
+        cursor.execute(
+            f"""
+            SELECT action, COUNT(*) FROM audit_logs
+            WHERE {where_clause}
+            GROUP BY action
+            """,
+            params,
+        )
+        entries_by_action = dict(cursor.fetchall())
+
+        # By status
+        cursor.execute(
+            f"""
+            SELECT COALESCE(status, 'success'), COUNT(*) FROM audit_logs
+            WHERE {where_clause}
+            GROUP BY status
+            """,
+            params,
+        )
+        entries_by_status = dict(cursor.fetchall())
+
+        # By user (top 10)
+        cursor.execute(
+            f"""
+            SELECT COALESCE(user_id, 'anonymous'), COUNT(*) FROM audit_logs
+            WHERE {where_clause}
+            GROUP BY user_id
+            ORDER BY COUNT(*) DESC
+            LIMIT 10
+            """,
+            params,
+        )
+        entries_by_user = dict(cursor.fetchall())
+
+        # Date range
+        cursor.execute(
+            f"""
+            SELECT MIN(timestamp), MAX(timestamp) FROM audit_logs
+            WHERE {where_clause}
+            """,
+            params,
+        )
+        row = cursor.fetchone()
+        date_range = {
+            "earliest": row[0] or "",
+            "latest": row[1] or "",
+        }
 
     return AuditStats(
         total_entries=total_entries,
@@ -454,57 +509,62 @@ async def export_audit_logs(
     Limited to MAX_EXPORT_ROWS rows to prevent memory issues.
     For larger exports, use date range filters to batch the export.
     """
-    conn = get_db()
-    init_audit_table(conn)
-    cursor = conn.cursor()
-
-    # Log the export action itself
-    log_audit_event(
-        conn,
-        action=AuditAction.EXPORT_AUDIT.value,
-        resource_type="audit_logs",
-        details={
-            "format": format,
-            "start_date": start_date,
-            "end_date": end_date,
-            "action_filter": action,
-        },
-    )
-
-    # Build query with filters
-    conditions = []
-    params: list[Any] = []
-
+    # Validate date parameters
     if start_date:
-        conditions.append("timestamp >= ?")
-        params.append(start_date)
-
+        validate_iso_date(start_date, "start_date")
     if end_date:
-        conditions.append("timestamp <= ?")
-        params.append(end_date)
+        validate_iso_date(end_date, "end_date")
 
-    if action:
-        conditions.append("action = ?")
-        params.append(action)
+    with get_db_context() as conn:
+        init_audit_table(conn)
+        cursor = conn.cursor()
 
-    where_clause = " AND ".join(conditions) if conditions else "1=1"
+        # Log the export action itself
+        log_audit_event(
+            conn,
+            action=AuditAction.EXPORT_AUDIT.value,
+            resource_type="audit_logs",
+            details={
+                "format": format,
+                "start_date": start_date,
+                "end_date": end_date,
+                "action_filter": action,
+            },
+        )
 
-    # SAFETY NOTE: where_clause uses hardcoded column names; user input is parameterized
-    cursor.execute(
-        f"""
-        SELECT id, timestamp, action, user_id, user_email,
-               resource_type, resource_id, details,
-               ip_address, user_agent, status, error_message
-        FROM audit_logs
-        WHERE {where_clause}
-        ORDER BY timestamp DESC
-        LIMIT ?
-        """,
-        params + [limit],
-    )
+        # Build query with filters
+        conditions = []
+        params: list[Any] = []
 
-    rows = cursor.fetchall()
-    conn.close()
+        if start_date:
+            conditions.append("timestamp >= ?")
+            params.append(start_date)
+
+        if end_date:
+            conditions.append("timestamp <= ?")
+            params.append(end_date)
+
+        if action:
+            conditions.append("action = ?")
+            params.append(action)
+
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+
+        # SAFETY NOTE: where_clause uses hardcoded column names; user input is parameterized
+        cursor.execute(
+            f"""
+            SELECT id, timestamp, action, user_id, user_email,
+                   resource_type, resource_id, details,
+                   ip_address, user_agent, status, error_message
+            FROM audit_logs
+            WHERE {where_clause}
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            params + [limit],
+        )
+
+        rows = cursor.fetchall()
 
     if format == "json":
         # JSON export

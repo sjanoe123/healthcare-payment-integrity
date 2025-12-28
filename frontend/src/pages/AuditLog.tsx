@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/api/client';
+import { api, getErrorMessage } from '@/api/client';
 import type { AuditLogListResponse, AuditStats } from '@/api/types';
 import { cn } from '@/lib/utils';
 import {
@@ -127,7 +127,7 @@ export function AuditLog() {
   };
 
   // Fetch audit logs
-  const { data: logsData, isLoading: logsLoading } = useQuery<AuditLogListResponse>({
+  const { data: logsData, isLoading: logsLoading, error: logsError } = useQuery<AuditLogListResponse>({
     queryKey: ['audit-logs', page, actionFilter, statusFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -144,7 +144,7 @@ export function AuditLog() {
   });
 
   // Fetch audit stats
-  const { data: statsData, isLoading: statsLoading } = useQuery<AuditStats>({
+  const { data: statsData, isLoading: statsLoading, error: statsError } = useQuery<AuditStats>({
     queryKey: ['audit-stats'],
     queryFn: async () => {
       const response = await api.get('/api/audit/stats');
@@ -189,8 +189,7 @@ export function AuditLog() {
       document.body.removeChild(a);
     } catch (error) {
       console.error('Export failed:', error);
-      const message = error instanceof Error ? error.message : 'Export failed. Please try again.';
-      showExportError(message);
+      showExportError(getErrorMessage(error));
     } finally {
       setIsExporting(false);
     }
@@ -227,6 +226,11 @@ export function AuditLog() {
       {statsLoading ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="w-6 h-6 animate-spin text-kirk" />
+        </div>
+      ) : statsError ? (
+        <div className="flex items-center justify-center py-8 px-4 rounded-xl bg-risk-high/10 border border-risk-high/30">
+          <AlertCircle className="w-5 h-5 text-risk-high mr-3" />
+          <span className="text-sm text-risk-high">{getErrorMessage(statsError)}</span>
         </div>
       ) : statsData && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -354,6 +358,14 @@ export function AuditLog() {
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-kirk" />
             <span className="ml-3 text-navy-400">Loading audit logs...</span>
+          </div>
+        ) : logsError ? (
+          <div className="flex items-center justify-center py-12 px-4">
+            <AlertCircle className="w-6 h-6 text-risk-high mr-3" />
+            <div className="text-center">
+              <p className="text-sm text-risk-high font-medium">Failed to load audit logs</p>
+              <p className="text-xs text-risk-high/70 mt-1">{getErrorMessage(logsError)}</p>
+            </div>
           </div>
         ) : logsData && logsData.entries.length > 0 ? (
           <>
