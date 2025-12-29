@@ -118,3 +118,15 @@ export const statusBadgeClasses = {
 } as const;
 
 export type StatusType = keyof typeof statusBadgeClasses;
+
+/**
+ * Data type badge styles for connectors.
+ */
+export const dataTypeBadgeClasses = {
+  claims: 'bg-electric/20 text-electric',
+  eligibility: 'bg-kirk/20 text-kirk-light',
+  providers: 'bg-risk-safe/20 text-risk-safe',
+  reference: 'bg-risk-caution/20 text-risk-caution',
+} as const;
+
+export type DataType = keyof typeof dataTypeBadgeClasses;

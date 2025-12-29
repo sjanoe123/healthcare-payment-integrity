@@ -8,6 +8,12 @@ import {
   useDeleteConnector,
   useTriggerSync,
 } from '../../api/hooks/useConnectors';
+import {
+  statusBadgeClasses,
+  dataTypeBadgeClasses,
+  type StatusType,
+  type DataType,
+} from '../../utils/formStyles';
 
 interface ConnectorCardProps {
   connector: Connector;
@@ -20,20 +26,6 @@ const CONNECTOR_ICONS: Record<string, string> = {
   file: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z',
 };
 
-const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
-  active: { bg: 'bg-risk-safe/20', text: 'text-risk-safe', dot: 'bg-risk-safe' },
-  inactive: { bg: 'bg-navy-700', text: 'text-navy-300', dot: 'bg-navy-500' },
-  error: { bg: 'bg-risk-critical/20', text: 'text-risk-critical', dot: 'bg-risk-critical' },
-  testing: { bg: 'bg-risk-caution/20', text: 'text-risk-caution', dot: 'bg-risk-caution' },
-};
-
-const DATA_TYPE_COLORS: Record<string, string> = {
-  claims: 'bg-electric/20 text-electric',
-  eligibility: 'bg-kirk/20 text-kirk-light',
-  providers: 'bg-risk-safe/20 text-risk-safe',
-  reference: 'bg-risk-caution/20 text-risk-caution',
-};
-
 export function ConnectorCard({ connector, onEdit }: ConnectorCardProps) {
   const [showActions, setShowActions] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -44,8 +36,8 @@ export function ConnectorCard({ connector, onEdit }: ConnectorCardProps) {
   const deleteConnector = useDeleteConnector();
   const triggerSync = useTriggerSync();
 
-  const statusColors = STATUS_COLORS[connector.status] || STATUS_COLORS.inactive;
-  const dataTypeColor = DATA_TYPE_COLORS[connector.data_type] || 'bg-navy-700 text-navy-300';
+  const statusColors = statusBadgeClasses[connector.status as StatusType] || statusBadgeClasses.inactive;
+  const dataTypeColor = dataTypeBadgeClasses[connector.data_type as DataType] || 'bg-navy-700 text-navy-300';
   const iconPath = CONNECTOR_ICONS[connector.connector_type] || CONNECTOR_ICONS.database;
 
   const handleTest = async () => {
