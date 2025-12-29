@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from backend.rules.models import RuleContext, RuleHit
+from ..models import RuleContext, RuleHit
 
 
 def cob_wrong_primary_rule(context: RuleContext) -> list[RuleHit]:

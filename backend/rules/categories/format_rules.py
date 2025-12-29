@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from backend.rules.models import RuleContext, RuleHit
-from backend.utils import parse_flexible_date
+from ..models import RuleContext, RuleHit
+from utils import parse_flexible_date
 
 
 def format_missing_field_rule(context: RuleContext) -> list[RuleHit]:

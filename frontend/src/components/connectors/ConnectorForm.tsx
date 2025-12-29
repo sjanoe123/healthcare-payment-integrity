@@ -391,11 +391,23 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
     onClose();
   };
 
+  const getMissingFields = (): string[] => {
+    const missing: string[] = [];
+    if (!formData.name) missing.push('Connector Name');
+    if (formData.connector_type === 'database') {
+      if (!formData.host) missing.push('Host');
+      if (!formData.port) missing.push('Port');
+      if (!formData.database) missing.push('Database');
+      if (!formData.username) missing.push('Username');
+    }
+    return missing;
+  };
+
   const canProceedFromConfig = () => {
     if (!formData.name) return false;
 
     if (formData.connector_type === 'database') {
-      return formData.host && formData.port && formData.database && formData.username;
+      return !!(formData.host && formData.port && formData.database && formData.username);
     } else if (formData.connector_type === 'file') {
       if (formData.subtype === 's3') {
         return !!formData.bucket;
@@ -1401,13 +1413,20 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
             </button>
 
             {step === 'config' && (
-              <button
-                onClick={() => setStep('test')}
-                disabled={!canProceedFromConfig()}
-                className="px-4 py-2 bg-gradient-to-r from-kirk to-electric text-white rounded-lg hover:from-kirk-dark hover:to-electric disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next: Test Connection
-              </button>
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  onClick={() => setStep('test')}
+                  disabled={!canProceedFromConfig()}
+                  className="px-4 py-2 bg-gradient-to-r from-kirk to-electric text-white rounded-lg hover:from-kirk-dark hover:to-electric disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next: Test Connection
+                </button>
+                {!canProceedFromConfig() && getMissingFields().length > 0 && (
+                  <span className="text-xs text-risk-critical">
+                    Missing: {getMissingFields().join(', ')}
+                  </span>
+                )}
+              </div>
             )}
 
             {step === 'test' && !testResult?.success && (

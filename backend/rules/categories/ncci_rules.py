@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from backend.rules.models import RuleContext, RuleHit
+from ..models import RuleContext, RuleHit
 
 
 def ncci_ptp_rule(context: RuleContext) -> list[RuleHit]:

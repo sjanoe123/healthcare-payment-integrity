@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from backend.rules.models import RuleContext, RuleHit
+from ..models import RuleContext, RuleHit
 
 
 def lcd_coverage_rule(context: RuleContext) -> list[RuleHit]:

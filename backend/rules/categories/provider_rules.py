@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.rules.models import RuleContext, RuleHit
+from ..models import RuleContext, RuleHit
 
 
 def provider_outlier_rule(context: RuleContext) -> list[RuleHit]:

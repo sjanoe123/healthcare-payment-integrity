@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from backend.rules.models import RuleContext, RuleHit
+from ..models import RuleContext, RuleHit
 
 
 def duplicate_line_rule(context: RuleContext) -> list[RuleHit]:
