@@ -150,6 +150,7 @@ npm run lint
   - `hooks/` - React Query hooks (useStats, useHealth, useJobs, etc.)
   - `types.ts` - TypeScript types including Kirk structured response interfaces
 - **Utilities**: `frontend/src/utils/`
+  - `formStyles.ts` - Shared dark theme form styling (WCAG AA compliant)
   - `mockData.ts` - Demo mode data with dynamic date generation
 
 ### API Endpoints
@@ -348,6 +349,61 @@ Rules return `RuleHit` objects with weights that adjust the fraud score. Organiz
 | **Audit & Compliance** | |
 | `backend/routes/audit.py` | HIPAA audit log endpoints |
 | `frontend/src/pages/AuditLog.tsx` | Audit log dashboard with export |
+| `frontend/src/utils/formStyles.ts` | Shared dark theme form styling utility |
+
+## Frontend Styling (Dark Theme)
+
+The frontend uses a consistent dark theme with navy backgrounds and WCAG AA compliant contrast.
+
+### Color Palette (Tailwind Config)
+
+| Color | Usage | Hex Values |
+|-------|-------|------------|
+| `navy-*` | Backgrounds, borders | Aliased from Tailwind slate (900-200) |
+| `kirk` | Primary accent (purple) | `#8B5CF6` (light: `#A78BFA`, dark: `#7C3AED`) |
+| `electric` | Actions, links (blue) | `#3B82F6` |
+| `risk-safe` | Success states (green) | `#10B981` |
+| `risk-caution` | Warnings (amber) | `#F59E0B` |
+| `risk-critical` | Errors, critical (red) | `#EF4444` |
+
+### Form Styling Utility (`formStyles.ts`)
+
+Import shared classes for consistent form styling:
+
+```typescript
+import {
+  inputClasses,        // Text inputs with disabled state
+  selectClasses,       // Select dropdowns
+  textareaClasses,     // Monospace textareas
+  checkboxClasses,     // Styled checkboxes
+  labelClasses,        // Form labels (navy-200)
+  helperTextClasses,   // Helper text (navy-400)
+  primaryButtonClasses, // Gradient buttons with focus-visible
+  secondaryButtonClasses,
+  statusBadgeClasses,  // Status badges (active, error, pending, etc.)
+  dataTypeBadgeClasses, // Data type badges (claims, eligibility, etc.)
+  withErrorBorder,     // Apply error border to any input class
+} from '../utils/formStyles';
+
+// Usage
+<input className={inputClasses} />
+<input className={withErrorBorder(inputClasses, hasError)} />
+<span className={`${statusBadgeClasses.active.bg} ${statusBadgeClasses.active.text}`}>
+  Active
+</span>
+```
+
+### Key Styling Patterns
+
+| Element | Classes | Notes |
+|---------|---------|-------|
+| Page background | `bg-navy-900` | Darkest background |
+| Card/panel | `bg-navy-800/50 border-navy-700/50` | Semi-transparent |
+| Input fields | `bg-navy-900/50 border-navy-600 text-white` | Includes disabled state |
+| Labels | `text-navy-200` | WCAG AA on dark bg |
+| Helper text | `text-navy-400` | Subdued but readable |
+| Focus rings | `focus:ring-kirk focus:border-kirk` | Purple accent |
+| Buttons | Include `focus-visible:ring-*` | Keyboard accessibility |
 
 ## Kirk AI Features
 
