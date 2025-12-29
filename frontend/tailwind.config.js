@@ -8,7 +8,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Navy backgrounds (based on Tailwind slate palette)
+        // Navy backgrounds (aliased from Tailwind slate for semantic naming)
         navy: {
           900: '#0F172A',
           800: '#1E293B',
