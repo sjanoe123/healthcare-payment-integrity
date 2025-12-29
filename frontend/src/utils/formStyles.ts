@@ -2,31 +2,39 @@
  * Shared form styling utilities for consistent dark theme forms.
  *
  * These classes ensure WCAG AA contrast compliance on navy-900 backgrounds.
+ *
+ * Usage:
+ * - Input/select/textarea classes include disabled state styling
+ * - Button classes include focus-visible for keyboard accessibility
+ * - Use withErrorBorder() for dynamic error state styling
+ *
+ * Note: Native <select> dropdown options may render with system default styling
+ * when clicked. For full theme support, consider a custom select component.
  */
 
 /** Base input classes for text inputs, textareas, and number inputs */
 export const inputClasses =
-  'w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk focus:border-kirk';
+  'w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk focus:border-kirk disabled:opacity-50 disabled:cursor-not-allowed';
 
 /** Input with px-4 padding (used in some forms) */
 export const inputClassesLg =
-  'w-full px-4 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk focus:border-kirk';
+  'w-full px-4 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk focus:border-kirk disabled:opacity-50 disabled:cursor-not-allowed';
 
 /** Select element classes */
 export const selectClasses =
-  'w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk focus:border-kirk';
+  'w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk focus:border-kirk disabled:opacity-50 disabled:cursor-not-allowed';
 
 /** Select with px-4 padding */
 export const selectClassesLg =
-  'w-full px-4 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk focus:border-kirk';
+  'w-full px-4 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white focus:ring-2 focus:ring-kirk focus:border-kirk disabled:opacity-50 disabled:cursor-not-allowed';
 
 /** Textarea classes */
 export const textareaClasses =
-  'w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk focus:border-kirk font-mono text-sm';
+  'w-full px-3 py-2 border border-navy-600 rounded-lg bg-navy-900/50 text-white placeholder-navy-500 focus:ring-2 focus:ring-kirk focus:border-kirk font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed';
 
 /** Checkbox classes */
 export const checkboxClasses =
-  'w-4 h-4 text-kirk border-navy-600 rounded bg-navy-900/50 focus:ring-kirk focus:ring-2';
+  'w-4 h-4 text-kirk border-navy-600 rounded bg-navy-900/50 focus:ring-kirk focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
 /** Helper/hint text below form fields - uses navy-400 for WCAG AA contrast */
 export const helperTextClasses = 'text-xs text-navy-400 mt-1';
@@ -85,21 +93,29 @@ export const dividerClasses = 'border-t border-navy-700/50 pt-4 mt-4';
 export const sectionBorderClasses = 'border-t border-navy-700/50';
 
 /**
+ * Apply error border styling to any class string.
+ * More generic than inputWithError - works with any element using border-navy-600.
+ */
+export function withErrorBorder(classes: string, hasError: boolean): string {
+  return hasError
+    ? classes.replace('border-navy-600', 'border-risk-critical')
+    : classes;
+}
+
+/**
  * Combine base input classes with error state
+ * @deprecated Use withErrorBorder(inputClasses, hasError) instead
  */
 export function inputWithError(hasError: boolean): string {
-  return hasError
-    ? inputClasses.replace('border-navy-600', 'border-risk-critical')
-    : inputClasses;
+  return withErrorBorder(inputClasses, hasError);
 }
 
 /**
  * Combine base input classes (lg) with error state
+ * @deprecated Use withErrorBorder(inputClassesLg, hasError) instead
  */
 export function inputLgWithError(hasError: boolean): string {
-  return hasError
-    ? inputClassesLg.replace('border-navy-600', 'border-risk-critical')
-    : inputClassesLg;
+  return withErrorBorder(inputClassesLg, hasError);
 }
 
 /**
@@ -115,6 +131,7 @@ export const statusBadgeClasses = {
   running: { bg: 'bg-electric/20', text: 'text-electric', dot: 'bg-electric' },
   success: { bg: 'bg-risk-safe/20', text: 'text-risk-safe', dot: 'bg-risk-safe' },
   failed: { bg: 'bg-risk-critical/20', text: 'text-risk-critical', dot: 'bg-risk-critical' },
+  default: { bg: 'bg-navy-700', text: 'text-navy-300', dot: 'bg-navy-500' },
 } as const;
 
 export type StatusType = keyof typeof statusBadgeClasses;
@@ -127,6 +144,7 @@ export const dataTypeBadgeClasses = {
   eligibility: 'bg-kirk/20 text-kirk-light',
   providers: 'bg-risk-safe/20 text-risk-safe',
   reference: 'bg-risk-caution/20 text-risk-caution',
+  default: 'bg-navy-700 text-navy-300',
 } as const;
 
 export type DataType = keyof typeof dataTypeBadgeClasses;

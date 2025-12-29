@@ -36,8 +36,8 @@ export function ConnectorCard({ connector, onEdit }: ConnectorCardProps) {
   const deleteConnector = useDeleteConnector();
   const triggerSync = useTriggerSync();
 
-  const statusColors = statusBadgeClasses[connector.status as StatusType] || statusBadgeClasses.inactive;
-  const dataTypeColor = dataTypeBadgeClasses[connector.data_type as DataType] || 'bg-navy-700 text-navy-300';
+  const statusColors = statusBadgeClasses[connector.status as StatusType] || statusBadgeClasses.default;
+  const dataTypeColor = dataTypeBadgeClasses[connector.data_type as DataType] || dataTypeBadgeClasses.default;
   const iconPath = CONNECTOR_ICONS[connector.connector_type] || CONNECTOR_ICONS.database;
 
   const handleTest = async () => {
