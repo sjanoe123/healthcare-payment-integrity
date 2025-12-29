@@ -1,6 +1,17 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCreateConnector, useTestConnection } from '../../api/hooks/useConnectors';
+import {
+  inputClasses,
+  selectClasses,
+  textareaClasses,
+  checkboxClasses,
+  helperTextClasses,
+  labelClasses,
+  inlineLabelClasses,
+  subsectionHeaderClasses,
+  dividerClasses,
+} from '../../utils/formStyles';
 
 interface ConnectorFormProps {
   onClose: () => void;
@@ -407,67 +418,67 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
     <>
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Host *</label>
+          <label className={labelClasses}>Host *</label>
           <input
             type="text"
             value={formData.host}
             onChange={(e) => updateField('host', e.target.value)}
             placeholder="localhost"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Port *</label>
+          <label className={labelClasses}>Port *</label>
           <input
             type="number"
             value={formData.port}
             onChange={(e) => updateField('port', parseInt(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Database *</label>
+        <label className={labelClasses}>Database *</label>
         <input
           type="text"
           value={formData.database}
           onChange={(e) => updateField('database', e.target.value)}
           placeholder="claims_db"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          className={inputClasses}
         />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
+          <label className={labelClasses}>Username *</label>
           <input
             type="text"
             value={formData.username}
             onChange={(e) => updateField('username', e.target.value)}
             placeholder="db_user"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <label className={labelClasses}>Password</label>
           <input
             type="password"
             value={formData.password}
             onChange={(e) => updateField('password', e.target.value)}
             placeholder="••••••••"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">SSL Mode</label>
+          <label className={labelClasses}>SSL Mode</label>
           <select
             value={formData.ssl_mode}
             onChange={(e) => updateField('ssl_mode', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={selectClasses}
           >
             {SSL_MODES.map((mode) => (
               <option key={mode.value} value={mode.value}>
@@ -477,25 +488,25 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Schema</label>
+          <label className={labelClasses}>Schema</label>
           <input
             type="text"
             value={formData.schema_name}
             onChange={(e) => updateField('schema_name', e.target.value)}
             placeholder="public"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Table (optional)</label>
+        <label className={labelClasses}>Table (optional)</label>
         <input
           type="text"
           value={formData.table}
           onChange={(e) => updateField('table', e.target.value)}
           placeholder="claims"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          className={inputClasses}
         />
       </div>
     </>
@@ -504,22 +515,22 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
   const renderS3Config = () => (
     <>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Bucket Name *</label>
+        <label className={labelClasses}>Bucket Name *</label>
         <input
           type="text"
           value={formData.bucket}
           onChange={(e) => updateField('bucket', e.target.value)}
           placeholder="my-claims-bucket"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          className={inputClasses}
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">AWS Region</label>
+        <label className={labelClasses}>AWS Region</label>
         <select
           value={formData.aws_region}
           onChange={(e) => updateField('aws_region', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          className={selectClasses}
         >
           {AWS_REGIONS.map((r) => (
             <option key={r.value} value={r.value}>
@@ -527,63 +538,63 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
             </option>
           ))}
         </select>
-        <p className="text-xs text-gray-500 mt-1">Leave empty for IAM role-based authentication</p>
+        <p className={helperTextClasses}>Leave empty for IAM role-based authentication</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Access Key ID</label>
+          <label className={labelClasses}>Access Key ID</label>
           <input
             type="text"
             value={formData.aws_access_key}
             onChange={(e) => updateField('aws_access_key', e.target.value)}
             placeholder="AKIA..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Secret Access Key</label>
+          <label className={labelClasses}>Secret Access Key</label>
           <input
             type="password"
             value={formData.aws_secret_key}
             onChange={(e) => updateField('aws_secret_key', e.target.value)}
             placeholder="••••••••"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Custom Endpoint URL</label>
+        <label className={labelClasses}>Custom Endpoint URL</label>
         <input
           type="text"
           value={formData.endpoint_url}
           onChange={(e) => updateField('endpoint_url', e.target.value)}
           placeholder="https://minio.example.com"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          className={inputClasses}
         />
-        <p className="text-xs text-gray-500 mt-1">For S3-compatible services like MinIO</p>
+        <p className={helperTextClasses}>For S3-compatible services like MinIO</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Path Prefix</label>
+          <label className={labelClasses}>Path Prefix</label>
           <input
             type="text"
             value={formData.prefix}
             onChange={(e) => updateField('prefix', e.target.value)}
             placeholder="claims/incoming/"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">File Pattern</label>
+          <label className={labelClasses}>File Pattern</label>
           <input
             type="text"
             value={formData.path_pattern}
             onChange={(e) => updateField('path_pattern', e.target.value)}
             placeholder="*.csv"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
       </div>
@@ -596,51 +607,51 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
     <>
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Host *</label>
+          <label className={labelClasses}>Host *</label>
           <input
             type="text"
             value={formData.host}
             onChange={(e) => updateField('host', e.target.value)}
             placeholder="sftp.example.com"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
+          <label className={labelClasses}>Port</label>
           <input
             type="number"
             value={formData.port}
             onChange={(e) => updateField('port', parseInt(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
+          <label className={labelClasses}>Username *</label>
           <input
             type="text"
             value={formData.username}
             onChange={(e) => updateField('username', e.target.value)}
             placeholder="sftp_user"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <label className={labelClasses}>Password</label>
           <input
             type="password"
             value={formData.password}
             onChange={(e) => updateField('password', e.target.value)}
             placeholder="••••••••"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className={labelClasses}>
           Private Key (PEM format)
         </label>
         <textarea
@@ -648,43 +659,43 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
           onChange={(e) => updateField('private_key', e.target.value)}
           placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...&#10;-----END RSA PRIVATE KEY-----"
           rows={4}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+          className={textareaClasses}
         />
-        <p className="text-xs text-gray-500 mt-1">Use instead of password for key-based auth</p>
+        <p className={helperTextClasses}>Use instead of password for key-based auth</p>
       </div>
 
       {formData.private_key && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Key Passphrase</label>
+          <label className={labelClasses}>Key Passphrase</label>
           <input
             type="password"
             value={formData.private_key_passphrase}
             onChange={(e) => updateField('private_key_passphrase', e.target.value)}
             placeholder="••••••••"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Remote Path</label>
+          <label className={labelClasses}>Remote Path</label>
           <input
             type="text"
             value={formData.remote_path}
             onChange={(e) => updateField('remote_path', e.target.value)}
             placeholder="/claims/incoming"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">File Pattern</label>
+          <label className={labelClasses}>File Pattern</label>
           <input
             type="text"
             value={formData.path_pattern}
             onChange={(e) => updateField('path_pattern', e.target.value)}
             placeholder="*.edi"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
       </div>
@@ -695,16 +706,16 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
 
   const renderFileFormatConfig = () => (
     <>
-      <div className="border-t border-gray-200 pt-4 mt-2">
-        <h4 className="text-sm font-medium text-gray-900 mb-3">File Format Settings</h4>
+      <div className={dividerClasses}>
+        <h4 className={subsectionHeaderClasses}>File Format Settings</h4>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">File Format</label>
+            <label className={labelClasses}>File Format</label>
             <select
               value={formData.file_format}
               onChange={(e) => updateField('file_format', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={selectClasses}
             >
               {FILE_FORMATS.map((f) => (
                 <option key={f.value} value={f.value}>
@@ -716,11 +727,11 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
 
           {formData.file_format === 'csv' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Delimiter</label>
+              <label className={labelClasses}>Delimiter</label>
               <select
                 value={formData.delimiter}
                 onChange={(e) => updateField('delimiter', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className={selectClasses}
               >
                 <option value=",">Comma (,)</option>
                 <option value=";">Semicolon (;)</option>
@@ -738,9 +749,9 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
                 type="checkbox"
                 checked={formData.has_header}
                 onChange={(e) => updateField('has_header', e.target.checked)}
-                className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                className={checkboxClasses}
               />
-              <span className="text-sm text-gray-700">File has header row</span>
+              <span className={inlineLabelClasses}>File has header row</span>
             </label>
           </div>
         )}
@@ -751,21 +762,21 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
               type="checkbox"
               checked={formData.archive_processed}
               onChange={(e) => updateField('archive_processed', e.target.checked)}
-              className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+              className={checkboxClasses}
             />
-            <span className="text-sm text-gray-700">Archive files after processing</span>
+            <span className={inlineLabelClasses}>Archive files after processing</span>
           </label>
         </div>
 
         {formData.archive_processed && (
           <div className="mt-3">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Archive Path</label>
+            <label className={labelClasses}>Archive Path</label>
             <input
               type="text"
               value={formData.archive_path}
               onChange={(e) => updateField('archive_path', e.target.value)}
               placeholder={formData.subtype === 's3' ? 'archive/processed/' : '/archive/processed'}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={inputClasses}
             />
           </div>
         )}
@@ -776,11 +787,11 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
   const renderAuthConfig = () => (
     <>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Authentication</label>
+        <label className={labelClasses}>Authentication</label>
         <select
           value={formData.auth_type}
           onChange={(e) => updateField('auth_type', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          className={selectClasses}
         >
           {AUTH_TYPES.map((t) => (
             <option key={t.value} value={t.value}>{t.label}</option>
@@ -791,23 +802,23 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
       {formData.auth_type === 'api_key' && (
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">API Key *</label>
+            <label className={labelClasses}>API Key *</label>
             <input
               type="password"
               value={formData.api_key}
               onChange={(e) => updateField('api_key', e.target.value)}
               placeholder="Your API key"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={inputClasses}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Header Name</label>
+            <label className={labelClasses}>Header Name</label>
             <input
               type="text"
               value={formData.api_key_header}
               onChange={(e) => updateField('api_key_header', e.target.value)}
               placeholder="X-API-Key"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={inputClasses}
             />
           </div>
         </div>
@@ -816,23 +827,23 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
       {formData.auth_type === 'basic' && (
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
+            <label className={labelClasses}>Username *</label>
             <input
               type="text"
               value={formData.username}
               onChange={(e) => updateField('username', e.target.value)}
               placeholder="username"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={inputClasses}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+            <label className={labelClasses}>Password *</label>
             <input
               type="password"
               value={formData.password}
               onChange={(e) => updateField('password', e.target.value)}
               placeholder="••••••••"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={inputClasses}
             />
           </div>
         </div>
@@ -840,13 +851,13 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
 
       {formData.auth_type === 'bearer' && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Bearer Token *</label>
+          <label className={labelClasses}>Bearer Token *</label>
           <input
             type="password"
             value={formData.bearer_token}
             onChange={(e) => updateField('bearer_token', e.target.value)}
             placeholder="Your bearer token"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            className={inputClasses}
           />
         </div>
       )}
@@ -854,45 +865,45 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
       {formData.auth_type === 'oauth2' && (
         <>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Token URL *</label>
+            <label className={labelClasses}>Token URL *</label>
             <input
               type="text"
               value={formData.oauth_token_url}
               onChange={(e) => updateField('oauth_token_url', e.target.value)}
               placeholder="https://auth.example.com/oauth/token"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={inputClasses}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Client ID *</label>
+              <label className={labelClasses}>Client ID *</label>
               <input
                 type="text"
                 value={formData.oauth_client_id}
                 onChange={(e) => updateField('oauth_client_id', e.target.value)}
                 placeholder="client_id"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className={inputClasses}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Client Secret *</label>
+              <label className={labelClasses}>Client Secret *</label>
               <input
                 type="password"
                 value={formData.oauth_client_secret}
                 onChange={(e) => updateField('oauth_client_secret', e.target.value)}
                 placeholder="••••••••"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className={inputClasses}
               />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Scopes (comma-separated)</label>
+            <label className={labelClasses}>Scopes (comma-separated)</label>
             <input
               type="text"
               value={formData.oauth_scopes}
               onChange={(e) => updateField('oauth_scopes', e.target.value)}
               placeholder="system/*.read, patient/*.read"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={inputClasses}
             />
           </div>
         </>
@@ -903,39 +914,39 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
   const renderRESTConfig = () => (
     <>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Base URL *</label>
+        <label className={labelClasses}>Base URL *</label>
         <input
           type="text"
           value={formData.base_url}
           onChange={(e) => updateField('base_url', e.target.value)}
           placeholder="https://api.example.com"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          className={inputClasses}
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Data Endpoint</label>
+        <label className={labelClasses}>Data Endpoint</label>
         <input
           type="text"
           value={formData.api_endpoint}
           onChange={(e) => updateField('api_endpoint', e.target.value)}
           placeholder="/v1/claims"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          className={inputClasses}
         />
       </div>
 
       {renderAuthConfig()}
 
-      <div className="border-t border-gray-200 pt-4 mt-2">
-        <h4 className="text-sm font-medium text-gray-900 mb-3">Response Settings</h4>
+      <div className={dividerClasses}>
+        <h4 className={subsectionHeaderClasses}>Response Settings</h4>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Pagination Type</label>
+            <label className={labelClasses}>Pagination Type</label>
             <select
               value={formData.pagination_type}
               onChange={(e) => updateField('pagination_type', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={selectClasses}
             >
               {PAGINATION_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
@@ -943,41 +954,41 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Data Path</label>
+            <label className={labelClasses}>Data Path</label>
             <input
               type="text"
               value={formData.data_path}
               onChange={(e) => updateField('data_path', e.target.value)}
               placeholder="data.items"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={inputClasses}
             />
-            <p className="text-xs text-gray-500 mt-1">JSON path to records array</p>
+            <p className={helperTextClasses}>JSON path to records array</p>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mt-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Timeout (sec)</label>
+            <label className={labelClasses}>Timeout (sec)</label>
             <input
               type="number"
               value={formData.timeout}
               onChange={(e) => updateField('timeout', parseInt(e.target.value))}
               min={5}
               max={300}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={inputClasses}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Rate Limit</label>
+            <label className={labelClasses}>Rate Limit</label>
             <input
               type="number"
               value={formData.rate_limit}
               onChange={(e) => updateField('rate_limit', parseInt(e.target.value))}
               min={1}
               max={100}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={inputClasses}
             />
-            <p className="text-xs text-gray-500 mt-1">req/sec</p>
+            <p className={helperTextClasses}>req/sec</p>
           </div>
           <div className="flex items-end pb-2">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -985,9 +996,9 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
                 type="checkbox"
                 checked={formData.verify_ssl}
                 onChange={(e) => updateField('verify_ssl', e.target.checked)}
-                className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                className={checkboxClasses}
               />
-              <span className="text-sm text-gray-700">Verify SSL</span>
+              <span className={inlineLabelClasses}>Verify SSL</span>
             </label>
           </div>
         </div>
@@ -998,21 +1009,21 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
   const renderFHIRConfig = () => (
     <>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">FHIR Server URL *</label>
+        <label className={labelClasses}>FHIR Server URL *</label>
         <input
           type="text"
           value={formData.base_url}
           onChange={(e) => updateField('base_url', e.target.value)}
           placeholder="https://fhir.example.com/r4"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          className={inputClasses}
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Resource Types</label>
+        <label className={labelClasses}>Resource Types</label>
         <div className="grid grid-cols-2 gap-2 mt-1">
           {FHIR_RESOURCES.map((r) => (
-            <label key={r.value} className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 rounded-lg hover:bg-gray-50">
+            <label key={r.value} className="flex items-center gap-2 cursor-pointer p-2 border border-navy-700/50 rounded-lg bg-navy-800/50 hover:bg-navy-700/50">
               <input
                 type="checkbox"
                 checked={formData.resource_types.includes(r.value)}
@@ -1023,9 +1034,9 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
                     updateField('resource_types', formData.resource_types.filter(v => v !== r.value));
                   }
                 }}
-                className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                className={checkboxClasses}
               />
-              <span className="text-sm text-gray-700">{r.label}</span>
+              <span className={inlineLabelClasses}>{r.label}</span>
             </label>
           ))}
         </div>
@@ -1033,32 +1044,32 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
 
       {renderAuthConfig()}
 
-      <div className="border-t border-gray-200 pt-4 mt-2">
-        <h4 className="text-sm font-medium text-gray-900 mb-3">Connection Settings</h4>
+      <div className={dividerClasses}>
+        <h4 className={subsectionHeaderClasses}>Connection Settings</h4>
 
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Timeout (sec)</label>
+            <label className={labelClasses}>Timeout (sec)</label>
             <input
               type="number"
               value={formData.timeout}
               onChange={(e) => updateField('timeout', parseInt(e.target.value))}
               min={10}
               max={300}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={inputClasses}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Rate Limit</label>
+            <label className={labelClasses}>Rate Limit</label>
             <input
               type="number"
               value={formData.rate_limit}
               onChange={(e) => updateField('rate_limit', parseInt(e.target.value))}
               min={1}
               max={50}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className={inputClasses}
             />
-            <p className="text-xs text-gray-500 mt-1">req/sec</p>
+            <p className={helperTextClasses}>req/sec</p>
           </div>
           <div className="flex items-end pb-2">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -1066,9 +1077,9 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
                 type="checkbox"
                 checked={formData.verify_ssl}
                 onChange={(e) => updateField('verify_ssl', e.target.checked)}
-                className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                className={checkboxClasses}
               />
-              <span className="text-sm text-gray-700">Verify SSL</span>
+              <span className={inlineLabelClasses}>Verify SSL</span>
             </label>
           </div>
         </div>
@@ -1088,21 +1099,21 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+        className="bg-navy-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-navy-700/50 flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Add Data Source Connector</h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <h2 className="text-xl font-bold text-white">Add Data Source Connector</h2>
+            <p className="text-sm text-navy-400 mt-1">
               {step === 'type' && 'Select connector type'}
               {step === 'config' && 'Configure connection settings'}
               {step === 'test' && 'Test your connection'}
               {step === 'schedule' && 'Configure sync schedule'}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-navy-400 hover:text-white">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -1110,17 +1121,17 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
         </div>
 
         {/* Progress Steps */}
-        <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+        <div className="px-6 py-3 bg-navy-800/50 border-b border-navy-700/50">
           <div className="flex items-center justify-between">
             {['type', 'config', 'test', 'schedule'].map((s, i) => (
               <div key={s} className="flex items-center">
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                     step === s
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-kirk text-white'
                       : ['type', 'config', 'test', 'schedule'].indexOf(step) > i
-                      ? 'bg-green-500 text-white'
-                      : 'bg-gray-200 text-gray-600'
+                      ? 'bg-risk-safe text-white'
+                      : 'bg-navy-700 text-navy-400'
                   }`}
                 >
                   {['type', 'config', 'test', 'schedule'].indexOf(step) > i ? (
@@ -1135,8 +1146,8 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
                   <div
                     className={`w-16 h-1 mx-2 ${
                       ['type', 'config', 'test', 'schedule'].indexOf(step) > i
-                        ? 'bg-green-500'
-                        : 'bg-gray-200'
+                        ? 'bg-risk-safe'
+                        : 'bg-navy-700'
                     }`}
                   />
                 )}
@@ -1158,23 +1169,23 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
                 className="space-y-4"
               >
                 {CONNECTOR_TYPES.map((ct) => (
-                  <div key={ct.type} className="border border-gray-200 rounded-lg p-4">
+                  <div key={ct.type} className="border border-navy-700/50 rounded-lg p-4">
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="p-2 bg-indigo-100 rounded-lg">
-                        <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="p-2 bg-kirk/20 rounded-lg">
+                        <svg className="w-5 h-5 text-kirk" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={ct.icon} />
                         </svg>
                       </div>
-                      <span className="font-medium text-gray-900">{ct.label}</span>
+                      <span className="font-medium text-white">{ct.label}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       {ct.subtypes.map((st) => (
                         <button
                           key={st.value}
                           onClick={() => selectType(ct.type, st.value, st.port)}
-                          className="p-3 text-left rounded-lg border border-gray-200 hover:border-indigo-500 hover:bg-indigo-50 transition-colors"
+                          className="p-3 text-left rounded-lg border border-navy-700/50 hover:border-kirk hover:bg-kirk/10 transition-colors"
                         >
-                          <span className="font-medium text-gray-800 block">{st.label}</span>
+                          <span className="font-medium text-navy-200 block">{st.label}</span>
                         </button>
                       ))}
                     </div>
@@ -1193,22 +1204,22 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
                 className="space-y-4"
               >
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Connector Name *</label>
+                  <label className={labelClasses}>Connector Name *</label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => updateField('name', e.target.value)}
                     placeholder={`e.g., Production ${formData.subtype.toUpperCase()} Claims`}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className={inputClasses}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Data Type</label>
+                  <label className={labelClasses}>Data Type</label>
                   <select
                     value={formData.data_type}
                     onChange={(e) => updateField('data_type', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    className={selectClasses}
                   >
                     {DATA_TYPES.map((dt) => (
                       <option key={dt.value} value={dt.value}>
@@ -1238,34 +1249,34 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
               >
                 {testConnection.isPending || createConnector.isPending ? (
                   <div>
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Testing connection...</p>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-kirk mx-auto mb-4"></div>
+                    <p className="text-navy-300">Testing connection...</p>
                   </div>
                 ) : testResult ? (
                   <div>
                     <div
                       className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                        testResult.success ? 'bg-green-100' : 'bg-red-100'
+                        testResult.success ? 'bg-risk-safe/20' : 'bg-risk-critical/20'
                       }`}
                     >
                       {testResult.success ? (
-                        <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-8 h-8 text-risk-safe" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                       ) : (
-                        <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-8 h-8 text-risk-critical" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       )}
                     </div>
-                    <h3 className={`text-lg font-medium ${testResult.success ? 'text-green-700' : 'text-red-700'}`}>
+                    <h3 className={`text-lg font-medium ${testResult.success ? 'text-risk-safe' : 'text-risk-critical'}`}>
                       {testResult.success ? 'Connection Successful!' : 'Connection Failed'}
                     </h3>
-                    <p className="text-gray-600 mt-2">{testResult.message}</p>
+                    <p className="text-navy-300 mt-2">{testResult.message}</p>
                     {!testResult.success && (
                       <button
                         onClick={() => setStep('config')}
-                        className="mt-4 text-indigo-600 hover:text-indigo-700 font-medium"
+                        className="mt-4 text-kirk hover:text-kirk-light font-medium"
                       >
                         Edit Configuration
                       </button>
@@ -1273,13 +1284,13 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
                   </div>
                 ) : (
                   <div>
-                    <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center mx-auto mb-4">
-                      <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-16 h-16 rounded-full bg-kirk/20 flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-kirk" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900">Ready to Test</h3>
-                    <p className="text-gray-600 mt-2">
+                    <h3 className="text-lg font-medium text-white">Ready to Test</h3>
+                    <p className="text-navy-300 mt-2">
                       Click the button below to test your connection settings.
                     </p>
                   </div>
@@ -1296,26 +1307,26 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-4"
               >
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                <div className="bg-risk-safe/10 border border-risk-safe/30 rounded-lg p-4 mb-6">
                   <div className="flex items-center gap-2">
-                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-risk-safe" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span className="text-green-800 font-medium">Connection verified successfully!</span>
+                    <span className="text-risk-safe font-medium">Connection verified successfully!</span>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Sync Mode</label>
+                  <label className={labelClasses}>Sync Mode</label>
                   <select
                     value={formData.sync_mode}
                     onChange={(e) => updateField('sync_mode', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    className={selectClasses}
                   >
                     <option value="incremental">Incremental (recommended)</option>
                     <option value="full">Full sync</option>
                   </select>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className={helperTextClasses}>
                     {formData.connector_type === 'file'
                       ? 'Incremental sync tracks processed files by modification time.'
                       : 'Incremental sync only fetches new/updated records using a watermark column.'}
@@ -1323,45 +1334,45 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Sync Schedule (cron)</label>
+                  <label className={labelClasses}>Sync Schedule (cron)</label>
                   <input
                     type="text"
                     value={formData.sync_schedule}
                     onChange={(e) => updateField('sync_schedule', e.target.value)}
                     placeholder="0 */6 * * * (every 6 hours)"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    className={inputClasses}
                   />
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className={helperTextClasses}>
                     Leave empty for manual sync only. Common: <code>0 0 * * *</code> (daily), <code>0 */6 * * *</code> (every 6h)
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Batch Size</label>
+                  <label className={labelClasses}>Batch Size</label>
                   <input
                     type="number"
                     value={formData.batch_size}
                     onChange={(e) => updateField('batch_size', parseInt(e.target.value))}
                     min={100}
                     max={10000}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    className={inputClasses}
                   />
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className={helperTextClasses}>
                     Number of records to process per batch (100-10,000).
                   </p>
                 </div>
 
                 {formData.sync_mode === 'incremental' && formData.connector_type === 'database' && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Watermark Column</label>
+                    <label className={labelClasses}>Watermark Column</label>
                     <input
                       type="text"
                       value={formData.watermark_column}
                       onChange={(e) => updateField('watermark_column', e.target.value)}
                       placeholder="updated_at"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      className={inputClasses}
                     />
-                    <p className="text-sm text-gray-500 mt-1">
+                    <p className={helperTextClasses}>
                       Column used to track incremental updates (e.g., updated_at, modified_date).
                     </p>
                   </div>
@@ -1372,20 +1383,20 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-navy-700/50 flex items-center justify-between">
           <button
             onClick={() => {
               if (step === 'config') setStep('type');
               else if (step === 'test') setStep('config');
               else if (step === 'schedule') setStep('test');
             }}
-            className={`px-4 py-2 text-gray-600 hover:text-gray-800 ${step === 'type' ? 'invisible' : ''}`}
+            className={`px-4 py-2 text-navy-400 hover:text-white ${step === 'type' ? 'invisible' : ''}`}
           >
             Back
           </button>
 
           <div className="flex gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-gray-600 hover:text-gray-800">
+            <button onClick={onClose} className="px-4 py-2 text-navy-400 hover:text-white">
               Cancel
             </button>
 
@@ -1393,7 +1404,7 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
               <button
                 onClick={() => setStep('test')}
                 disabled={!canProceedFromConfig()}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-gradient-to-r from-kirk to-electric text-white rounded-lg hover:from-kirk-dark hover:to-electric disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next: Test Connection
               </button>
@@ -1403,7 +1414,7 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
               <button
                 onClick={handleTest}
                 disabled={testConnection.isPending || createConnector.isPending}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                className="px-4 py-2 bg-gradient-to-r from-kirk to-electric text-white rounded-lg hover:from-kirk-dark hover:to-electric disabled:opacity-50"
               >
                 {testConnection.isPending || createConnector.isPending ? 'Testing...' : 'Test Connection'}
               </button>
@@ -1412,7 +1423,7 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
             {step === 'schedule' && (
               <button
                 onClick={handleComplete}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                className="px-4 py-2 bg-risk-safe text-white rounded-lg hover:bg-risk-safe/90"
               >
                 Complete Setup
               </button>
