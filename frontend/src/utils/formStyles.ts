@@ -46,29 +46,29 @@ export const subsectionHeaderClasses = 'text-sm font-medium text-white mb-3';
 /** Error message text */
 export const errorTextClasses = 'text-sm text-risk-critical mt-1';
 
-/** Primary button classes */
+/** Primary button classes - includes focus-visible for keyboard accessibility */
 export const primaryButtonClasses =
-  'px-4 py-2 bg-gradient-to-r from-kirk to-electric text-white rounded-lg hover:shadow-lg hover:shadow-kirk/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed';
+  'px-4 py-2 bg-gradient-to-r from-kirk to-electric text-white rounded-lg hover:shadow-lg hover:shadow-kirk/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kirk focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900';
 
 /** Primary button with px-6 */
 export const primaryButtonClassesLg =
-  'px-6 py-2 bg-gradient-to-r from-kirk to-electric text-white rounded-lg hover:shadow-lg hover:shadow-kirk/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed';
+  'px-6 py-2 bg-gradient-to-r from-kirk to-electric text-white rounded-lg hover:shadow-lg hover:shadow-kirk/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kirk focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900';
 
 /** Solid primary button (kirk background) */
 export const primaryButtonSolidClasses =
-  'px-4 py-2 bg-kirk text-white rounded-lg hover:bg-kirk-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+  'px-4 py-2 bg-kirk text-white rounded-lg hover:bg-kirk-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kirk-light focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900';
 
 /** Secondary button classes */
 export const secondaryButtonClasses =
-  'px-4 py-2 bg-navy-800 text-navy-300 border border-navy-600 rounded-lg hover:bg-navy-700 hover:text-white transition-colors disabled:opacity-50';
+  'px-4 py-2 bg-navy-800 text-navy-300 border border-navy-600 rounded-lg hover:bg-navy-700 hover:text-white transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kirk focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900';
 
 /** Ghost/text button classes */
 export const ghostButtonClasses =
-  'px-4 py-2 text-navy-400 hover:text-white transition-colors';
+  'px-4 py-2 text-navy-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kirk focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900';
 
 /** Success button (green) */
 export const successButtonClasses =
-  'px-6 py-2 bg-risk-safe text-white rounded-lg hover:bg-risk-safe/80 transition-colors disabled:opacity-50';
+  'px-6 py-2 bg-risk-safe text-white rounded-lg hover:bg-risk-safe/80 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risk-safe focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900';
 
 /** Card/panel container classes */
 export const cardClasses =
@@ -101,3 +101,20 @@ export function inputLgWithError(hasError: boolean): string {
     ? inputClassesLg.replace('border-navy-600', 'border-risk-critical')
     : inputClassesLg;
 }
+
+/**
+ * Status badge styles for connectors, jobs, etc.
+ * Each status has background, text, and dot color classes.
+ */
+export const statusBadgeClasses = {
+  active: { bg: 'bg-risk-safe/20', text: 'text-risk-safe', dot: 'bg-risk-safe' },
+  inactive: { bg: 'bg-navy-700', text: 'text-navy-300', dot: 'bg-navy-500' },
+  error: { bg: 'bg-risk-critical/20', text: 'text-risk-critical', dot: 'bg-risk-critical' },
+  testing: { bg: 'bg-risk-caution/20', text: 'text-risk-caution', dot: 'bg-risk-caution' },
+  pending: { bg: 'bg-navy-700', text: 'text-navy-300', dot: 'bg-navy-500' },
+  running: { bg: 'bg-electric/20', text: 'text-electric', dot: 'bg-electric' },
+  success: { bg: 'bg-risk-safe/20', text: 'text-risk-safe', dot: 'bg-risk-safe' },
+  failed: { bg: 'bg-risk-critical/20', text: 'text-risk-critical', dot: 'bg-risk-critical' },
+} as const;
+
+export type StatusType = keyof typeof statusBadgeClasses;
