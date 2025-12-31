@@ -1937,7 +1937,16 @@ async def trigger_sync(
                     (id, connector_id, job_type, sync_mode, status, started_at, triggered_by, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (job_id, connector_id, "manual", mode, "pending", now, triggered_by, now),
+                (
+                    job_id,
+                    connector_id,
+                    "manual",
+                    mode,
+                    "pending",
+                    now,
+                    triggered_by,
+                    now,
+                ),
             )
             conn.commit()
 
