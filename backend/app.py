@@ -1848,11 +1848,11 @@ async def list_scheduled_jobs():
             "jobs": jobs,
             "total_jobs": len(jobs),
         }
-    except ImportError:
+    except ImportError as e:
         return {
             "scheduler_running": False,
             "jobs": [],
-            "message": "APScheduler not installed",
+            "message": f"APScheduler not installed: {str(e)}",
         }
     except Exception as e:
         logger.error(f"Failed to list scheduled jobs: {e}")
@@ -1923,7 +1923,8 @@ async def trigger_sync(
             "message": "Sync job started in background",
         }
 
-    except ImportError:
+    except ImportError as e:
+        logger.error(f"Failed to import scheduler modules: {e}")
         # Fallback: create job record without execution
         job_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
@@ -1933,10 +1934,19 @@ async def trigger_sync(
             cursor.execute(
                 """
                 INSERT INTO sync_jobs
-                    (id, connector_id, job_type, sync_mode, status, started_at, triggered_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (id, connector_id, job_type, sync_mode, status, started_at, triggered_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (job_id, connector_id, "manual", mode, "pending", now, triggered_by),
+                (
+                    job_id,
+                    connector_id,
+                    "manual",
+                    mode,
+                    "pending",
+                    now,
+                    triggered_by,
+                    now,
+                ),
             )
             conn.commit()
 
@@ -1946,8 +1956,15 @@ async def trigger_sync(
             "connector_name": connector["name"],
             "sync_mode": mode,
             "status": "pending",
-            "message": "Sync job created. Install APScheduler for background execution.",
+            "message": f"Sync job created but worker not available: {str(e)}",
         }
+
+    except Exception as e:
+        logger.error(f"Sync job execution failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Sync job execution failed: {str(e)[:200]}",
+        )
 
 
 @app.get("/api/sync-jobs")
