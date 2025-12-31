@@ -2362,8 +2362,8 @@ async def analyze_connector_samples(
             except Exception as e:
                 claims_failed += 1
                 logger.warning(
-                    f"Failed to analyze claim {claim_row.get('claim_id')}: "
-                    f"{type(e).__name__}: {e}"
+                    f"Failed to analyze claim {claim_row.get('claim_id')} "
+                    f"from connector {connector_id}: {type(e).__name__}: {e}"
                 )
                 continue
 
