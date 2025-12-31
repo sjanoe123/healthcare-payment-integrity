@@ -16,12 +16,12 @@ help:
 	@echo "  make stats          - Show database statistics"
 	@echo "  make clean          - Remove all containers and volumes"
 	@echo ""
-	@echo "Connection details:"
+	@echo "Connection details (LOCAL DEV ONLY - never use in production):"
 	@echo "  Host: localhost"
 	@echo "  Port: 5433"
 	@echo "  Database: healthcare_claims"
 	@echo "  User: hpi_user"
-	@echo "  Password: hpi_secure_password"
+	@echo "  Password: local_dev_only"
 
 # Docker commands
 up:
@@ -65,8 +65,8 @@ setup: up seed
 	@echo "Test database ready!"
 	@echo "=========================================="
 	@echo ""
-	@echo "Connection string:"
-	@echo "  postgresql://hpi_user:hpi_secure_password@localhost:5433/healthcare_claims"
+	@echo "Connection string (LOCAL DEV ONLY):"
+	@echo "  postgresql://hpi_user:local_dev_only@localhost:5433/healthcare_claims"
 	@echo ""
 	@echo "To connect via psql:"
 	@echo "  make shell"

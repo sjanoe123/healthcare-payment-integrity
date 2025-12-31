@@ -319,7 +319,7 @@ class KirkDataSeeder:
         port = os.environ.get("DB_PORT", "5433")
         dbname = os.environ.get("DB_NAME", "healthcare_claims")
         user = os.environ.get("DB_USER", "hpi_user")
-        password = os.environ.get("DB_PASSWORD", "hpi_secure_password")
+        password = os.environ.get("DB_PASSWORD", "local_dev_only")
         return f"host={host} port={port} dbname={dbname} user={user} password={password}"
 
     def connect(self):

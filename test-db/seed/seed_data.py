@@ -13,7 +13,10 @@ Environment variables:
     DB_PORT: PostgreSQL port (default: 5433)
     DB_NAME: Database name (default: healthcare_claims)
     DB_USER: Database user (default: hpi_user)
-    DB_PASSWORD: Database password (default: hpi_secure_password)
+    DB_PASSWORD: Database password (default: local_dev_only)
+
+NOTE: Default credentials are for LOCAL DEVELOPMENT only.
+Never use these in production environments.
 """
 
 import argparse
@@ -110,7 +113,7 @@ class DataSeeder:
         port = os.environ.get("DB_PORT", "5433")
         dbname = os.environ.get("DB_NAME", "healthcare_claims")
         user = os.environ.get("DB_USER", "hpi_user")
-        password = os.environ.get("DB_PASSWORD", "hpi_secure_password")
+        password = os.environ.get("DB_PASSWORD", "local_dev_only")
         return f"host={host} port={port} dbname={dbname} user={user} password={password}"
 
     def connect(self, max_retries: int = 3, retry_delay: int = 5):
@@ -146,6 +149,14 @@ class DataSeeder:
             print(f"  WARNING: Reference data directory not found: {data_dir}")
             print("  Run 'make data-all' from the project root to download CMS data.")
             print("  Proceeding with limited fraud scenario generation...\n")
+        else:
+            # Check for minimum required files
+            required_files = ["ncci_ptp.json", "oig_exclusions.json"]
+            missing = [f for f in required_files if not (data_dir / f).exists()]
+            if missing:
+                print(f"  WARNING: Missing reference files: {', '.join(missing)}")
+                print("  Run 'make data-all' from the project root for full fraud scenarios.")
+                print("  Proceeding with available data...\n")
 
         self.ref_loader = ReferenceDataLoader(data_dir)
         self.ref_loader.load_all()
