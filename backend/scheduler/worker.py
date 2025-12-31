@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterator
 
 from .jobs import JobType, SyncJobManager, get_job_manager
-from ..connectors.constants import CONNECTOR_SECRET_FIELDS
+from connectors.constants import CONNECTOR_SECRET_FIELDS
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +211,7 @@ class SyncWorker:
             self.job_manager.add_log(job_id, "info", "Connected to data source")
 
             # Import SyncMode
-            from ..connectors.models import SyncMode
+            from connectors.models import SyncMode
 
             mode = SyncMode.INCREMENTAL if sync_mode == "incremental" else SyncMode.FULL
 
@@ -355,7 +355,7 @@ class SyncWorker:
             return config
 
         try:
-            from ..security.credentials import get_credential_manager
+            from security.credentials import get_credential_manager
 
             cred_manager = get_credential_manager()
             config = cred_manager.inject_secrets(connector_id, config, secret_fields)
@@ -387,7 +387,7 @@ class SyncWorker:
         """
         if connector_type == "database":
             if subtype == "postgresql":
-                from ..connectors.database import PostgreSQLConnector
+                from connectors.database import PostgreSQLConnector
 
                 return PostgreSQLConnector(
                     connector_id=connector_id,
@@ -395,7 +395,7 @@ class SyncWorker:
                     config=config,
                 )
             elif subtype == "mysql":
-                from ..connectors.database import MySQLConnector
+                from connectors.database import MySQLConnector
 
                 return MySQLConnector(
                     connector_id=connector_id,

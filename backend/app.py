@@ -476,6 +476,42 @@ async def health_check():
     }
 
 
+@app.get("/debug/dependencies")
+async def debug_dependencies():
+    """Debug endpoint to check installed dependencies."""
+    deps = {}
+
+    # Check APScheduler
+    try:
+        import apscheduler
+        deps["apscheduler"] = {"installed": True, "version": getattr(apscheduler, "__version__", "unknown")}
+        try:
+            from apscheduler.schedulers.background import BackgroundScheduler
+            from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+            deps["apscheduler"]["imports_ok"] = True
+        except ImportError as e:
+            deps["apscheduler"]["imports_ok"] = False
+            deps["apscheduler"]["import_error"] = str(e)
+    except ImportError as e:
+        deps["apscheduler"] = {"installed": False, "error": str(e)}
+
+    # Check SQLAlchemy
+    try:
+        import sqlalchemy
+        deps["sqlalchemy"] = {"installed": True, "version": sqlalchemy.__version__}
+    except ImportError as e:
+        deps["sqlalchemy"] = {"installed": False, "error": str(e)}
+
+    # Check scheduler module status
+    try:
+        from scheduler.scheduler import APSCHEDULER_AVAILABLE
+        deps["scheduler_module"] = {"available": APSCHEDULER_AVAILABLE}
+    except ImportError as e:
+        deps["scheduler_module"] = {"error": str(e)}
+
+    return deps
+
+
 @app.post("/api/upload", response_model=dict)
 async def upload_claim(claim: ClaimSubmission):
     """Submit a claim for analysis."""
@@ -1848,11 +1884,11 @@ async def list_scheduled_jobs():
             "jobs": jobs,
             "total_jobs": len(jobs),
         }
-    except ImportError:
+    except ImportError as e:
         return {
             "scheduler_running": False,
             "jobs": [],
-            "message": "APScheduler not installed",
+            "message": f"APScheduler not installed: {str(e)}",
         }
     except Exception as e:
         logger.error(f"Failed to list scheduled jobs: {e}")
@@ -1923,7 +1959,8 @@ async def trigger_sync(
             "message": "Sync job started in background",
         }
 
-    except ImportError:
+    except ImportError as e:
+        logger.error(f"Failed to import scheduler modules: {e}")
         # Fallback: create job record without execution
         job_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
@@ -1946,8 +1983,15 @@ async def trigger_sync(
             "connector_name": connector["name"],
             "sync_mode": mode,
             "status": "pending",
-            "message": "Sync job created. Install APScheduler for background execution.",
+            "message": f"Sync job created but worker not available: {str(e)}",
         }
+
+    except Exception as e:
+        logger.error(f"Sync job execution failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Sync job execution failed: {str(e)[:200]}",
+        )
 
 
 @app.get("/api/sync-jobs")
