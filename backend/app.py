@@ -2198,7 +2198,7 @@ async def analyze_connector_samples(
         validate_identifier,
     )
     from rules.engine import evaluate_baseline
-    from security.credentials import get_credential_manager
+    from security import get_credential_manager
 
     # Verify connector exists
     with sqlite3.connect(DB_PATH) as conn:
@@ -2213,10 +2213,12 @@ async def analyze_connector_samples(
     connector_dict = dict(connector)
     config = safe_json_loads(connector_dict.get("connection_config", "{}"), {})
 
-    # Inject secrets
+    # Inject secrets (same pattern as test_connector endpoint)
+    connector_type = connector_dict.get("connector_type")
+    secret_fields = CONNECTOR_SECRET_FIELDS.get(connector_type, [])
     try:
-        cred_manager = get_credential_manager()
-        config = cred_manager.inject_secrets(connector_id, config, ["password"])
+        cred_manager = get_credential_manager(DB_PATH)
+        config = cred_manager.inject_secrets(connector_id, config, secret_fields)
     except Exception as e:
         logger.warning(f"Failed to inject secrets: {e}")
 
