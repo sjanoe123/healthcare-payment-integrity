@@ -2154,7 +2154,7 @@ async def get_sync_job_logs(
 @app.post("/api/connectors/{connector_id}/sample-analysis")
 async def analyze_connector_samples(
     connector_id: str,
-    limit: int = Query(default=10, ge=1, le=100, alias="limit"),
+    limit: int = Query(default=10, ge=1, le=100, alias="sample_size"),
 ):
     """Analyze a sample of claims from a connector in real-time.
 
@@ -2165,7 +2165,13 @@ async def analyze_connector_samples(
     4. Returns aggregated results with key findings
 
     No sync required - fetches and analyzes claims on demand.
+
+    Args:
+        connector_id: ID of the connector to analyze
+        limit: Number of claims to analyze (1-100, default 10).
+               Also accepts 'sample_size' parameter for backward compatibility.
     """
+    from connectors.database.base_db import quote_identifier, validate_identifier
     from rules.engine import evaluate_baseline
     from security.credentials import get_credential_manager
 
@@ -2200,6 +2206,7 @@ async def analyze_connector_samples(
     sample_results = []
     preview_mode = False
     claims_fetched = []
+    db_connector = None
 
     try:
         db_connector = PostgreSQLConnector(
@@ -2208,9 +2215,19 @@ async def analyze_connector_samples(
             config=config,
         )
         db_connector.connect()
+        logger.info(f"Connected to connector {connector_id} for sample analysis")
 
-        # Fetch sample claims with claim lines
+        # Sanitize table name to prevent SQL injection
         table = config.get("table", "claims")
+        try:
+            safe_table = quote_identifier(validate_identifier(table, "table name"))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid table name: {e}")
+
+        # Build query with sanitized identifiers
+        # Note: This query assumes a standard claims schema with claim_lines table.
+        # The connector's table should have: claim_id, created_at columns
+        # and a related claim_lines table with procedure details.
         query = f"""
             SELECT c.*,
                    json_agg(json_build_object(
@@ -2222,19 +2239,28 @@ async def analyze_connector_samples(
                        'charge_amount', cl.charge_amount,
                        'diagnosis_pointer', cl.diagnosis_pointer
                    )) as items
-            FROM {table} c
+            FROM {safe_table} c
             LEFT JOIN claim_lines cl ON c.claim_id = cl.claim_id
             GROUP BY c.claim_id
             ORDER BY c.created_at DESC
-            LIMIT {limit}
+            LIMIT {int(limit)}
         """
         claims_fetched = db_connector.execute_query(query)
-        db_connector.disconnect()
+        logger.info(f"Fetched {len(claims_fetched)} claims for analysis")
 
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
         logger.error(f"Failed to fetch claims from connector: {e}")
         # Fall back to preview mode
         preview_mode = True
+    finally:
+        # Ensure connection is always closed
+        if db_connector:
+            try:
+                db_connector.disconnect()
+            except Exception:
+                pass  # Ignore disconnect errors
 
     # Analyze each claim
     if claims_fetched:
