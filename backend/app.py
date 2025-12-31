@@ -2234,22 +2234,31 @@ async def analyze_connector_samples(
         logger.info(f"Connected to connector {connector_id} for sample analysis")
 
         # Sanitize table names to prevent SQL injection
+        # Both table names are configurable in connector config
         table = config.get("table", "claims")
+        claim_lines_table = config.get("claim_lines_table", "claim_lines")
         try:
             safe_table = quote_identifier(validate_identifier(table, "table name"))
-            safe_claim_lines = quote_identifier("claim_lines")
+            safe_claim_lines = quote_identifier(
+                validate_identifier(claim_lines_table, "claim_lines table name")
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid table name: {e}")
 
         # Build query with sanitized identifiers
-        # Note: This query assumes a standard claims schema with claim_lines table.
-        # Required schema:
-        #   - claims table: claim_id (PK), member_id, billing_provider_npi,
-        #     rendering_provider_npi, facility_npi, statement_from_date,
-        #     statement_to_date, place_of_service, diagnosis_codes, total_charge,
-        #     created_at
-        #   - claim_lines table: claim_id (FK), line_number, procedure_code,
-        #     modifier_1, modifier_2, units, charge_amount, diagnosis_pointer
+        # Table names are configurable via connector config:
+        #   - "table": main claims table (default: "claims")
+        #   - "claim_lines_table": line items table (default: "claim_lines")
+        #
+        # Required schema for claims table:
+        #   claim_id (PK), member_id, billing_provider_npi, rendering_provider_npi,
+        #   facility_npi, statement_from_date, statement_to_date, place_of_service,
+        #   diagnosis_codes, total_charge, created_at
+        #
+        # Required schema for claim_lines table:
+        #   claim_id (FK), line_number, procedure_code, modifier_1, modifier_2,
+        #   units, charge_amount, diagnosis_pointer
+        #
         # Uses subquery pattern for PostgreSQL strict mode compatibility.
         query = f"""
             SELECT c.*,
