@@ -21,6 +21,7 @@ import json
 import os
 import random
 import sys
+import time
 from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
@@ -112,12 +113,22 @@ class DataSeeder:
         password = os.environ.get("DB_PASSWORD", "hpi_secure_password")
         return f"host={host} port={port} dbname={dbname} user={user} password={password}"
 
-    def connect(self):
-        """Connect to the database."""
-        print(f"Connecting to database...")
-        self.conn = psycopg2.connect(self.conn_string)
-        self.conn.autocommit = False
-        print("Connected successfully")
+    def connect(self, max_retries: int = 3, retry_delay: int = 5):
+        """Connect to the database with retry logic for CI environments."""
+        for attempt in range(max_retries):
+            try:
+                print(f"Connecting to database (attempt {attempt + 1}/{max_retries})...")
+                self.conn = psycopg2.connect(self.conn_string)
+                self.conn.autocommit = False
+                print("Connected successfully")
+                return
+            except psycopg2.OperationalError as e:
+                if attempt < max_retries - 1:
+                    print(f"Connection failed: {e}. Retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                else:
+                    print(f"Connection failed after {max_retries} attempts")
+                    raise
 
     def disconnect(self):
         """Disconnect from the database."""
@@ -787,8 +798,18 @@ def main():
         default=500,
         help="Number of providers to generate (default: 500)",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        help="Random seed for reproducible test data generation",
+    )
 
     args = parser.parse_args()
+
+    # Set random seed for reproducibility if provided
+    if args.seed is not None:
+        random.seed(args.seed)
+        print(f"Using random seed: {args.seed}")
 
     seeder = DataSeeder(
         connection_string=args.connection_string,

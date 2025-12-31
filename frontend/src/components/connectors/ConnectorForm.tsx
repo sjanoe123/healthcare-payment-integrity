@@ -399,6 +399,26 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
       if (!formData.port) missing.push('Port');
       if (!formData.database) missing.push('Database');
       if (!formData.username) missing.push('Username');
+    } else if (formData.connector_type === 'file') {
+      if (formData.subtype === 's3') {
+        if (!formData.bucket) missing.push('Bucket');
+      } else if (formData.subtype === 'sftp') {
+        if (!formData.host) missing.push('Host');
+        if (!formData.username) missing.push('Username');
+      }
+    } else if (formData.connector_type === 'api') {
+      if (!formData.base_url) missing.push('Base URL');
+      if (formData.auth_type === 'api_key' && !formData.api_key) missing.push('API Key');
+      if (formData.auth_type === 'basic') {
+        if (!formData.username) missing.push('Username');
+        if (!formData.password) missing.push('Password');
+      }
+      if (formData.auth_type === 'bearer' && !formData.bearer_token) missing.push('Bearer Token');
+      if (formData.auth_type === 'oauth2') {
+        if (!formData.oauth_token_url) missing.push('Token URL');
+        if (!formData.oauth_client_id) missing.push('Client ID');
+        if (!formData.oauth_client_secret) missing.push('Client Secret');
+      }
     }
     return missing;
   };
