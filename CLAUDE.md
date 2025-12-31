@@ -26,11 +26,16 @@ make run
 # Seed ChromaDB with policy documents
 make seed
 
-# Run unit tests
+# Run unit tests (PYTHONPATH=backend required)
 PYTHONPATH=backend pytest tests/ -v
 
 # Run a single test
 PYTHONPATH=backend pytest tests/test_rules.py::test_function_name -v
+
+# IMPORTANT: Backend imports require PYTHONPATH=backend
+# This makes 'utils', 'rules', 'mapping', etc. top-level modules
+# Use absolute imports: from utils import parse_flexible_date
+# NOT relative: from ...utils import (fails beyond top-level package)
 
 # Run integration tests (requires running server)
 make test-integration

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from backend.rules.models import RuleContext, RuleHit
-from backend.utils import parse_flexible_date
+from ..models import RuleContext, RuleHit
+from utils import parse_flexible_date
 
 
 def surgical_global_period_rule(context: RuleContext) -> list[RuleHit]:

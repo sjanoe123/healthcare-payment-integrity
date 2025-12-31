@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCreateConnector, useTestConnection } from '../../api/hooks/useConnectors';
 import {
@@ -391,16 +391,65 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
     onClose();
   };
 
+  const missingFields = useMemo((): string[] => {
+    const missing: string[] = [];
+    if (!formData.name) missing.push('Connector Name');
+    if (formData.connector_type === 'database') {
+      if (!formData.host) missing.push('Host');
+      if (!formData.port) missing.push('Port');
+      if (!formData.database) missing.push('Database');
+      if (!formData.username) missing.push('Username');
+    } else if (formData.connector_type === 'file') {
+      if (formData.subtype === 's3') {
+        if (!formData.bucket) missing.push('Bucket');
+      } else if (formData.subtype === 'sftp') {
+        if (!formData.host) missing.push('Host');
+        if (!formData.username) missing.push('Username');
+      }
+    } else if (formData.connector_type === 'api') {
+      if (!formData.base_url) missing.push('Base URL');
+      if (formData.auth_type === 'api_key' && !formData.api_key) missing.push('API Key');
+      if (formData.auth_type === 'basic') {
+        if (!formData.username) missing.push('Username');
+        if (!formData.password) missing.push('Password');
+      }
+      if (formData.auth_type === 'bearer' && !formData.bearer_token) missing.push('Bearer Token');
+      if (formData.auth_type === 'oauth2') {
+        if (!formData.oauth_token_url) missing.push('Token URL');
+        if (!formData.oauth_client_id) missing.push('Client ID');
+        if (!formData.oauth_client_secret) missing.push('Client Secret');
+      }
+    }
+    return missing;
+  }, [
+    formData.name,
+    formData.connector_type,
+    formData.subtype,
+    formData.host,
+    formData.port,
+    formData.database,
+    formData.username,
+    formData.password,
+    formData.bucket,
+    formData.base_url,
+    formData.auth_type,
+    formData.api_key,
+    formData.bearer_token,
+    formData.oauth_token_url,
+    formData.oauth_client_id,
+    formData.oauth_client_secret,
+  ]);
+
   const canProceedFromConfig = () => {
     if (!formData.name) return false;
 
     if (formData.connector_type === 'database') {
-      return formData.host && formData.port && formData.database && formData.username;
+      return !!(formData.host && formData.port && formData.database && formData.username);
     } else if (formData.connector_type === 'file') {
       if (formData.subtype === 's3') {
         return !!formData.bucket;
       } else if (formData.subtype === 'sftp') {
-        return formData.host && formData.username;
+        return !!(formData.host && formData.username);
       }
     } else if (formData.connector_type === 'api') {
       if (!formData.base_url) return false;
@@ -1401,13 +1450,20 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
             </button>
 
             {step === 'config' && (
-              <button
-                onClick={() => setStep('test')}
-                disabled={!canProceedFromConfig()}
-                className="px-4 py-2 bg-gradient-to-r from-kirk to-electric text-white rounded-lg hover:from-kirk-dark hover:to-electric disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next: Test Connection
-              </button>
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  onClick={() => setStep('test')}
+                  disabled={!canProceedFromConfig()}
+                  className="px-4 py-2 bg-gradient-to-r from-kirk to-electric text-white rounded-lg hover:from-kirk-dark hover:to-electric disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next: Test Connection
+                </button>
+                {!canProceedFromConfig() && missingFields.length > 0 && (
+                  <span className="text-xs text-risk-critical">
+                    Missing: {missingFields.join(', ')}
+                  </span>
+                )}
+              </div>
             )}
 
             {step === 'test' && !testResult?.success && (
