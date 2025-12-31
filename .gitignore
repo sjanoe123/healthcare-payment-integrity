@@ -44,3 +44,4 @@ htmlcov/
 # Type checking
 .mypy_cache/
 .vercel
+test-db/.env

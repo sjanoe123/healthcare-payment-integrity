@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCreateConnector, useTestConnection } from '../../api/hooks/useConnectors';
 import {
@@ -391,7 +391,7 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
     onClose();
   };
 
-  const getMissingFields = (): string[] => {
+  const missingFields = useMemo((): string[] => {
     const missing: string[] = [];
     if (!formData.name) missing.push('Connector Name');
     if (formData.connector_type === 'database') {
@@ -421,7 +421,24 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
       }
     }
     return missing;
-  };
+  }, [
+    formData.name,
+    formData.connector_type,
+    formData.subtype,
+    formData.host,
+    formData.port,
+    formData.database,
+    formData.username,
+    formData.password,
+    formData.bucket,
+    formData.base_url,
+    formData.auth_type,
+    formData.api_key,
+    formData.bearer_token,
+    formData.oauth_token_url,
+    formData.oauth_client_id,
+    formData.oauth_client_secret,
+  ]);
 
   const canProceedFromConfig = () => {
     if (!formData.name) return false;
@@ -432,7 +449,7 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
       if (formData.subtype === 's3') {
         return !!formData.bucket;
       } else if (formData.subtype === 'sftp') {
-        return formData.host && formData.username;
+        return !!(formData.host && formData.username);
       }
     } else if (formData.connector_type === 'api') {
       if (!formData.base_url) return false;
@@ -1441,9 +1458,9 @@ export function ConnectorForm({ onClose, onSuccess }: ConnectorFormProps) {
                 >
                   Next: Test Connection
                 </button>
-                {!canProceedFromConfig() && getMissingFields().length > 0 && (
+                {!canProceedFromConfig() && missingFields.length > 0 && (
                   <span className="text-xs text-risk-critical">
-                    Missing: {getMissingFields().join(', ')}
+                    Missing: {missingFields.join(', ')}
                   </span>
                 )}
               </div>

@@ -2,10 +2,12 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: hpi-test-db
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB: healthcare_claims
-      POSTGRES_USER: hpi_user
-      POSTGRES_PASSWORD: hpi_secure_password
+      POSTGRES_DB: ${POSTGRES_DB:-healthcare_claims}
+      POSTGRES_USER: ${POSTGRES_USER:-hpi_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hpi_secure_password}
     ports:
       - "5433:5432"
     volumes:

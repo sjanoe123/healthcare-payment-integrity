@@ -141,6 +141,12 @@ class DataSeeder:
         """Load reference data for fraud scenario generation."""
         print("\nLoading reference data...")
         data_dir = Path(__file__).parent.parent.parent / "data"
+
+        if not data_dir.exists():
+            print(f"  WARNING: Reference data directory not found: {data_dir}")
+            print("  Run 'make data-all' from the project root to download CMS data.")
+            print("  Proceeding with limited fraud scenario generation...\n")
+
         self.ref_loader = ReferenceDataLoader(data_dir)
         self.ref_loader.load_all()
 
@@ -806,8 +812,10 @@ def main():
 
     args = parser.parse_args()
 
-    # Set random seed for reproducibility if provided
+    # Validate and set random seed for reproducibility if provided
     if args.seed is not None:
+        if args.seed < 0:
+            parser.error("--seed must be a non-negative integer")
         random.seed(args.seed)
         print(f"Using random seed: {args.seed}")
 
