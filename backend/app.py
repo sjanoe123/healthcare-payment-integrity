@@ -2217,20 +2217,27 @@ async def analyze_connector_samples(
         db_connector.connect()
         logger.info(f"Connected to connector {connector_id} for sample analysis")
 
-        # Sanitize table name to prevent SQL injection
+        # Sanitize table names to prevent SQL injection
         table = config.get("table", "claims")
         try:
             safe_table = quote_identifier(validate_identifier(table, "table name"))
+            safe_claim_lines = quote_identifier("claim_lines")
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid table name: {e}")
 
         # Build query with sanitized identifiers
         # Note: This query assumes a standard claims schema with claim_lines table.
-        # The connector's table should have: claim_id, created_at columns
-        # and a related claim_lines table with procedure details.
+        # Required schema:
+        #   - claims table: claim_id (PK), member_id, billing_provider_npi,
+        #     rendering_provider_npi, facility_npi, statement_from_date,
+        #     statement_to_date, place_of_service, diagnosis_codes, total_charge,
+        #     created_at
+        #   - claim_lines table: claim_id (FK), line_number, procedure_code,
+        #     modifier_1, modifier_2, units, charge_amount, diagnosis_pointer
+        # Uses subquery pattern for PostgreSQL strict mode compatibility.
         query = f"""
             SELECT c.*,
-                   json_agg(json_build_object(
+                   (SELECT json_agg(json_build_object(
                        'line_number', cl.line_number,
                        'procedure_code', cl.procedure_code,
                        'modifier_1', cl.modifier_1,
@@ -2238,20 +2245,25 @@ async def analyze_connector_samples(
                        'units', cl.units,
                        'charge_amount', cl.charge_amount,
                        'diagnosis_pointer', cl.diagnosis_pointer
-                   )) as items
+                   ))
+                   FROM {safe_claim_lines} cl
+                   WHERE cl.claim_id = c.claim_id) as items
             FROM {safe_table} c
-            LEFT JOIN claim_lines cl ON c.claim_id = cl.claim_id
-            GROUP BY c.claim_id
             ORDER BY c.created_at DESC
             LIMIT {int(limit)}
         """
         claims_fetched = db_connector.execute_query(query)
-        logger.info(f"Fetched {len(claims_fetched)} claims for analysis")
+        logger.info(
+            f"Fetched {len(claims_fetched)} claims from connector {connector_id}"
+        )
 
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
-        logger.error(f"Failed to fetch claims from connector: {e}")
+        logger.error(
+            f"Failed to fetch claims from connector {connector_id}: "
+            f"{type(e).__name__}: {e}"
+        )
         # Fall back to preview mode
         preview_mode = True
     finally:
@@ -2263,6 +2275,11 @@ async def analyze_connector_samples(
                 pass  # Ignore disconnect errors
 
     # Analyze each claim
+    import time
+
+    analysis_start = time.time()
+    claims_failed = 0
+
     if claims_fetched:
         # Load reference datasets
         datasets = load_datasets()
@@ -2330,8 +2347,10 @@ async def analyze_connector_samples(
                 )
 
             except Exception as e:
+                claims_failed += 1
                 logger.warning(
-                    f"Failed to analyze claim {claim_row.get('claim_id')}: {e}"
+                    f"Failed to analyze claim {claim_row.get('claim_id')}: "
+                    f"{type(e).__name__}: {e}"
                 )
                 continue
 
@@ -2389,6 +2408,9 @@ async def analyze_connector_samples(
         else 0
     )
 
+    # Calculate analysis duration
+    analysis_duration_ms = int((time.time() - analysis_start) * 1000)
+
     return {
         "connector_id": connector_id,
         "connector_name": connector_dict["name"],
@@ -2401,6 +2423,12 @@ async def analyze_connector_samples(
             "low_risk": low_risk_count,
             "total_flags": total_flags,
             "avg_score": avg_score,
+        },
+        "metrics": {
+            "analysis_duration_ms": analysis_duration_ms,
+            "claims_fetched": len(claims_fetched),
+            "claims_analyzed": len(sample_results),
+            "claims_failed": claims_failed,
         },
         "results": sample_results,
         "message": (
