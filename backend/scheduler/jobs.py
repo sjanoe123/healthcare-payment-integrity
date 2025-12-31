@@ -109,6 +109,22 @@ class SyncJobManager:
                 ON sync_job_logs(job_id)
             """)
 
+            # Migration: Add created_at column if missing (for existing DBs)
+            cursor.execute("PRAGMA table_info(sync_jobs)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "created_at" not in columns:
+                logger.info("Adding created_at column to sync_jobs table")
+                cursor.execute("""
+                    ALTER TABLE sync_jobs
+                    ADD COLUMN created_at TEXT
+                """)
+                # Set default for existing rows
+                cursor.execute("""
+                    UPDATE sync_jobs
+                    SET created_at = started_at
+                    WHERE created_at IS NULL
+                """)
+
             conn.commit()
         finally:
             conn.close()
