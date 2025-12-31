@@ -2154,17 +2154,21 @@ async def get_sync_job_logs(
 @app.post("/api/connectors/{connector_id}/sample-analysis")
 async def analyze_connector_samples(
     connector_id: str,
-    sample_size: int = Query(default=10, ge=1, le=100),
+    limit: int = Query(default=10, ge=1, le=100, alias="limit"),
 ):
-    """Analyze a sample of claims from a connector to demonstrate value.
+    """Analyze a sample of claims from a connector in real-time.
 
     This endpoint:
-    1. Fetches the most recent synced claims from the connector
-    2. Runs fraud analysis on each claim
-    3. Returns aggregated results with key findings
+    1. Connects directly to the connector's data source
+    2. Fetches a sample of claims
+    3. Runs fraud analysis on each claim using the rules engine
+    4. Returns aggregated results with key findings
 
-    Use after initial sync to quickly show fraud detection capabilities.
+    No sync required - fetches and analyzes claims on demand.
     """
+    from rules.engine import evaluate_baseline
+    from security.credentials import get_credential_manager
+
     # Verify connector exists
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
@@ -2175,61 +2179,111 @@ async def analyze_connector_samples(
     if not connector:
         raise HTTPException(status_code=404, detail="Connector not found")
 
-    # Check for completed sync jobs
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT * FROM sync_jobs
-            WHERE connector_id = ? AND status = 'completed'
-            ORDER BY completed_at DESC LIMIT 1
-            """,
-            (connector_id,),
+    connector_dict = dict(connector)
+    config = safe_json_loads(connector_dict.get("connection_config", "{}"), {})
+
+    # Inject secrets
+    try:
+        cred_manager = get_credential_manager()
+        config = cred_manager.inject_secrets(connector_id, config, ["password"])
+    except Exception as e:
+        logger.warning(f"Failed to inject secrets: {e}")
+
+    # Only PostgreSQL supported for now
+    if connector_dict.get("subtype") != "postgresql":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Sample analysis only supports PostgreSQL connectors, got {connector_dict.get('subtype')}",
         )
-        last_sync = cursor.fetchone()
 
-    if not last_sync:
-        return {
-            "connector_id": connector_id,
-            "connector_name": connector["name"],
-            "status": "no_data",
-            "message": "No completed sync found. Run a sync first to import claims.",
-            "sample_size": 0,
-            "results": [],
-        }
-
-    # Check for actual analyzed claims associated with this connector's sync
-    # Claims are stored in jobs/results tables linked via sync_jobs
+    # Connect and fetch sample claims
     sample_results = []
     preview_mode = False
+    claims_fetched = []
 
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        # Try to find actual analyzed results from claims imported by this connector
-        # Look for results created after the connector's first sync
-        cursor.execute(
-            """
-            SELECT r.*, j.claim_id, j.claim_data
-            FROM results r
-            JOIN jobs j ON r.job_id = j.job_id
-            WHERE j.created_at >= (
-                SELECT MIN(started_at) FROM sync_jobs WHERE connector_id = ? AND status = 'completed'
-            )
-            ORDER BY r.created_at DESC
-            LIMIT ?
-            """,
-            (connector_id, min(sample_size, MAX_SAMPLE_ANALYSIS_SIZE)),
+    try:
+        db_connector = PostgreSQLConnector(
+            connector_id=connector_id,
+            name=connector_dict["name"],
+            config=config,
         )
-        real_results = cursor.fetchall()
+        db_connector.connect()
 
-        if real_results:
-            # Use actual analyzed claims
-            for row in real_results:
-                rule_hits = safe_json_loads(row["rule_hits"], [])
-                fraud_score = row["fraud_score"] or 0.5
+        # Fetch sample claims with claim lines
+        table = config.get("table", "claims")
+        query = f"""
+            SELECT c.*,
+                   json_agg(json_build_object(
+                       'line_number', cl.line_number,
+                       'procedure_code', cl.procedure_code,
+                       'modifier_1', cl.modifier_1,
+                       'modifier_2', cl.modifier_2,
+                       'units', cl.units,
+                       'charge_amount', cl.charge_amount,
+                       'diagnosis_pointer', cl.diagnosis_pointer
+                   )) as items
+            FROM {table} c
+            LEFT JOIN claim_lines cl ON c.claim_id = cl.claim_id
+            GROUP BY c.claim_id
+            ORDER BY c.created_at DESC
+            LIMIT {limit}
+        """
+        claims_fetched = db_connector.execute_query(query)
+        db_connector.disconnect()
+
+    except Exception as e:
+        logger.error(f"Failed to fetch claims from connector: {e}")
+        # Fall back to preview mode
+        preview_mode = True
+
+    # Analyze each claim
+    if claims_fetched:
+        # Load reference datasets
+        datasets = load_datasets()
+
+        for claim_row in claims_fetched:
+            try:
+                # Transform to analysis format
+                items = claim_row.get("items") or []
+                if isinstance(items, str):
+                    items = safe_json_loads(items, [])
+                # Filter out null items from LEFT JOIN
+                items = [i for i in items if i and i.get("procedure_code")]
+
+                claim_data = {
+                    "claim_id": claim_row.get("claim_id"),
+                    "member_id": claim_row.get("member_id"),
+                    "billing_npi": claim_row.get("billing_provider_npi"),
+                    "rendering_npi": claim_row.get("rendering_provider_npi"),
+                    "facility_npi": claim_row.get("facility_npi"),
+                    "service_date": str(claim_row.get("statement_from_date", "")),
+                    "service_end_date": str(claim_row.get("statement_to_date", "")),
+                    "place_of_service": claim_row.get("place_of_service", "11"),
+                    "diagnosis_codes": claim_row.get("diagnosis_codes") or [],
+                    "total_charge": float(claim_row.get("total_charge") or 0),
+                    "items": [
+                        {
+                            "line_number": i.get("line_number", idx + 1),
+                            "procedure_code": i.get("procedure_code"),
+                            "modifiers": [
+                                m
+                                for m in [i.get("modifier_1"), i.get("modifier_2")]
+                                if m
+                            ],
+                            "units": i.get("units", 1),
+                            "charge": float(i.get("charge_amount") or 0),
+                        }
+                        for idx, i in enumerate(items)
+                    ],
+                }
+
+                # Run rules engine
+                outcome = evaluate_baseline(claim_data, datasets)
+                fraud_score = outcome.score
+                rule_hits = [
+                    {"rule_id": h.rule_id, "description": h.description}
+                    for h in outcome.rule_hits
+                ]
 
                 if fraud_score >= 0.7:
                     risk_level = "high"
@@ -2238,25 +2292,26 @@ async def analyze_connector_samples(
                 else:
                     risk_level = "low"
 
-                # Extract top flags from rule_hits
-                top_flags = [hit.get("rule_id", "UNKNOWN") for hit in rule_hits[:3]]
-
                 sample_results.append(
                     {
-                        "claim_id": row["claim_id"],
+                        "claim_id": claim_data["claim_id"],
                         "fraud_score": round(fraud_score, 3),
                         "risk_level": risk_level,
                         "flags_count": len(rule_hits),
-                        "top_flags": top_flags,
+                        "top_flags": [h["rule_id"] for h in rule_hits[:3]],
+                        "total_charge": claim_data["total_charge"],
                     }
                 )
-        else:
-            # No real data yet - use preview mode with synthetic data
-            # This helps demonstrate the system's capabilities before real claims are processed
-            preview_mode = True
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to analyze claim {claim_row.get('claim_id')}: {e}"
+                )
+                continue
 
     # If no real results, generate preview data
-    if preview_mode:
+    if not sample_results:
+        preview_mode = True
         # Generate deterministic preview results based on connector ID
         # Note: MD5 is used here only for deterministic seeding of random data,
         # not for any security purpose. This ensures the same connector always
@@ -2264,7 +2319,7 @@ async def analyze_connector_samples(
         seed_hash = int(hashlib.md5(connector_id.encode()).hexdigest()[:8], 16)
         random.seed(seed_hash)
 
-        for i in range(min(sample_size, MAX_SAMPLE_ANALYSIS_SIZE)):
+        for i in range(min(limit, MAX_SAMPLE_ANALYSIS_SIZE)):
             score = random.uniform(0.2, 0.95)
             flags = random.randint(0, 5)
 
@@ -2310,11 +2365,10 @@ async def analyze_connector_samples(
 
     return {
         "connector_id": connector_id,
-        "connector_name": connector["name"],
+        "connector_name": connector_dict["name"],
         "status": "completed",
         "preview_mode": preview_mode,
         "sample_size": len(sample_results),
-        "last_sync_at": last_sync["completed_at"] if last_sync else None,
         "summary": {
             "high_risk": high_risk_count,
             "medium_risk": medium_risk_count,
@@ -2324,10 +2378,9 @@ async def analyze_connector_samples(
         },
         "results": sample_results,
         "message": (
-            "Preview: Showing sample fraud detection results. "
-            "Process claims through this connector to see real analysis."
+            "Preview: Could not connect to data source. Showing sample results."
             if preview_mode
-            else f"Analyzed {len(sample_results)} claims. "
+            else f"Analyzed {len(sample_results)} claims from live database. "
             f"{high_risk_count} high-risk claims detected."
         ),
     }
