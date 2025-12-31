@@ -13,6 +13,7 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -425,8 +426,13 @@ SAMPLE_DATASETS = {
 }
 
 
+@lru_cache(maxsize=1)
 def load_datasets() -> dict[str, Any]:
-    """Load reference datasets from files or return samples."""
+    """Load reference datasets from files or return samples.
+
+    Uses LRU cache since datasets change infrequently and loading
+    from disk is expensive for repeated calls.
+    """
     data_dir = Path("./data")
 
     datasets = SAMPLE_DATASETS.copy()
@@ -2186,7 +2192,11 @@ async def analyze_connector_samples(
     """
     # Local imports for functions not needed elsewhere.
     # PostgreSQLConnector uses top-level import (line 36) for connector registry.
-    from connectors.database.base_db import quote_identifier, validate_identifier
+    from connectors.database.base_db import (
+        quote_identifier,
+        sanitize_error_message,
+        validate_identifier,
+    )
     from rules.engine import evaluate_baseline
     from security.credentials import get_credential_manager
 
@@ -2242,8 +2252,12 @@ async def analyze_connector_samples(
             safe_claim_lines = quote_identifier(
                 validate_identifier(claim_lines_table, "claim_lines table name")
             )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid table name: {e}")
+        except ValueError:
+            # Generic error to avoid leaking table structure details
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid table configuration. Check connector settings.",
+            )
 
         # Build query with sanitized identifiers
         # Table names are configurable via connector config:
@@ -2293,9 +2307,11 @@ async def analyze_connector_samples(
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
+        # Sanitize error message to avoid logging sensitive connection info
+        safe_error = sanitize_error_message(str(e))
         logger.error(
             f"Failed to fetch claims from connector {connector_id}: "
-            f"{type(e).__name__}: {e}"
+            f"{type(e).__name__}: {safe_error}"
         )
         # Fall back to preview mode
         preview_mode = True
@@ -2331,6 +2347,11 @@ async def analyze_connector_samples(
                         "analysis will be based on header only"
                     )
 
+                # Parse diagnosis_codes (may be stored as JSON string)
+                diagnosis_codes = claim_row.get("diagnosis_codes") or []
+                if isinstance(diagnosis_codes, str):
+                    diagnosis_codes = safe_json_loads(diagnosis_codes, [])
+
                 claim_data = {
                     "claim_id": claim_row.get("claim_id"),
                     "member_id": claim_row.get("member_id"),
@@ -2340,7 +2361,7 @@ async def analyze_connector_samples(
                     "service_date": str(claim_row.get("statement_from_date", "")),
                     "service_end_date": str(claim_row.get("statement_to_date", "")),
                     "place_of_service": claim_row.get("place_of_service", "11"),
-                    "diagnosis_codes": claim_row.get("diagnosis_codes") or [],
+                    "diagnosis_codes": diagnosis_codes,
                     "total_charge": float(claim_row.get("total_charge") or 0),
                     "items": [
                         {
@@ -2432,6 +2453,7 @@ async def analyze_connector_samples(
                     )
                     if flags > 0
                     else [],
+                    "total_charge": round(random.uniform(100, 5000), 2),
                 }
             )
 
