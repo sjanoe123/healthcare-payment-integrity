@@ -8,6 +8,7 @@ import logging
 import os
 import random
 import sqlite3
+import time
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import asdict
@@ -2169,8 +2170,22 @@ async def analyze_connector_samples(
     Args:
         connector_id: ID of the connector to analyze
         limit: Number of claims to analyze (1-100, default 10).
-               Also accepts 'sample_size' parameter for backward compatibility.
+               Query parameter name is 'sample_size' for backward compatibility.
+
+    Returns:
+        JSON response with:
+        - connector_id, connector_name: Connector identification
+        - preview_mode: True if using synthetic data (connection failed)
+        - summary: Risk level counts and average score
+        - metrics: Analysis timing and claim counts
+        - results: Array of claim analysis results
+
+    Raises:
+        HTTPException 404: Connector not found
+        HTTPException 400: Non-PostgreSQL connector or invalid table name
     """
+    # Local imports for functions not needed elsewhere.
+    # PostgreSQLConnector uses top-level import (line 36) for connector registry.
     from connectors.database.base_db import quote_identifier, validate_identifier
     from rules.engine import evaluate_baseline
     from security.credentials import get_credential_manager
@@ -2275,8 +2290,6 @@ async def analyze_connector_samples(
                 pass  # Ignore disconnect errors
 
     # Analyze each claim
-    import time
-
     analysis_start = time.time()
     claims_failed = 0
 
