@@ -476,42 +476,6 @@ async def health_check():
     }
 
 
-@app.get("/debug/dependencies")
-async def debug_dependencies():
-    """Debug endpoint to check installed dependencies."""
-    deps = {}
-
-    # Check APScheduler
-    try:
-        import apscheduler
-        deps["apscheduler"] = {"installed": True, "version": getattr(apscheduler, "__version__", "unknown")}
-        try:
-            from apscheduler.schedulers.background import BackgroundScheduler
-            from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-            deps["apscheduler"]["imports_ok"] = True
-        except ImportError as e:
-            deps["apscheduler"]["imports_ok"] = False
-            deps["apscheduler"]["import_error"] = str(e)
-    except ImportError as e:
-        deps["apscheduler"] = {"installed": False, "error": str(e)}
-
-    # Check SQLAlchemy
-    try:
-        import sqlalchemy
-        deps["sqlalchemy"] = {"installed": True, "version": sqlalchemy.__version__}
-    except ImportError as e:
-        deps["sqlalchemy"] = {"installed": False, "error": str(e)}
-
-    # Check scheduler module status
-    try:
-        from scheduler.scheduler import APSCHEDULER_AVAILABLE
-        deps["scheduler_module"] = {"available": APSCHEDULER_AVAILABLE}
-    except ImportError as e:
-        deps["scheduler_module"] = {"error": str(e)}
-
-    return deps
-
-
 @app.post("/api/upload", response_model=dict)
 async def upload_claim(claim: ClaimSubmission):
     """Submit a claim for analysis."""
@@ -1970,10 +1934,10 @@ async def trigger_sync(
             cursor.execute(
                 """
                 INSERT INTO sync_jobs
-                    (id, connector_id, job_type, sync_mode, status, started_at, triggered_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (id, connector_id, job_type, sync_mode, status, started_at, triggered_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (job_id, connector_id, "manual", mode, "pending", now, triggered_by),
+                (job_id, connector_id, "manual", mode, "pending", now, triggered_by, now),
             )
             conn.commit()
 

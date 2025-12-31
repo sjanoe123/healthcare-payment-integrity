@@ -116,12 +116,12 @@ class SyncJobManager:
                 logger.info("Adding created_at column to sync_jobs table")
                 cursor.execute("""
                     ALTER TABLE sync_jobs
-                    ADD COLUMN created_at TEXT
+                    ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 """)
-                # Set default for existing rows
+                # Set value for existing rows (use started_at or current time as fallback)
                 cursor.execute("""
                     UPDATE sync_jobs
-                    SET created_at = started_at
+                    SET created_at = COALESCE(started_at, datetime('now'))
                     WHERE created_at IS NULL
                 """)
 
