@@ -2218,9 +2218,10 @@ async def analyze_connector_samples(
         )
 
     # Connect and fetch sample claims
-    sample_results = []
+    sample_results: list[dict[str, Any]] = []
     preview_mode = False
-    claims_fetched = []
+    no_claims_in_db = False
+    claims_fetched: list[dict[str, Any]] = []
     db_connector = None
 
     try:
@@ -2272,6 +2273,14 @@ async def analyze_connector_samples(
             f"Fetched {len(claims_fetched)} claims from connector {connector_id}"
         )
 
+        # If database has no claims, use preview mode for better UX
+        if not claims_fetched:
+            logger.info(
+                f"No claims found in connector {connector_id} - using preview mode"
+            )
+            preview_mode = True
+            no_claims_in_db = True
+
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
@@ -2305,6 +2314,13 @@ async def analyze_connector_samples(
                     items = safe_json_loads(items, [])
                 # Filter out null items from LEFT JOIN
                 items = [i for i in items if i and i.get("procedure_code")]
+
+                claim_id = claim_row.get("claim_id")
+                if not items:
+                    logger.debug(
+                        f"Claim {claim_id} has no line items - "
+                        "analysis will be based on header only"
+                    )
 
                 claim_data = {
                     "claim_id": claim_row.get("claim_id"),
@@ -2445,7 +2461,9 @@ async def analyze_connector_samples(
         },
         "results": sample_results,
         "message": (
-            "Preview: Could not connect to data source. Showing sample results."
+            "Preview: No claims found in database. Showing sample results."
+            if no_claims_in_db
+            else "Preview: Could not connect to data source. Showing sample results."
             if preview_mode
             else f"Analyzed {len(sample_results)} claims from live database. "
             f"{high_risk_count} high-risk claims detected."
