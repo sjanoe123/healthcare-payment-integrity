@@ -516,17 +516,18 @@ class SyncWorker:
             Tuple of (analyzed_count, failed_count)
         """
         from rules.engine import evaluate_baseline
+        from utils.claim_structurer import structure_claim_for_rules_engine
 
         analyzed = 0
         failed = 0
 
-        # Load reference datasets
+        # Load reference datasets (cached via lru_cache in app module)
         datasets = self._load_datasets()
 
         for claim_record in claims:
             try:
                 # Structure claim for rules engine
-                claim_data = self._structure_claim_for_analysis(claim_record)
+                claim_data = structure_claim_for_rules_engine(claim_record)
 
                 # Run baseline rules evaluation
                 outcome = evaluate_baseline(claim_data, datasets)
@@ -548,85 +549,6 @@ class SyncWorker:
                 failed += 1
 
         return analyzed, failed
-
-    def _structure_claim_for_analysis(
-        self, claim_record: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Structure a flat claim record for the rules engine.
-
-        The rules engine expects nested structures like:
-        - member.member_id
-        - provider.npi
-        - claim_lines[].procedure_code
-
-        Args:
-            claim_record: Flat claim record from ETL
-
-        Returns:
-            Structured claim dict for rules engine
-        """
-        # Parse raw_data if present (contains extra fields)
-        raw_data = {}
-        if claim_record.get("raw_data"):
-            try:
-                raw_data = json.loads(claim_record["raw_data"])
-            except (json.JSONDecodeError, TypeError):
-                pass
-
-        # Build structured claim
-        claim_data = {
-            "claim_id": claim_record.get("claim_id"),
-            "member": {
-                "member_id": claim_record.get("patient_id")
-                or raw_data.get("member_id"),
-            },
-            "provider": {
-                "npi": claim_record.get("provider_npi") or raw_data.get("npi"),
-            },
-            "date_of_service": claim_record.get("date_of_service"),
-            "billed_amount": claim_record.get("billed_amount", 0),
-            "place_of_service": claim_record.get("place_of_service", "11"),
-        }
-
-        # Parse procedure codes
-        procedure_codes = []
-        if claim_record.get("procedure_codes"):
-            try:
-                codes = claim_record["procedure_codes"]
-                if isinstance(codes, str):
-                    codes = json.loads(codes)
-                procedure_codes = codes if isinstance(codes, list) else [codes]
-            except (json.JSONDecodeError, TypeError):
-                procedure_codes = [str(claim_record["procedure_codes"])]
-
-        # Parse diagnosis codes
-        diagnosis_codes = []
-        if claim_record.get("diagnosis_codes"):
-            try:
-                diags = claim_record["diagnosis_codes"]
-                if isinstance(diags, str):
-                    diags = json.loads(diags)
-                diagnosis_codes = diags if isinstance(diags, list) else [diags]
-            except (json.JSONDecodeError, TypeError):
-                diagnosis_codes = [str(claim_record["diagnosis_codes"])]
-
-        # Build claim_lines from procedure codes
-        claim_lines = []
-        for idx, code in enumerate(procedure_codes):
-            claim_lines.append(
-                {
-                    "procedure_code": code,
-                    "line_charge": (claim_record.get("billed_amount", 0) or 0)
-                    / max(len(procedure_codes), 1),
-                    "units": 1,
-                    "diagnosis_codes": diagnosis_codes,
-                }
-            )
-
-        claim_data["claim_lines"] = claim_lines
-        claim_data["diagnosis_codes"] = diagnosis_codes
-
-        return claim_data
 
     def _load_datasets(self) -> dict[str, Any]:
         """Load reference datasets for fraud analysis.

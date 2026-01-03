@@ -101,6 +101,7 @@ npm run lint
     - `coverage_rules.py` - LCD/NCD coverage validation
 - **Shared utilities**: `backend/utils/`
   - `date_parser.py` - Flexible date parsing with validation
+  - `claim_structurer.py` - Claim record transformation for rules engine
 - **Field mapping**: `backend/mapping/` - OMOP CDM-based schema normalization
   - `omop_schema.py` - Canonical OMOP CDM schema with 40+ field aliases
   - `mapper.py` - FieldMapper class for transforming claims to canonical format
@@ -165,6 +166,7 @@ npm run lint
 | GET | `/health` | Health check with RAG document count |
 | POST | `/api/upload` | Submit claim, create job |
 | POST | `/api/analyze/{job_id}?mapping_template=` | Run fraud analysis with optional field mapping |
+| POST | `/api/analyze/synced/{sync_job_id}?limit=&reanalyze=` | Analyze claims from a completed sync job |
 | GET | `/api/results/{job_id}` | Get analysis results |
 | GET | `/api/jobs?limit=100&offset=0` | List analyzed claims (paginated) |
 | GET | `/api/stats` | Dashboard statistics |
@@ -324,6 +326,7 @@ Rules return `RuleHit` objects with weights that adjust the fraud score. Organiz
 | `backend/mapping/persistence.py` | SQLite storage for mapping decisions with audit trail |
 | `backend/mapping/templates/` | EDI 837P/I and CSV mapping templates |
 | `backend/utils/date_parser.py` | Shared date parsing utility |
+| `backend/utils/claim_structurer.py` | Claim record transformation for rules engine |
 | `backend/claude_client.py` | Kirk AI integration with structured responses |
 | `backend/kirk_config.py` | Kirk AI personality and prompts |
 | `backend/railway.json` | Railway deployment config |
