@@ -2391,10 +2391,10 @@ async def analyze_connector_samples(
 
                 # Run rules engine
                 outcome = evaluate_baseline(claim_data, datasets)
-                fraud_score = outcome.score
+                fraud_score = outcome.decision.score
                 rule_hits = [
                     {"rule_id": h.rule_id, "description": h.description}
-                    for h in outcome.rule_hits
+                    for h in outcome.rule_result.hits
                 ]
 
                 if fraud_score >= 0.7:
