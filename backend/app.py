@@ -2216,17 +2216,9 @@ async def analyze_connector_samples(
     # Inject secrets (same pattern as test_connector endpoint)
     connector_type = connector_dict.get("connector_type")
     secret_fields = CONNECTOR_SECRET_FIELDS.get(connector_type, [])
-    logger.debug(
-        f"sample-analysis: connector_type={connector_type}, secret_fields={secret_fields}"
-    )
     try:
         cred_manager = get_credential_manager(DB_PATH)
         config = cred_manager.inject_secrets(connector_id, config, secret_fields)
-        # Debug: check if password was injected
-        has_password = bool(config.get("password") and config.get("password") != "***")
-        logger.info(
-            f"sample-analysis credential injection: password_present={has_password}"
-        )
     except Exception as e:
         logger.warning(f"Failed to inject secrets: {e}")
 
