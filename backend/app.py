@@ -2356,10 +2356,16 @@ async def analyze_connector_samples(
 
                 claim_data = {
                     "claim_id": claim_row.get("claim_id"),
-                    "member_id": claim_row.get("member_id"),
-                    "billing_npi": claim_row.get("billing_provider_npi"),
-                    "rendering_npi": claim_row.get("rendering_provider_npi"),
-                    "facility_npi": claim_row.get("facility_npi"),
+                    # Nested member structure for format rules
+                    "member": {
+                        "member_id": claim_row.get("member_id"),
+                    },
+                    # Nested provider structure for format rules
+                    "provider": {
+                        "npi": claim_row.get("billing_provider_npi"),
+                        "rendering_npi": claim_row.get("rendering_provider_npi"),
+                        "facility_npi": claim_row.get("facility_npi"),
+                    },
                     "service_date": str(claim_row.get("statement_from_date", "")),
                     "service_end_date": str(claim_row.get("statement_to_date", "")),
                     "place_of_service": claim_row.get("place_of_service", "11"),
