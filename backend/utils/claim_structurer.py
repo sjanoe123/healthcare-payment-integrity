@@ -48,10 +48,10 @@ def structure_claim_for_rules_engine(claim_record: dict[str, Any]) -> dict[str, 
     }
 
     # Parse procedure codes
-    procedure_codes = _parse_json_list(claim_record.get("procedure_codes"))
+    procedure_codes = parse_json_list(claim_record.get("procedure_codes"))
 
     # Parse diagnosis codes
-    diagnosis_codes = _parse_json_list(claim_record.get("diagnosis_codes"))
+    diagnosis_codes = parse_json_list(claim_record.get("diagnosis_codes"))
 
     # Build claim_lines from procedure codes
     claim_lines = []
@@ -74,26 +74,37 @@ def structure_claim_for_rules_engine(claim_record: dict[str, Any]) -> dict[str, 
     return claim_data
 
 
-def _parse_json_list(value: Any) -> list[str]:
+def parse_json_list(value: Any) -> list[str]:
     """Parse a value that may be a JSON string or list.
+
+    Always returns a list of strings for consistency.
 
     Args:
         value: String, list, or None
 
     Returns:
-        List of strings
+        List of strings (all values converted to str)
     """
     if not value:
         return []
 
     if isinstance(value, list):
-        return value
+        # Ensure all items are strings
+        return [str(item) for item in value]
 
     if isinstance(value, str):
         try:
             parsed = json.loads(value)
-            return parsed if isinstance(parsed, list) else [parsed]
+            if isinstance(parsed, list):
+                # Convert all parsed items to strings
+                return [str(item) for item in parsed]
+            # Single value parsed from JSON - convert to string
+            return [str(parsed)]
         except (json.JSONDecodeError, TypeError):
             return [value]
 
     return [str(value)]
+
+
+# Backwards compatibility alias
+_parse_json_list = parse_json_list

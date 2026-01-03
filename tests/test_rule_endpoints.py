@@ -32,76 +32,86 @@ def client():
 def db_with_results():
     """Create a database with sample results for testing."""
     db_path = os.environ["DB_PATH"]
+    job_ids = ("job-1", "job-2", "job-3")
+
     conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    # Insert sample results
-    sample_results = [
-        (
-            "job-1",
-            "CLM-001",
-            0.75,
-            "review",
-            json.dumps([
-                {"rule_id": "NCCI_PTP", "severity": "high", "rule_type": "ncci", "weight": 0.15},
-                {"rule_id": "FORMAT_MISSING_FIELD", "severity": "medium", "rule_type": "format", "weight": 0.05},
-            ]),
-            json.dumps(["NCCI_PTP"]),
-            json.dumps([]),
-            json.dumps([]),
-            150.0,
-        ),
-        (
-            "job-2",
-            "CLM-002",
-            0.50,
-            "approve",
-            json.dumps([
-                {"rule_id": "NCCI_PTP", "severity": "high", "rule_type": "ncci", "weight": 0.15},
-            ]),
-            json.dumps(["NCCI_PTP"]),
-            json.dumps([]),
-            json.dumps([]),
-            75.0,
-        ),
-        (
-            "job-3",
-            "CLM-003",
-            0.85,
-            "deny",
-            json.dumps([
-                {"rule_id": "OIG_EXCLUSION", "severity": "critical", "rule_type": "fwa", "weight": 0.25},
-                {"rule_id": "FWA_WATCH", "severity": "high", "rule_type": "fwa", "weight": 0.10},
-            ]),
-            json.dumps([]),
-            json.dumps([]),
-            json.dumps(["OIG_EXCLUSION"]),
-            500.0,
-        ),
-    ]
+        # Insert sample results
+        sample_results = [
+            (
+                "job-1",
+                "CLM-001",
+                0.75,
+                "review",
+                json.dumps([
+                    {"rule_id": "NCCI_PTP", "severity": "high", "rule_type": "ncci", "weight": 0.15},
+                    {"rule_id": "FORMAT_MISSING_FIELD", "severity": "medium", "rule_type": "format", "weight": 0.05},
+                ]),
+                json.dumps(["NCCI_PTP"]),
+                json.dumps([]),
+                json.dumps([]),
+                150.0,
+            ),
+            (
+                "job-2",
+                "CLM-002",
+                0.50,
+                "approve",
+                json.dumps([
+                    {"rule_id": "NCCI_PTP", "severity": "high", "rule_type": "ncci", "weight": 0.15},
+                ]),
+                json.dumps(["NCCI_PTP"]),
+                json.dumps([]),
+                json.dumps([]),
+                75.0,
+            ),
+            (
+                "job-3",
+                "CLM-003",
+                0.85,
+                "deny",
+                json.dumps([
+                    {"rule_id": "OIG_EXCLUSION", "severity": "critical", "rule_type": "fwa", "weight": 0.25},
+                    {"rule_id": "FWA_WATCH", "severity": "high", "rule_type": "fwa", "weight": 0.10},
+                ]),
+                json.dumps([]),
+                json.dumps([]),
+                json.dumps(["OIG_EXCLUSION"]),
+                500.0,
+            ),
+        ]
 
-    for result in sample_results:
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO results
-            (job_id, claim_id, fraud_score, decision_mode, rule_hits,
-             ncci_flags, coverage_flags, provider_flags, roi_estimate)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            result,
-        )
+        for result in sample_results:
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO results
+                (job_id, claim_id, fraud_score, decision_mode, rule_hits,
+                 ncci_flags, coverage_flags, provider_flags, roi_estimate)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                result,
+            )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+    finally:
+        conn.close()
 
-    yield
-
-    # Cleanup
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM results WHERE job_id IN ('job-1', 'job-2', 'job-3')")
-    conn.commit()
-    conn.close()
+    try:
+        yield
+    finally:
+        # Cleanup always runs even if tests fail
+        conn = sqlite3.connect(db_path)
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM results WHERE job_id IN (?, ?, ?)",
+                job_ids,
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
 
 class TestRuleStatsEndpoint:

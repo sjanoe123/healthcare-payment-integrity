@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useStats } from '@/api/hooks/useStats';
@@ -83,12 +83,21 @@ export function Dashboard() {
   const { data: health } = useHealth();
 
   // Auto-detect demo mode based on whether real data exists
-  // Default to demo mode while loading or if no real jobs exist
   const hasRealData = stats && (stats.total_jobs ?? 0) > 0;
   const [demoMode, setDemoMode] = useState<boolean | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
-  // Initialize demo mode based on data availability after loading
-  const effectiveDemoMode = demoMode ?? (statsLoading || !hasRealData);
+  // Initialize demo mode once after loading completes
+  // This ensures user's manual toggle is preserved after initial auto-detection
+  useEffect(() => {
+    if (!statsLoading && !initialized) {
+      setDemoMode(!hasRealData);
+      setInitialized(true);
+    }
+  }, [statsLoading, hasRealData, initialized]);
+
+  // Use null-coalescing for loading state, otherwise use user's choice
+  const effectiveDemoMode = demoMode ?? true;
 
   // Normalize stats to a consistent format
   const displayStats: DisplayStats = useMemo(() => {

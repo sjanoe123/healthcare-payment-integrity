@@ -100,7 +100,7 @@ async def get_rule_stats(limit: int = Query(default=50, le=100)):
             }
 
     except Exception as e:
-        logger.error(f"Failed to get rule stats: {e}")
+        logger.error(f"Failed to get rule stats: {e}", exc_info=True)
         raise HTTPException(
             status_code=500, detail=f"Failed to get rule statistics: {str(e)[:200]}"
         )
@@ -135,7 +135,7 @@ async def get_rule_catalog():
         }
 
     except Exception as e:
-        logger.error(f"Failed to get rule catalog: {e}")
+        logger.error(f"Failed to get rule catalog: {e}", exc_info=True)
         raise HTTPException(
             status_code=500, detail=f"Failed to get rule catalog: {str(e)[:200]}"
         )
@@ -244,7 +244,7 @@ async def get_field_coverage():
             }
 
     except Exception as e:
-        logger.error(f"Failed to get field coverage: {e}")
+        logger.error(f"Failed to get field coverage: {e}", exc_info=True)
         raise HTTPException(
             status_code=500, detail=f"Failed to get field coverage: {str(e)[:200]}"
         )
@@ -306,7 +306,7 @@ async def get_rule_effectiveness():
             }
 
     except Exception as e:
-        logger.error(f"Failed to get rule effectiveness: {e}")
+        logger.error(f"Failed to get rule effectiveness: {e}", exc_info=True)
         raise HTTPException(
             status_code=500, detail=f"Failed to get rule effectiveness: {str(e)[:200]}"
         )

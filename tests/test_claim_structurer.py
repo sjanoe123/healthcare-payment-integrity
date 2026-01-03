@@ -7,36 +7,47 @@ import json
 import pytest
 
 from utils.claim_structurer import (
-    _parse_json_list,
+    parse_json_list,
     structure_claim_for_rules_engine,
 )
 
 
 class TestParseJsonList:
-    """Tests for _parse_json_list helper."""
+    """Tests for parse_json_list helper.
+
+    The function always returns a list of strings for consistency.
+    """
 
     def test_returns_empty_list_for_none(self):
-        assert _parse_json_list(None) == []
+        assert parse_json_list(None) == []
 
     def test_returns_empty_list_for_empty_string(self):
-        assert _parse_json_list("") == []
+        assert parse_json_list("") == []
 
-    def test_returns_list_unchanged(self):
-        assert _parse_json_list(["a", "b", "c"]) == ["a", "b", "c"]
+    def test_returns_list_with_strings(self):
+        assert parse_json_list(["a", "b", "c"]) == ["a", "b", "c"]
+
+    def test_converts_list_items_to_strings(self):
+        """Ensure all list items are converted to strings."""
+        assert parse_json_list([1, 2, 3]) == ["1", "2", "3"]
 
     def test_parses_json_string_array(self):
-        assert _parse_json_list('["99213", "99214"]') == ["99213", "99214"]
+        assert parse_json_list('["99213", "99214"]') == ["99213", "99214"]
+
+    def test_parses_json_numeric_array_to_strings(self):
+        """Ensure JSON array items are converted to strings."""
+        assert parse_json_list("[1, 2, 3]") == ["1", "2", "3"]
 
     def test_parses_json_single_value(self):
-        assert _parse_json_list('"99213"') == ["99213"]
+        assert parse_json_list('"99213"') == ["99213"]
 
     def test_returns_single_item_for_plain_string(self):
-        # Plain numeric strings parse as JSON numbers
-        result = _parse_json_list("99213")
-        assert result == [99213] or result == ["99213"]
+        # Plain numeric strings parse as JSON numbers but are converted to strings
+        result = parse_json_list("99213")
+        assert result == ["99213"]
 
     def test_converts_non_string_to_list(self):
-        assert _parse_json_list(12345) == ["12345"]
+        assert parse_json_list(12345) == ["12345"]
 
 
 class TestStructureClaimForRulesEngine:

@@ -515,141 +515,84 @@ class SyncWorker:
         Returns:
             Tuple of (analyzed_count, failed_count)
         """
+        import uuid as uuid_module
+        from dataclasses import asdict
+
         from rules.engine import evaluate_baseline
         from utils.claim_structurer import structure_claim_for_rules_engine
+        from utils.datasets import load_datasets
 
         analyzed = 0
         failed = 0
+        results_to_insert = []  # Collect results for batch insert
 
-        # Load reference datasets (cached via lru_cache in app module)
-        datasets = self._load_datasets()
+        # Load reference datasets (cached via lru_cache)
+        datasets = load_datasets()
 
         for claim_record in claims:
             try:
+                # Validate claim_id with UUID fallback to prevent collisions
+                claim_id = claim_record.get("claim_id") or claim_record.get("id")
+                if not claim_id:
+                    claim_id = str(uuid_module.uuid4())
+
                 # Structure claim for rules engine
                 claim_data = structure_claim_for_rules_engine(claim_record)
 
                 # Run baseline rules evaluation
                 outcome = evaluate_baseline(claim_data, datasets)
 
-                # Store result
-                self._store_analysis_result(
-                    db_path=db_path,
-                    job_id=job_id,
-                    claim_record=claim_record,
-                    outcome=outcome,
+                # Collect result for batch insert
+                result_job_id = f"sync-{job_id}-{claim_id}"
+                now = datetime.now(timezone.utc).isoformat()
+                results_to_insert.append(
+                    (
+                        result_job_id,
+                        claim_id,
+                        outcome.decision.score,
+                        outcome.decision.decision_mode,
+                        json.dumps([asdict(h) for h in outcome.rule_result.hits]),
+                        json.dumps(outcome.ncci_flags),
+                        json.dumps(outcome.coverage_flags),
+                        json.dumps(outcome.provider_flags),
+                        outcome.roi_estimate,
+                        json.dumps(
+                            {
+                                "analysis_type": "sync_batch",
+                                "sync_job_id": job_id,
+                                "note": "Baseline analysis during sync - Kirk AI not invoked",
+                            }
+                        ),
+                        now,
+                    )
                 )
 
                 analyzed += 1
 
             except Exception as e:
                 logger.warning(
-                    f"Failed to analyze claim {claim_record.get('claim_id', 'unknown')}: {e}"
+                    f"Failed to analyze claim {claim_record.get('claim_id', 'unknown')}: {e}",
+                    exc_info=True,
                 )
                 failed += 1
 
-        return analyzed, failed
-
-    def _load_datasets(self) -> dict[str, Any]:
-        """Load reference datasets for fraud analysis.
-
-        Returns:
-            Dict of reference datasets
-        """
-        # Import from app module to reuse cached datasets
-        try:
-            from app import load_datasets
-
-            return load_datasets()
-        except ImportError:
-            # Fallback to minimal sample datasets
-            return {
-                "ncci_ptp": {},
-                "ncci_mue": {},
-                "lcd": {},
-                "oig_exclusions": set(),
-                "fwa_watchlist": set(),
-                "mpfs": {},
-                "utilization": {},
-                "fwa_config": {
-                    "roi_multiplier": 1.0,
-                    "volume_threshold": 3,
-                },
-            }
-
-    def _store_analysis_result(
-        self,
-        db_path: str,
-        job_id: str,
-        claim_record: dict[str, Any],
-        outcome: Any,
-    ) -> None:
-        """Store fraud analysis result in the database.
-
-        Args:
-            db_path: Database path
-            job_id: Sync job ID (used as reference)
-            claim_record: Original claim record
-            outcome: BaselineOutcome from rules engine
-        """
-        from dataclasses import asdict
-
-        claim_id = claim_record.get("claim_id") or claim_record.get("id", "")
-
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-
-            # Ensure results table exists
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS results (
-                    job_id TEXT PRIMARY KEY,
-                    claim_id TEXT,
-                    fraud_score REAL,
-                    decision_mode TEXT,
-                    rule_hits TEXT,
-                    ncci_flags TEXT,
-                    coverage_flags TEXT,
-                    provider_flags TEXT,
-                    roi_estimate REAL,
-                    claude_explanation TEXT,
-                    created_at TEXT
+        # Batch insert all results with a single connection and commit
+        if results_to_insert:
+            with get_db_connection(db_path) as conn:
+                cursor = conn.cursor()
+                cursor.executemany(
+                    """
+                    INSERT OR REPLACE INTO results
+                    (job_id, claim_id, fraud_score, decision_mode, rule_hits,
+                     ncci_flags, coverage_flags, provider_flags, roi_estimate,
+                     claude_explanation, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    results_to_insert,
                 )
-                """
-            )
+                conn.commit()
 
-            # Create a synthetic job_id for each claim result (sync_job_id + claim_id)
-            result_job_id = f"sync-{job_id}-{claim_id}"
-
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO results
-                (job_id, claim_id, fraud_score, decision_mode, rule_hits,
-                 ncci_flags, coverage_flags, provider_flags, roi_estimate,
-                 claude_explanation, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    result_job_id,
-                    claim_id,
-                    outcome.decision.score,
-                    outcome.decision.decision_mode,
-                    json.dumps([asdict(h) for h in outcome.rule_result.hits]),
-                    json.dumps(outcome.ncci_flags),
-                    json.dumps(outcome.coverage_flags),
-                    json.dumps(outcome.provider_flags),
-                    outcome.roi_estimate,
-                    json.dumps(
-                        {
-                            "analysis_type": "sync_batch",
-                            "sync_job_id": job_id,
-                            "note": "Baseline analysis during sync - Kirk AI not invoked",
-                        }
-                    ),
-                    datetime.now(timezone.utc).isoformat(),
-                ),
-            )
-            conn.commit()
+        return analyzed, failed
 
     def _update_connector_sync_status(
         self,

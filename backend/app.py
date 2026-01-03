@@ -13,7 +13,6 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import datetime, timezone
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +40,7 @@ from connectors.file import S3Connector, SFTPConnector, AzureBlobConnector  # no
 from routes import policies_router, mappings_router, rules_router, audit_router
 from routes.audit import log_audit_event, AuditAction
 from utils import sanitize_filename
+from utils.datasets import load_datasets
 from config import DB_PATH
 from schemas import SemanticMatchRequest
 from templates import (
@@ -381,96 +381,6 @@ class AnalysisResult(BaseModel):
     provider_flags: list[str]
     roi_estimate: float | None
     claude_analysis: dict[str, Any]
-
-
-# Sample reference datasets (load from files in production)
-SAMPLE_DATASETS = {
-    "ncci_ptp": {
-        ("99213", "99214"): {"citation": "NCCI PTP Edit", "modifier": "25"},
-        ("99214", "99215"): {"citation": "NCCI PTP Edit", "modifier": "25"},
-        ("43239", "43235"): {"citation": "NCCI PTP Edit - Endoscopy", "modifier": None},
-    },
-    "ncci_mue": {
-        "99213": {"limit": 1},
-        "99214": {"limit": 1},
-        "99215": {"limit": 1},
-        "90834": {"limit": 4},
-        "90837": {"limit": 4},
-    },
-    "lcd": {
-        "99213": {
-            "diagnosis_codes": {"J06.9", "J20.9", "R05.9", "J00"},
-            "age_ranges": [{"min": 0, "max": 120}],
-            "experimental": False,
-        },
-        "99214": {
-            "diagnosis_codes": {"J06.9", "J20.9", "R05.9", "J00", "M54.5"},
-            "age_ranges": [{"min": 0, "max": 120}],
-            "experimental": False,
-        },
-    },
-    "oig_exclusions": {"1234567890"},  # Sample excluded NPI
-    "fwa_watchlist": {"9876543210"},  # Sample watched NPI
-    "mpfs": {
-        "99213": {"regions": {"national": 95.0}, "global_surgery": None},
-        "99214": {"regions": {"national": 130.0}, "global_surgery": None},
-        "99215": {"regions": {"national": 175.0}, "global_surgery": None},
-    },
-    "utilization": {},
-    "fwa_config": {
-        "roi_multiplier": 1.0,
-        "volume_threshold": 3,
-        "high_risk_specialties": ["pain management", "durable medical equipment"],
-        "geographic_distance_km": 100,
-    },
-}
-
-
-@lru_cache(maxsize=1)
-def load_datasets() -> dict[str, Any]:
-    """Load reference datasets from files or return samples.
-
-    Uses LRU cache since datasets change infrequently and loading
-    from disk is expensive for repeated calls.
-    """
-    data_dir = Path("./data")
-
-    datasets = SAMPLE_DATASETS.copy()
-
-    # Try to load from JSON files if they exist
-    for dataset_name in ["ncci_mue", "lcd", "mpfs", "fwa_config"]:
-        json_path = data_dir / f"{dataset_name}.json"
-        if json_path.exists():
-            with open(json_path) as f:
-                datasets[dataset_name] = json.load(f)
-
-    # Load NCCI PTP (convert list format to dict with tuple keys)
-    ncci_ptp_path = data_dir / "ncci_ptp.json"
-    if ncci_ptp_path.exists():
-        with open(ncci_ptp_path) as f:
-            ptp_list = json.load(f)
-            ptp_dict = {}
-            for entry in ptp_list:
-                codes = entry.get("codes", [])
-                if len(codes) == 2:
-                    key = tuple(sorted(codes))
-                    ptp_dict[key] = {
-                        "citation": entry.get("citation"),
-                        "modifier": entry.get("modifier"),
-                    }
-            datasets["ncci_ptp"] = ptp_dict
-            print(f"Loaded {len(ptp_dict):,} NCCI PTP code pairs")
-
-    # Load OIG exclusions (special format with excluded_npis list)
-    oig_path = data_dir / "oig_exclusions.json"
-    if oig_path.exists():
-        with open(oig_path) as f:
-            oig_data = json.load(f)
-            # Convert list to set for fast lookups
-            datasets["oig_exclusions"] = set(oig_data.get("excluded_npis", []))
-            print(f"Loaded {len(datasets['oig_exclusions']):,} OIG excluded NPIs")
-
-    return datasets
 
 
 @app.get("/health")
@@ -2264,10 +2174,14 @@ async def analyze_synced_claims(
     skipped_count = 0
     failed_count = 0
     results_summary = []
+    results_to_insert = []  # Collect results for batch insert
 
     for claim_row in claims:
         claim_record = dict(claim_row)
-        claim_id = claim_record.get("claim_id") or claim_record.get("id", "")
+        # Validate claim_id with UUID fallback to prevent collisions
+        claim_id = claim_record.get("claim_id") or claim_record.get("id")
+        if not claim_id:
+            claim_id = str(uuid.uuid4())
         result_job_id = f"sync-{sync_job_id}-{claim_id}"
 
         try:
@@ -2282,38 +2196,29 @@ async def analyze_synced_claims(
             # Run baseline rules evaluation
             outcome = evaluate_baseline(claim_data, datasets)
 
-            # Store result
-            with sqlite3.connect(DB_PATH) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    INSERT OR REPLACE INTO results
-                    (job_id, claim_id, fraud_score, decision_mode, rule_hits,
-                     ncci_flags, coverage_flags, provider_flags, roi_estimate,
-                     claude_explanation, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        result_job_id,
-                        claim_id,
-                        outcome.decision.score,
-                        outcome.decision.decision_mode,
-                        json.dumps([asdict(h) for h in outcome.rule_result.hits]),
-                        json.dumps(outcome.ncci_flags),
-                        json.dumps(outcome.coverage_flags),
-                        json.dumps(outcome.provider_flags),
-                        outcome.roi_estimate,
-                        json.dumps(
-                            {
-                                "analysis_type": "manual_reanalysis",
-                                "sync_job_id": sync_job_id,
-                                "reanalyze": reanalyze,
-                            }
-                        ),
-                        datetime.now(timezone.utc).isoformat(),
+            # Collect result for batch insert
+            now = datetime.now(timezone.utc).isoformat()
+            results_to_insert.append(
+                (
+                    result_job_id,
+                    claim_id,
+                    outcome.decision.score,
+                    outcome.decision.decision_mode,
+                    json.dumps([asdict(h) for h in outcome.rule_result.hits]),
+                    json.dumps(outcome.ncci_flags),
+                    json.dumps(outcome.coverage_flags),
+                    json.dumps(outcome.provider_flags),
+                    outcome.roi_estimate,
+                    json.dumps(
+                        {
+                            "analysis_type": "manual_reanalysis",
+                            "sync_job_id": sync_job_id,
+                            "reanalyze": reanalyze,
+                        }
                     ),
+                    now,
                 )
-                conn.commit()
+            )
 
             analyzed_count += 1
             results_summary.append(
@@ -2327,7 +2232,23 @@ async def analyze_synced_claims(
 
         except Exception as e:
             failed_count += 1
-            logger.warning(f"Failed to analyze claim {claim_id}: {e}")
+            logger.warning(f"Failed to analyze claim {claim_id}: {e}", exc_info=True)
+
+    # Batch insert all results with a single connection and commit
+    if results_to_insert:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.executemany(
+                """
+                INSERT OR REPLACE INTO results
+                (job_id, claim_id, fraud_score, decision_mode, rule_hits,
+                 ncci_flags, coverage_flags, provider_flags, roi_estimate,
+                 claude_explanation, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                results_to_insert,
+            )
+            conn.commit()
 
     return {
         "sync_job_id": sync_job_id,
