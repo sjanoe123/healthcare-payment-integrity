@@ -2281,7 +2281,7 @@ async def analyze_connector_samples(
         #
         # Required schema for claim_lines table:
         #   claim_id (FK), line_number, procedure_code, modifier_1, modifier_2,
-        #   units, charge_amount, diagnosis_pointer
+        #   units, line_charge, diagnosis_pointer
         #
         # Uses subquery pattern for PostgreSQL strict mode compatibility.
         query = f"""
@@ -2292,7 +2292,7 @@ async def analyze_connector_samples(
                        'modifier_1', cl.modifier_1,
                        'modifier_2', cl.modifier_2,
                        'units', cl.units,
-                       'charge_amount', cl.charge_amount,
+                       'line_charge', cl.line_charge,
                        'diagnosis_pointer', cl.diagnosis_pointer
                    ))
                    FROM {safe_claim_lines} cl
@@ -2383,7 +2383,7 @@ async def analyze_connector_samples(
                                 if m
                             ],
                             "units": i.get("units", 1),
-                            "charge": float(i.get("charge_amount") or 0),
+                            "charge": float(i.get("line_charge") or 0),
                         }
                         for idx, i in enumerate(items)
                     ],
