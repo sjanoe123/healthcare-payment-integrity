@@ -1010,6 +1010,170 @@ async def get_stats():
 
 
 # ============================================================================
+# Rule Coverage Endpoints
+# ============================================================================
+
+
+@app.get("/api/rules/stats")
+async def get_rule_stats():
+    """Get rule execution statistics.
+
+    Returns aggregate counts of rule hits by rule ID and category.
+    """
+    from collections import Counter
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT rule_hits FROM results WHERE rule_hits IS NOT NULL")
+        rows = cursor.fetchall()
+
+    rule_counts: Counter[str] = Counter()
+    category_counts: Counter[str] = Counter()
+    severity_counts: Counter[str] = Counter()
+    total_results = len(rows)
+
+    for (rule_hits_json,) in rows:
+        rule_hits = safe_json_loads(rule_hits_json, [])
+        for hit in rule_hits:
+            rule_id = hit.get("rule_id", "unknown")
+            category = hit.get("metadata", {}).get("category", "other")
+            severity = hit.get("severity", "medium")
+
+            rule_counts[rule_id] += 1
+            category_counts[category] += 1
+            severity_counts[severity] += 1
+
+    # Get top 20 rules by frequency
+    top_rules = [
+        {
+            "rule_id": rule_id,
+            "count": count,
+            "percentage": round(count / max(total_results, 1) * 100, 1),
+        }
+        for rule_id, count in rule_counts.most_common(20)
+    ]
+
+    return {
+        "total_results": total_results,
+        "total_rule_hits": sum(rule_counts.values()),
+        "unique_rules_triggered": len(rule_counts),
+        "top_rules": top_rules,
+        "by_category": dict(category_counts),
+        "by_severity": dict(severity_counts),
+    }
+
+
+@app.get("/api/rules/coverage")
+async def get_rule_coverage():
+    """Get rule coverage metrics.
+
+    Shows which rules have been triggered vs total available rules.
+    """
+    from rules import ruleset
+    from rules.registry import default_registry
+
+    # Ensure rules are registered
+    ruleset.register_default_rules(default_registry)
+
+    # Get all registered rules
+    all_rules = list(default_registry.active_rules())
+    total_rules = len(all_rules)
+
+    # Get triggered rules from results
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT rule_hits FROM results WHERE rule_hits IS NOT NULL")
+        rows = cursor.fetchall()
+
+    triggered_rule_ids: set[str] = set()
+    for (rule_hits_json,) in rows:
+        rule_hits = safe_json_loads(rule_hits_json, [])
+        for hit in rule_hits:
+            triggered_rule_ids.add(hit.get("rule_id", ""))
+
+    # Calculate coverage
+    coverage_percentage = round(len(triggered_rule_ids) / max(total_rules, 1) * 100, 1)
+
+    return {
+        "total_rules": total_rules,
+        "triggered_rules": len(triggered_rule_ids),
+        "coverage_percentage": coverage_percentage,
+        "triggered_rule_ids": list(triggered_rule_ids),
+        "untriggered_count": total_rules - len(triggered_rule_ids),
+    }
+
+
+@app.get("/api/rules/effectiveness")
+async def get_rule_effectiveness():
+    """Get rule effectiveness by category.
+
+    Aggregates fraud scores and ROI by rule category.
+    """
+    from collections import defaultdict
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT fraud_score, rule_hits, roi_estimate, decision_mode
+            FROM results
+            WHERE rule_hits IS NOT NULL
+            """
+        )
+        rows = cursor.fetchall()
+
+    category_data: dict[str, dict] = defaultdict(
+        lambda: {
+            "hits": 0,
+            "total_score": 0,
+            "total_roi": 0,
+            "decisions": defaultdict(int),
+        }
+    )
+
+    for fraud_score, rule_hits_json, roi_estimate, decision_mode in rows:
+        rule_hits = safe_json_loads(rule_hits_json, [])
+        seen_categories: set[str] = set()
+
+        for hit in rule_hits:
+            category = hit.get("metadata", {}).get("category", "other")
+
+            if category not in seen_categories:
+                seen_categories.add(category)
+                data = category_data[category]
+                data["hits"] += 1
+                data["total_score"] += fraud_score or 0
+                data["total_roi"] += roi_estimate or 0
+                data["decisions"][decision_mode or "unknown"] += 1
+
+    # Calculate averages and format response
+    effectiveness = []
+    for category, data in category_data.items():
+        effectiveness.append(
+            {
+                "category": category,
+                "total_hits": data["hits"],
+                "avg_fraud_score": round(data["total_score"] / max(data["hits"], 1), 3),
+                "total_roi": round(data["total_roi"], 2),
+                "decisions": dict(data["decisions"]),
+            }
+        )
+
+    # Sort by total hits descending
+    effectiveness.sort(key=lambda x: x["total_hits"], reverse=True)
+
+    return {
+        "by_category": effectiveness,
+        "summary": {
+            "total_categories": len(effectiveness),
+            "total_roi": sum(e["total_roi"] for e in effectiveness),
+        },
+    }
+
+
+# ============================================================================
 # Data Source Connector Endpoints
 # ============================================================================
 
@@ -2153,6 +2317,257 @@ async def get_sync_job_logs(
         )
 
     return {"job_id": job_id, "logs": logs, "total": len(logs)}
+
+
+# === Synced Claims Analysis Endpoint ===
+
+
+@app.post("/api/analyze/synced/{sync_job_id}")
+async def analyze_synced_claims(
+    sync_job_id: str,
+    limit: int = Query(default=100, ge=1, le=1000),
+    reanalyze: bool = Query(default=False),
+):
+    """Analyze or re-analyze claims from a completed sync job.
+
+    This endpoint:
+    1. Verifies the sync job exists and is completed
+    2. Fetches synced claims from the synced_claims table
+    3. Runs fraud analysis on each claim
+    4. Stores results in the results table
+    5. Returns summary statistics
+
+    Args:
+        sync_job_id: ID of the completed sync job
+        limit: Maximum number of claims to analyze
+        reanalyze: If True, re-analyze even if results exist
+
+    Returns:
+        Analysis summary with claim counts and scores
+    """
+    from dataclasses import asdict
+
+    from rules.engine import evaluate_baseline
+
+    # 1. Verify sync job exists and is completed
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT * FROM sync_jobs WHERE id = ?",
+            (sync_job_id,),
+        )
+        job = cursor.fetchone()
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Sync job not found")
+
+        if job["status"] not in ("success", "partial"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Sync job status is '{job['status']}'. Only completed jobs can be analyzed.",
+            )
+
+        connector_id = job["connector_id"]
+
+    # 2. Fetch synced claims
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Check if synced_claims table exists
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='synced_claims'"
+        )
+        if not cursor.fetchone():
+            raise HTTPException(
+                status_code=404,
+                detail="No synced claims table found. Run a sync job first.",
+            )
+
+        # Fetch claims from this connector
+        cursor.execute(
+            """
+            SELECT * FROM synced_claims
+            WHERE source_connector_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (connector_id, limit),
+        )
+        claims = cursor.fetchall()
+
+    if not claims:
+        return {
+            "sync_job_id": sync_job_id,
+            "connector_id": connector_id,
+            "analyzed": 0,
+            "skipped": 0,
+            "failed": 0,
+            "message": "No claims found for this connector",
+        }
+
+    # 3. Load reference datasets
+    datasets = load_datasets()
+
+    analyzed_count = 0
+    skipped_count = 0
+    failed_count = 0
+    results_summary = []
+
+    for claim_row in claims:
+        claim_record = dict(claim_row)
+        claim_id = claim_record.get("claim_id") or claim_record.get("id", "")
+        result_job_id = f"sync-{sync_job_id}-{claim_id}"
+
+        try:
+            # Check if already analyzed
+            if not reanalyze:
+                with sqlite3.connect(DB_PATH) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT job_id FROM results WHERE job_id = ?",
+                        (result_job_id,),
+                    )
+                    if cursor.fetchone():
+                        skipped_count += 1
+                        continue
+
+            # Structure claim for rules engine
+            claim_data = _structure_synced_claim(claim_record)
+
+            # Run baseline rules evaluation
+            outcome = evaluate_baseline(claim_data, datasets)
+
+            # Store result
+            with sqlite3.connect(DB_PATH) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO results
+                    (job_id, claim_id, fraud_score, decision_mode, rule_hits,
+                     ncci_flags, coverage_flags, provider_flags, roi_estimate,
+                     claude_explanation, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        result_job_id,
+                        claim_id,
+                        outcome.decision.score,
+                        outcome.decision.decision_mode,
+                        json.dumps([asdict(h) for h in outcome.rule_result.hits]),
+                        json.dumps(outcome.ncci_flags),
+                        json.dumps(outcome.coverage_flags),
+                        json.dumps(outcome.provider_flags),
+                        outcome.roi_estimate,
+                        json.dumps(
+                            {
+                                "analysis_type": "manual_reanalysis",
+                                "sync_job_id": sync_job_id,
+                                "reanalyze": reanalyze,
+                            }
+                        ),
+                        datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
+                conn.commit()
+
+            analyzed_count += 1
+            results_summary.append(
+                {
+                    "claim_id": claim_id,
+                    "fraud_score": outcome.decision.score,
+                    "decision_mode": outcome.decision.decision_mode,
+                    "rule_hits_count": len(outcome.rule_result.hits),
+                }
+            )
+
+        except Exception as e:
+            failed_count += 1
+            logger.warning(f"Failed to analyze claim {claim_id}: {e}")
+
+    return {
+        "sync_job_id": sync_job_id,
+        "connector_id": connector_id,
+        "analyzed": analyzed_count,
+        "skipped": skipped_count,
+        "failed": failed_count,
+        "message": f"Analyzed {analyzed_count} claims, skipped {skipped_count}, failed {failed_count}",
+        "results": results_summary[:20],  # Return first 20 for preview
+    }
+
+
+def _structure_synced_claim(claim_record: dict[str, Any]) -> dict[str, Any]:
+    """Structure a synced claim record for the rules engine.
+
+    Args:
+        claim_record: Row from synced_claims table
+
+    Returns:
+        Structured claim dict for rules engine
+    """
+    # Parse raw_data if present
+    raw_data = {}
+    if claim_record.get("raw_data"):
+        try:
+            raw_data = json.loads(claim_record["raw_data"])
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Build structured claim
+    claim_data = {
+        "claim_id": claim_record.get("claim_id"),
+        "member": {
+            "member_id": claim_record.get("patient_id") or raw_data.get("member_id"),
+        },
+        "provider": {
+            "npi": claim_record.get("provider_npi") or raw_data.get("npi"),
+        },
+        "date_of_service": claim_record.get("date_of_service"),
+        "billed_amount": claim_record.get("billed_amount", 0),
+        "place_of_service": claim_record.get("place_of_service", "11"),
+    }
+
+    # Parse procedure codes
+    procedure_codes = []
+    if claim_record.get("procedure_codes"):
+        try:
+            codes = claim_record["procedure_codes"]
+            if isinstance(codes, str):
+                codes = json.loads(codes)
+            procedure_codes = codes if isinstance(codes, list) else [codes]
+        except (json.JSONDecodeError, TypeError):
+            procedure_codes = [str(claim_record["procedure_codes"])]
+
+    # Parse diagnosis codes
+    diagnosis_codes = []
+    if claim_record.get("diagnosis_codes"):
+        try:
+            diags = claim_record["diagnosis_codes"]
+            if isinstance(diags, str):
+                diags = json.loads(diags)
+            diagnosis_codes = diags if isinstance(diags, list) else [diags]
+        except (json.JSONDecodeError, TypeError):
+            diagnosis_codes = [str(claim_record["diagnosis_codes"])]
+
+    # Build claim_lines from procedure codes
+    claim_lines = []
+    for code in procedure_codes:
+        claim_lines.append(
+            {
+                "procedure_code": code,
+                "line_charge": (claim_record.get("billed_amount", 0) or 0)
+                / max(len(procedure_codes), 1),
+                "units": 1,
+                "diagnosis_codes": diagnosis_codes,
+            }
+        )
+
+    claim_data["claim_lines"] = claim_lines
+    claim_data["diagnosis_codes"] = diagnosis_codes
+
+    return claim_data
 
 
 # === Sample Analysis Endpoint ===

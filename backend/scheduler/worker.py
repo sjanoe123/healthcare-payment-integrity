@@ -415,6 +415,9 @@ class SyncWorker:
     ) -> tuple[int, int]:
         """Process a batch of records.
 
+        Performs ETL transformation and loading, then runs fraud analysis
+        on claims data.
+
         Args:
             job_id: Current job ID
             connector_id: Connector ID
@@ -424,24 +427,307 @@ class SyncWorker:
         Returns:
             Tuple of (processed_count, failed_count)
         """
-        # For now, just count records
-        # In future, this will:
-        # 1. Apply field mappings from connector_config["field_mapping_id"]
-        # 2. Transform data using ETL pipeline
-        # 3. Load into target storage
+        from etl.stages.transform import TransformStage
+        from etl.stages.load import LoadStage
 
-        processed = 0
+        connection_config = connector_config.get("connection_config", {})
+        data_type = connector_config.get("data_type", "claims")
+        mapping_id = connection_config.get("field_mapping_id")
+
+        db_path = os.getenv("DB_PATH", "./data/prototype.db")
+        target_table = f"synced_{data_type}"
+
+        # Initialize ETL stages
+        transform_stage = TransformStage(
+            mapping_id=mapping_id,
+            data_type=data_type,
+        )
+
+        load_stage = LoadStage(
+            db_path=db_path,
+            table_name=target_table,
+            data_type=data_type,
+            primary_key="id",
+            batch_size=100,
+        )
+
+        # 1. Transform the batch
+        transform_result = transform_stage.transform(
+            records=batch,
+            on_error=lambda r, e: logger.warning(f"Transform error: {e}"),
+        )
+
+        if transform_result.failed_count > 0:
+            self.job_manager.add_log(
+                job_id,
+                "warning",
+                f"Transform: {transform_result.failed_count} records failed",
+            )
+
+        # 2. Load transformed records
+        load_result = load_stage.load(
+            records=transform_result.records,
+            source_connector_id=connector_id,
+        )
+
+        loaded_count = load_result.inserted_count + load_result.updated_count
+
+        if load_result.failed_count > 0:
+            self.job_manager.add_log(
+                job_id,
+                "warning",
+                f"Load: {load_result.failed_count} records failed",
+            )
+
+        # 3. Run fraud analysis for claims data
+        if data_type == "claims" and transform_result.records:
+            analysis_count, analysis_failed = self._analyze_claims_batch(
+                job_id=job_id,
+                connector_id=connector_id,
+                claims=transform_result.records,
+                db_path=db_path,
+            )
+
+            if analysis_failed > 0:
+                self.job_manager.add_log(
+                    job_id,
+                    "warning",
+                    f"Analysis: {analysis_failed} claims failed fraud check",
+                )
+
+        return loaded_count, transform_result.failed_count + load_result.failed_count
+
+    def _analyze_claims_batch(
+        self,
+        job_id: str,
+        connector_id: str,
+        claims: list[dict[str, Any]],
+        db_path: str,
+    ) -> tuple[int, int]:
+        """Run fraud analysis on a batch of claims.
+
+        Args:
+            job_id: Current sync job ID
+            connector_id: Source connector ID
+            claims: Transformed claim records
+            db_path: Database path for storing results
+
+        Returns:
+            Tuple of (analyzed_count, failed_count)
+        """
+        from rules.engine import evaluate_baseline
+
+        analyzed = 0
         failed = 0
 
-        for record in batch:
+        # Load reference datasets
+        datasets = self._load_datasets()
+
+        for claim_record in claims:
             try:
-                # TODO: Apply transformations via ETL pipeline
-                # For now, records are extracted and counted
-                processed += 1
-            except Exception:
+                # Structure claim for rules engine
+                claim_data = self._structure_claim_for_analysis(claim_record)
+
+                # Run baseline rules evaluation
+                outcome = evaluate_baseline(claim_data, datasets)
+
+                # Store result
+                self._store_analysis_result(
+                    db_path=db_path,
+                    job_id=job_id,
+                    claim_record=claim_record,
+                    outcome=outcome,
+                )
+
+                analyzed += 1
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to analyze claim {claim_record.get('claim_id', 'unknown')}: {e}"
+                )
                 failed += 1
 
-        return processed, failed
+        return analyzed, failed
+
+    def _structure_claim_for_analysis(
+        self, claim_record: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Structure a flat claim record for the rules engine.
+
+        The rules engine expects nested structures like:
+        - member.member_id
+        - provider.npi
+        - claim_lines[].procedure_code
+
+        Args:
+            claim_record: Flat claim record from ETL
+
+        Returns:
+            Structured claim dict for rules engine
+        """
+        # Parse raw_data if present (contains extra fields)
+        raw_data = {}
+        if claim_record.get("raw_data"):
+            try:
+                raw_data = json.loads(claim_record["raw_data"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Build structured claim
+        claim_data = {
+            "claim_id": claim_record.get("claim_id"),
+            "member": {
+                "member_id": claim_record.get("patient_id")
+                or raw_data.get("member_id"),
+            },
+            "provider": {
+                "npi": claim_record.get("provider_npi") or raw_data.get("npi"),
+            },
+            "date_of_service": claim_record.get("date_of_service"),
+            "billed_amount": claim_record.get("billed_amount", 0),
+            "place_of_service": claim_record.get("place_of_service", "11"),
+        }
+
+        # Parse procedure codes
+        procedure_codes = []
+        if claim_record.get("procedure_codes"):
+            try:
+                codes = claim_record["procedure_codes"]
+                if isinstance(codes, str):
+                    codes = json.loads(codes)
+                procedure_codes = codes if isinstance(codes, list) else [codes]
+            except (json.JSONDecodeError, TypeError):
+                procedure_codes = [str(claim_record["procedure_codes"])]
+
+        # Parse diagnosis codes
+        diagnosis_codes = []
+        if claim_record.get("diagnosis_codes"):
+            try:
+                diags = claim_record["diagnosis_codes"]
+                if isinstance(diags, str):
+                    diags = json.loads(diags)
+                diagnosis_codes = diags if isinstance(diags, list) else [diags]
+            except (json.JSONDecodeError, TypeError):
+                diagnosis_codes = [str(claim_record["diagnosis_codes"])]
+
+        # Build claim_lines from procedure codes
+        claim_lines = []
+        for idx, code in enumerate(procedure_codes):
+            claim_lines.append(
+                {
+                    "procedure_code": code,
+                    "line_charge": (claim_record.get("billed_amount", 0) or 0)
+                    / max(len(procedure_codes), 1),
+                    "units": 1,
+                    "diagnosis_codes": diagnosis_codes,
+                }
+            )
+
+        claim_data["claim_lines"] = claim_lines
+        claim_data["diagnosis_codes"] = diagnosis_codes
+
+        return claim_data
+
+    def _load_datasets(self) -> dict[str, Any]:
+        """Load reference datasets for fraud analysis.
+
+        Returns:
+            Dict of reference datasets
+        """
+        # Import from app module to reuse cached datasets
+        try:
+            from app import load_datasets
+
+            return load_datasets()
+        except ImportError:
+            # Fallback to minimal sample datasets
+            return {
+                "ncci_ptp": {},
+                "ncci_mue": {},
+                "lcd": {},
+                "oig_exclusions": set(),
+                "fwa_watchlist": set(),
+                "mpfs": {},
+                "utilization": {},
+                "fwa_config": {
+                    "roi_multiplier": 1.0,
+                    "volume_threshold": 3,
+                },
+            }
+
+    def _store_analysis_result(
+        self,
+        db_path: str,
+        job_id: str,
+        claim_record: dict[str, Any],
+        outcome: Any,
+    ) -> None:
+        """Store fraud analysis result in the database.
+
+        Args:
+            db_path: Database path
+            job_id: Sync job ID (used as reference)
+            claim_record: Original claim record
+            outcome: BaselineOutcome from rules engine
+        """
+        from dataclasses import asdict
+
+        claim_id = claim_record.get("claim_id") or claim_record.get("id", "")
+
+        with get_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+
+            # Ensure results table exists
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS results (
+                    job_id TEXT PRIMARY KEY,
+                    claim_id TEXT,
+                    fraud_score REAL,
+                    decision_mode TEXT,
+                    rule_hits TEXT,
+                    ncci_flags TEXT,
+                    coverage_flags TEXT,
+                    provider_flags TEXT,
+                    roi_estimate REAL,
+                    claude_explanation TEXT,
+                    created_at TEXT
+                )
+                """
+            )
+
+            # Create a synthetic job_id for each claim result (sync_job_id + claim_id)
+            result_job_id = f"sync-{job_id}-{claim_id}"
+
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO results
+                (job_id, claim_id, fraud_score, decision_mode, rule_hits,
+                 ncci_flags, coverage_flags, provider_flags, roi_estimate,
+                 claude_explanation, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    result_job_id,
+                    claim_id,
+                    outcome.decision.score,
+                    outcome.decision.decision_mode,
+                    json.dumps([asdict(h) for h in outcome.rule_result.hits]),
+                    json.dumps(outcome.ncci_flags),
+                    json.dumps(outcome.coverage_flags),
+                    json.dumps(outcome.provider_flags),
+                    outcome.roi_estimate,
+                    json.dumps(
+                        {
+                            "analysis_type": "sync_batch",
+                            "sync_job_id": job_id,
+                            "note": "Baseline analysis during sync - Kirk AI not invoked",
+                        }
+                    ),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            conn.commit()
 
     def _update_connector_sync_status(
         self,
