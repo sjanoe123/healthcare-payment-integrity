@@ -415,6 +415,9 @@ class SyncWorker:
     ) -> tuple[int, int]:
         """Process a batch of records.
 
+        Performs ETL transformation and loading, then runs fraud analysis
+        on claims data.
+
         Args:
             job_id: Current job ID
             connector_id: Connector ID
@@ -424,24 +427,172 @@ class SyncWorker:
         Returns:
             Tuple of (processed_count, failed_count)
         """
-        # For now, just count records
-        # In future, this will:
-        # 1. Apply field mappings from connector_config["field_mapping_id"]
-        # 2. Transform data using ETL pipeline
-        # 3. Load into target storage
+        from etl.stages.transform import TransformStage
+        from etl.stages.load import LoadStage
 
-        processed = 0
+        connection_config = connector_config.get("connection_config", {})
+        data_type = connector_config.get("data_type", "claims")
+        mapping_id = connection_config.get("field_mapping_id")
+
+        db_path = os.getenv("DB_PATH", "./data/prototype.db")
+        target_table = f"synced_{data_type}"
+
+        # Initialize ETL stages
+        transform_stage = TransformStage(
+            mapping_id=mapping_id,
+            data_type=data_type,
+        )
+
+        load_stage = LoadStage(
+            db_path=db_path,
+            table_name=target_table,
+            data_type=data_type,
+            primary_key="id",
+            batch_size=100,
+        )
+
+        # 1. Transform the batch
+        transform_result = transform_stage.transform(
+            records=batch,
+            on_error=lambda r, e: logger.warning(f"Transform error: {e}"),
+        )
+
+        if transform_result.failed_count > 0:
+            self.job_manager.add_log(
+                job_id,
+                "warning",
+                f"Transform: {transform_result.failed_count} records failed",
+            )
+
+        # 2. Load transformed records
+        load_result = load_stage.load(
+            records=transform_result.records,
+            source_connector_id=connector_id,
+        )
+
+        loaded_count = load_result.inserted_count + load_result.updated_count
+
+        if load_result.failed_count > 0:
+            self.job_manager.add_log(
+                job_id,
+                "warning",
+                f"Load: {load_result.failed_count} records failed",
+            )
+
+        # 3. Run fraud analysis for claims data
+        if data_type == "claims" and transform_result.records:
+            analysis_count, analysis_failed = self._analyze_claims_batch(
+                job_id=job_id,
+                connector_id=connector_id,
+                claims=transform_result.records,
+                db_path=db_path,
+            )
+
+            if analysis_failed > 0:
+                self.job_manager.add_log(
+                    job_id,
+                    "warning",
+                    f"Analysis: {analysis_failed} claims failed fraud check",
+                )
+
+        return loaded_count, transform_result.failed_count + load_result.failed_count
+
+    def _analyze_claims_batch(
+        self,
+        job_id: str,
+        connector_id: str,
+        claims: list[dict[str, Any]],
+        db_path: str,
+    ) -> tuple[int, int]:
+        """Run fraud analysis on a batch of claims.
+
+        Args:
+            job_id: Current sync job ID
+            connector_id: Source connector ID
+            claims: Transformed claim records
+            db_path: Database path for storing results
+
+        Returns:
+            Tuple of (analyzed_count, failed_count)
+        """
+        import uuid as uuid_module
+        from dataclasses import asdict
+
+        from rules.engine import evaluate_baseline
+        from utils.claim_structurer import structure_claim_for_rules_engine
+        from utils.datasets import load_datasets
+
+        analyzed = 0
         failed = 0
+        results_to_insert = []  # Collect results for batch insert
 
-        for record in batch:
+        # Load reference datasets (cached via lru_cache)
+        datasets = load_datasets()
+
+        for claim_record in claims:
             try:
-                # TODO: Apply transformations via ETL pipeline
-                # For now, records are extracted and counted
-                processed += 1
-            except Exception:
+                # Validate claim_id with UUID fallback to prevent collisions
+                claim_id = claim_record.get("claim_id") or claim_record.get("id")
+                if not claim_id:
+                    claim_id = str(uuid_module.uuid4())
+
+                # Structure claim for rules engine
+                claim_data = structure_claim_for_rules_engine(claim_record)
+
+                # Run baseline rules evaluation
+                outcome = evaluate_baseline(claim_data, datasets)
+
+                # Collect result for batch insert
+                result_job_id = f"sync-{job_id}-{claim_id}"
+                now = datetime.now(timezone.utc).isoformat()
+                results_to_insert.append(
+                    (
+                        result_job_id,
+                        claim_id,
+                        outcome.decision.score,
+                        outcome.decision.decision_mode,
+                        json.dumps([asdict(h) for h in outcome.rule_result.hits]),
+                        json.dumps(outcome.ncci_flags),
+                        json.dumps(outcome.coverage_flags),
+                        json.dumps(outcome.provider_flags),
+                        outcome.roi_estimate,
+                        json.dumps(
+                            {
+                                "analysis_type": "sync_batch",
+                                "sync_job_id": job_id,
+                                "note": "Baseline analysis during sync - Kirk AI not invoked",
+                            }
+                        ),
+                        now,
+                    )
+                )
+
+                analyzed += 1
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to analyze claim {claim_record.get('claim_id', 'unknown')}: {e}",
+                    exc_info=True,
+                )
                 failed += 1
 
-        return processed, failed
+        # Batch insert all results with a single connection and commit
+        if results_to_insert:
+            with get_db_connection(db_path) as conn:
+                cursor = conn.cursor()
+                cursor.executemany(
+                    """
+                    INSERT OR REPLACE INTO results
+                    (job_id, claim_id, fraud_score, decision_mode, rule_hits,
+                     ncci_flags, coverage_flags, provider_flags, roi_estimate,
+                     claude_explanation, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    results_to_insert,
+                )
+                conn.commit()
+
+        return analyzed, failed
 
     def _update_connector_sync_status(
         self,

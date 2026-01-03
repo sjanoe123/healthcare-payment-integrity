@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useStats } from '@/api/hooks/useStats';
@@ -79,13 +79,29 @@ function StatCard({ title, value, subtitle, icon: Icon, color, delay = 0 }: Stat
 }
 
 export function Dashboard() {
-  const { data: stats } = useStats();
+  const { data: stats, isLoading: statsLoading } = useStats();
   const { data: health } = useHealth();
-  const [demoMode, setDemoMode] = useState(true);
+
+  // Auto-detect demo mode based on whether real data exists
+  const hasRealData = stats && (stats.total_jobs ?? 0) > 0;
+  const [demoMode, setDemoMode] = useState<boolean | null>(null);
+  const [initialized, setInitialized] = useState(false);
+
+  // Initialize demo mode once after loading completes
+  // This ensures user's manual toggle is preserved after initial auto-detection
+  useEffect(() => {
+    if (!statsLoading && !initialized) {
+      setDemoMode(!hasRealData);
+      setInitialized(true);
+    }
+  }, [statsLoading, hasRealData, initialized]);
+
+  // Use null-coalescing for loading state, otherwise use user's choice
+  const effectiveDemoMode = demoMode ?? true;
 
   // Normalize stats to a consistent format
   const displayStats: DisplayStats = useMemo(() => {
-    if (demoMode) {
+    if (effectiveDemoMode) {
       return DEMO_STATS;
     }
     if (stats) {
@@ -102,7 +118,7 @@ export function Dashboard() {
       autoApproved: '—',
       potentialSavings: '—',
     };
-  }, [demoMode, stats]);
+  }, [effectiveDemoMode, stats]);
 
   return (
     <div className="space-y-8">
@@ -123,16 +139,16 @@ export function Dashboard() {
         <div className="flex items-center gap-4">
           {/* Demo Mode Toggle */}
           <button
-            onClick={() => setDemoMode(!demoMode)}
+            onClick={() => setDemoMode(!effectiveDemoMode)}
             className={cn(
               'flex items-center gap-2 px-4 py-2 rounded-lg',
               'border transition-all duration-200',
-              demoMode
+              effectiveDemoMode
                 ? 'bg-kirk/10 border-kirk/30 text-kirk'
                 : 'bg-navy-800/50 border-navy-600 text-navy-400 hover:text-white'
             )}
           >
-            {demoMode ? (
+            {effectiveDemoMode ? (
               <ToggleRight className="w-5 h-5" />
             ) : (
               <ToggleLeft className="w-5 h-5" />
@@ -195,8 +211,27 @@ export function Dashboard() {
         />
       </div>
 
+      {/* Demo Mode Banner */}
+      {effectiveDemoMode && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="bg-kirk/10 border border-kirk/30 rounded-xl p-4 flex items-center gap-3"
+        >
+          <Activity className="w-5 h-5 text-kirk" />
+          <div className="flex-1">
+            <span className="text-kirk font-medium">Demo Mode Active</span>
+            <span className="text-navy-400 ml-2">
+              {hasRealData
+                ? 'Toggle off to view your actual data'
+                : 'No analysis data yet. Run a sync job or analyze claims to see real data.'}
+            </span>
+          </div>
+        </motion.div>
+      )}
+
       {/* Charts Section */}
-      {demoMode && (
+      {effectiveDemoMode && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <SavingsChart
             data={DEMO_SAVINGS_TREND}
